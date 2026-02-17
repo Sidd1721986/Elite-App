@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { createContext, useState, useContext, useEffect } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import { Job, JobStatus, Contact, Urgency } from '../types/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -23,7 +23,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loadJobs();
     }, []);
 
-    const loadJobs = async () => {
+    const loadJobs = useCallback(async () => {
         try {
             const storedJobs = await AsyncStorage.getItem(STORAGE_KEY);
             if (storedJobs) {
@@ -34,40 +34,55 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
-    const saveJobs = async (updatedJobs: Job[]) => {
+    const saveJobs = useCallback(async (updatedJobs: Job[]) => {
         try {
             await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedJobs));
             setJobs(updatedJobs);
         } catch (error) {
             console.error('Error saving jobs:', error);
         }
-    };
+    }, []);
 
-    const addJob = async (jobData: Omit<Job, 'id' | 'status' | 'createdAt'>) => {
+    const addJob = useCallback(async (jobData: Omit<Job, 'id' | 'status' | 'createdAt'>) => {
         const newJob: Job = {
             ...jobData,
             id: Math.random().toString(36).substr(2, 9),
             status: JobStatus.SUBMITTED,
             createdAt: new Date().toISOString(),
         };
-        await saveJobs([newJob, ...jobs]);
-    };
+        setJobs(prevJobs => {
+            const updatedJobs = [newJob, ...prevJobs];
+            AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedJobs));
+            return updatedJobs;
+        });
+    }, []);
 
-    const updateJob = async (jobId: string, updates: Partial<Job>) => {
-        const updatedJobs = jobs.map(job =>
-            job.id === jobId ? { ...job, ...updates } : job
-        );
-        await saveJobs(updatedJobs);
-    };
+    const updateJob = useCallback(async (jobId: string, updates: Partial<Job>) => {
+        setJobs(prevJobs => {
+            const updatedJobs = prevJobs.map(job =>
+                job.id === jobId ? { ...job, ...updates } : job
+            );
+            AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedJobs));
+            return updatedJobs;
+        });
+    }, []);
 
-    const getJobById = (jobId: string) => {
+    const getJobById = useCallback((jobId: string) => {
         return jobs.find(job => job.id === jobId);
-    };
+    }, [jobs]);
+
+    const value = useMemo(() => ({
+        jobs,
+        addJob,
+        updateJob,
+        getJobById,
+        isLoading
+    }), [jobs, addJob, updateJob, getJobById, isLoading]);
 
     return (
-        <JobContext.Provider value={{ jobs, addJob, updateJob, getJobById, isLoading }}>
+        <JobContext.Provider value={value}>
             {children}
         </JobContext.Provider>
     );

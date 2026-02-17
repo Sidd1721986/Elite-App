@@ -12,9 +12,9 @@ export const authService = {
 
             // Ensure default accounts exist for testing
             const rolesToSeed = [
-                { username: 'Admin User', email: 'admin', password: '123', role: UserRole.ADMIN, name: 'Admin', address: '', phone: '', referralSource: '' },
-                { username: 'Vendor User', email: 'vendor', password: '123', role: UserRole.VENDOR, name: 'Vendor', address: '', phone: '', referralSource: '' },
-                { username: 'Customer User', email: 'customer', password: '123', role: UserRole.CUSTOMER, name: 'Customer', address: '', phone: '', referralSource: '' },
+                { username: 'Admin User', email: 'admin', password: '123', role: UserRole.ADMIN, name: 'Admin', address: '', phone: '', referralSource: '', isApproved: true },
+                { username: 'Vendor User', email: 'vendor', password: '123', role: UserRole.VENDOR, name: 'Vendor', address: '', phone: '', referralSource: '', isApproved: true },
+                { username: 'Customer User', email: 'customer', password: '123', role: UserRole.CUSTOMER, name: 'Customer', address: '', phone: '', referralSource: '', isApproved: true },
             ];
 
             let seededAny = false;
@@ -76,7 +76,8 @@ export const authService = {
                 address,
                 phone,
                 referralSource,
-                roleOther
+                roleOther,
+                isApproved: role === UserRole.VENDOR ? false : true
             };
             users.push(newUser);
             await this.saveUsers(users);
@@ -107,9 +108,14 @@ export const authService = {
                 const credentialsMatch = u.email === email && u.password === password;
                 if (!credentialsMatch) return false;
 
-                // Simple match for Admin/Vendor
-                if (role === UserRole.ADMIN || role === UserRole.VENDOR) {
-                    return u.role === role;
+                // Match for Vendor (must be approved)
+                if (role === UserRole.VENDOR) {
+                    return u.role === UserRole.VENDOR && u.isApproved === true;
+                }
+
+                // Match for Admin
+                if (role === UserRole.ADMIN) {
+                    return u.role === UserRole.ADMIN;
                 }
 
                 // Group all customer sub-roles under UserRole.CUSTOMER for login purposes
@@ -150,6 +156,35 @@ export const authService = {
             await AsyncStorage.removeItem('@current_user');
         } catch (error) {
             console.error('Error logging out:', error);
+        }
+    },
+
+    // Get users pending vendor approval
+    async getPendingVendors(): Promise<User[]> {
+        const users = await this.getUsers();
+        return users.filter(u => u.role === UserRole.VENDOR && !u.isApproved);
+    },
+
+    // Approve or deny a vendor
+    async updateUserStatus(email: string, approved: boolean): Promise<boolean> {
+        try {
+            const users = await this.getUsers();
+            const userIndex = users.findIndex(u => u.email === email);
+
+            if (userIndex === -1) return false;
+
+            if (approved) {
+                users[userIndex].isApproved = true;
+                if (!users[userIndex].name) users[userIndex].name = users[userIndex].username;
+            } else {
+                users.splice(userIndex, 1);
+            }
+
+            await this.saveUsers(users);
+            return true;
+        } catch (error) {
+            console.error('Error updating user status:', error);
+            return false;
         }
     },
 };

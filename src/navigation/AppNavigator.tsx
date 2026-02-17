@@ -4,7 +4,9 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
 import { UserRole, RootStackParamList } from '../types/types';
 import LoginScreen from '../screens/LoginScreen';
-import SignupScreen from '../screens/SignupScreen';
+import SignupRoleSelectorScreen from '../screens/SignupRoleSelectorScreen';
+import CustomerSignupScreen from '../screens/CustomerSignupScreen';
+import VendorSignupScreen from '../screens/VendorSignupScreen';
 import AdminDashboard from '../screens/AdminDashboard';
 import VendorDashboard from '../screens/VendorDashboard';
 import CustomerDashboard from '../screens/CustomerDashboard';
@@ -44,7 +46,9 @@ const AppNavigator: React.FC = () => {
                     }}
                 >
                     <Stack.Screen name="Login" component={LoginScreen} />
-                    <Stack.Screen name="Signup" component={SignupScreen} />
+                    <Stack.Screen name="SignupRoleSelector" component={SignupRoleSelectorScreen} />
+                    <Stack.Screen name="CustomerSignup" component={CustomerSignupScreen} />
+                    <Stack.Screen name="VendorSignup" component={VendorSignupScreen} />
                 </Stack.Navigator>
             ) : (
                 // Main Stack - shown when user is logged in

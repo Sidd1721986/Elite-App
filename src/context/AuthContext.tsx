@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import { authService } from '../services/authService';
 import { User, UserRole, AuthContextType } from '../types/types';
 
@@ -13,22 +13,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         checkSession();
     }, []);
 
-    const checkSession = async () => {
+    const checkSession = useCallback(async () => {
         const currentUser = await authService.getCurrentUser();
         setUser(currentUser);
         setIsLoading(false);
-    };
+    }, []);
 
-    const login = async (email: string, password: string, role: UserRole): Promise<boolean> => {
+    const login = useCallback(async (email: string, password: string, role: UserRole): Promise<boolean> => {
         const loggedInUser = await authService.login(email, password, role);
         if (loggedInUser) {
             setUser(loggedInUser);
             return true;
         }
         return false;
-    };
+    }, []);
 
-    const signup = async (
+    const signup = useCallback(async (
         name: string,
         email: string,
         password: string,
@@ -39,15 +39,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         roleOther?: string
     ): Promise<boolean> => {
         return await authService.signup(name, email, password, role, address, phone, referralSource, roleOther);
-    };
+    }, []);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         await authService.logout();
         setUser(null);
-    };
+    }, []);
+
+    const getPendingVendors = useCallback(async () => {
+        return await authService.getPendingVendors();
+    }, []);
+
+    const updateUserStatus = useCallback(async (email: string, approved: boolean) => {
+        return await authService.updateUserStatus(email, approved);
+    }, []);
+
+    const value = useMemo(() => ({
+        user,
+        login,
+        signup,
+        logout,
+        isLoading,
+        getPendingVendors,
+        updateUserStatus
+    }), [user, login, signup, logout, isLoading, getPendingVendors, updateUserStatus]);
 
     return (
-        <AuthContext.Provider value={{ user, login, signup, logout, isLoading }}>
+        <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );

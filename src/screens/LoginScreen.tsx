@@ -130,7 +130,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
                                 <Button
                                     mode="text"
-                                    onPress={() => navigation.navigate('Signup')}
+                                    onPress={() => navigation.navigate('SignupRoleSelector')}
                                     style={styles.signupButton}
                                 >
                                     Don't have an account? Sign Up

@@ -8,13 +8,13 @@ import { UserRole } from '../types/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
 
-type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Signup'>;
+type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, 'CustomerSignup'>;
 
 interface Props {
     navigation: SignupScreenNavigationProp;
 }
 
-const SignupScreen: React.FC<Props> = ({ navigation }) => {
+const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [address, setAddress] = useState('');
@@ -49,16 +49,15 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
             return;
         }
 
-        const emailRegex = /\S+@\S+\.\S+/;
         if (!email.includes('@')) {
-            setSnackbarMessage('the email should be in right format');
+            setSnackbarMessage('The email should be in right format');
             setSnackbarVisible(true);
             return;
         }
 
         const phoneRegex = /^\d{10}$/;
         if (!phoneRegex.test(phone)) {
-            setSnackbarMessage('the phone number is not correct');
+            setSnackbarMessage('The phone number is not correct');
             setSnackbarVisible(true);
             return;
         }
@@ -82,7 +81,7 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
         );
 
         if (success) {
-            setSnackbarMessage('Account created successfully!');
+            setSnackbarMessage('Customer account created successfully!');
             setSnackbarVisible(true);
             setTimeout(() => {
                 setLoading(false);
@@ -95,7 +94,8 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
         }
     };
 
-    const roles = [
+    const customerRoles = [
+        { label: 'Individual Customer', value: UserRole.CUSTOMER },
         { label: 'Realtor', value: UserRole.REALTOR },
         { label: 'Property manager', value: UserRole.PROPERTY_MANAGER },
         { label: 'Business', value: UserRole.BUSINESS },
@@ -119,7 +119,6 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                         style={styles.scrollView}
                         contentContainerStyle={styles.scrollContent}
                         keyboardShouldPersistTaps="handled"
-                        showsVerticalScrollIndicator={true}
                     >
                         <View style={styles.content}>
                             <View style={styles.logoContainer}>
@@ -130,17 +129,17 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                 />
                             </View>
                             <Text variant="displaySmall" style={styles.title}>
-                                Create Account
+                                Customer Signup
                             </Text>
                             <Text variant="bodyLarge" style={styles.subtitle}>
-                                Sign up to get started
+                                Create your account to request services
                             </Text>
 
                             <Card style={styles.card}>
                                 <Card.Content>
                                     <TextInput
                                         ref={nameRef}
-                                        label={submitted && !name ? "Name *" : "Name"}
+                                        label={submitted && !name ? "Full Name *" : "Full Name"}
                                         value={name}
                                         onChangeText={setName}
                                         autoCapitalize="words"
@@ -148,7 +147,6 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                         style={styles.input}
                                         returnKeyType="next"
                                         onSubmitEditing={() => addressRef.current?.focus()}
-                                        blurOnSubmit={false}
                                         error={submitted && !name}
                                     />
 
@@ -161,7 +159,6 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                         style={styles.input}
                                         returnKeyType="next"
                                         onSubmitEditing={() => emailRef.current?.focus()}
-                                        blurOnSubmit={false}
                                         error={submitted && !address}
                                     />
 
@@ -172,27 +169,23 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                         onChangeText={setEmail}
                                         keyboardType="email-address"
                                         autoCapitalize="none"
-                                        autoComplete="email"
                                         mode="outlined"
                                         style={styles.input}
                                         returnKeyType="next"
                                         onSubmitEditing={() => phoneRef.current?.focus()}
-                                        blurOnSubmit={false}
                                         error={submitted && (!email || !isEmailValid(email))}
                                     />
 
                                     <TextInput
                                         ref={phoneRef}
-                                        label={submitted && (!phone || !isPhoneValid(phone)) ? "Phone *" : "Phone"}
-                                        placeholder="Phone (2fa confirmation ?)"
+                                        label={submitted && (!phone || !isPhoneValid(phone)) ? "Phone Number *" : "Phone Number"}
                                         value={phone}
                                         onChangeText={setPhone}
-                                        keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'phone-pad'}
+                                        keyboardType="phone-pad"
                                         mode="outlined"
                                         style={styles.input}
                                         returnKeyType="next"
                                         onSubmitEditing={() => passwordRef.current?.focus()}
-                                        blurOnSubmit={false}
                                         error={submitted && (!phone || !isPhoneValid(phone))}
                                     />
 
@@ -202,12 +195,10 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                         value={password}
                                         onChangeText={setPassword}
                                         secureTextEntry
-                                        autoCapitalize="none"
                                         mode="outlined"
                                         style={styles.input}
                                         returnKeyType="next"
                                         onSubmitEditing={() => confirmPasswordRef.current?.focus()}
-                                        blurOnSubmit={false}
                                         error={submitted && !password}
                                     />
 
@@ -217,7 +208,6 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                         value={confirmPassword}
                                         onChangeText={setConfirmPassword}
                                         secureTextEntry
-                                        autoCapitalize="none"
                                         mode="outlined"
                                         style={styles.input}
                                         returnKeyType="next"
@@ -228,13 +218,12 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                                 referralSourceRef.current?.focus();
                                             }
                                         }}
-                                        blurOnSubmit={false}
                                         error={submitted && (!confirmPassword || password !== confirmPassword)}
                                     />
 
                                     <View style={styles.dropdownContainer}>
-                                        <Text variant="labelLarge" style={[styles.label, submitted && !selectedRole && { color: '#B00020' }]}>
-                                            I am a {submitted && !selectedRole && "*"}
+                                        <Text variant="labelLarge" style={styles.label}>
+                                            Account Type
                                         </Text>
                                         <Menu
                                             visible={showRoleMenu}
@@ -243,27 +232,18 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                                 <Button
                                                     mode="outlined"
                                                     onPress={() => setShowRoleMenu(true)}
-                                                    style={[styles.dropdownButton, submitted && !selectedRole && { borderColor: '#B00020' }]}
+                                                    style={styles.dropdownButton}
                                                     contentStyle={styles.dropdownButtonContent}
-                                                    textColor={submitted && !selectedRole ? '#B00020' : undefined}
                                                 >
-                                                    {roles.find(r => r.value === selectedRole)?.label || 'Select Role'}
+                                                    {customerRoles.find(r => r.value === selectedRole)?.label || 'Select Type'}
                                                 </Button>
                                             }>
-                                            {roles.map((role) => (
+                                            {customerRoles.map((role) => (
                                                 <Menu.Item
                                                     key={role.value}
                                                     onPress={() => {
                                                         setSelectedRole(role.value);
                                                         setShowRoleMenu(false);
-                                                        // After selecting role, focus on either roleOther or referralSource
-                                                        setTimeout(() => {
-                                                            if (role.value === UserRole.OTHER) {
-                                                                roleOtherRef.current?.focus();
-                                                            } else {
-                                                                referralSourceRef.current?.focus();
-                                                            }
-                                                        }, 100);
                                                     }}
                                                     title={role.label}
                                                 />
@@ -274,14 +254,13 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                     {selectedRole === UserRole.OTHER && (
                                         <TextInput
                                             ref={roleOtherRef}
-                                            label={submitted && !roleOther ? "Please specify *" : "Please specify"}
+                                            label={submitted && !roleOther ? "Please specify type *" : "Please specify type"}
                                             value={roleOther}
                                             onChangeText={setRoleOther}
                                             mode="outlined"
                                             style={styles.input}
                                             returnKeyType="next"
                                             onSubmitEditing={() => referralSourceRef.current?.focus()}
-                                            blurOnSubmit={false}
                                             error={submitted && !roleOther}
                                         />
                                     )}
@@ -305,15 +284,15 @@ const SignupScreen: React.FC<Props> = ({ navigation }) => {
                                         disabled={loading}
                                         style={styles.signupButton}
                                     >
-                                        Sign Up
+                                        Create Customer Account
                                     </Button>
 
                                     <Button
                                         mode="text"
-                                        onPress={() => navigation.navigate('Login')}
-                                        style={styles.loginButton}
+                                        onPress={() => navigation.navigate('SignupRoleSelector')}
+                                        style={styles.backButton}
                                     >
-                                        Already have an account? Login
+                                        Back to Role Selection
                                     </Button>
                                 </Card.Content>
                             </Card>
@@ -392,9 +371,9 @@ const styles = StyleSheet.create({
         marginTop: 16,
         paddingVertical: 6,
     },
-    loginButton: {
+    backButton: {
         marginTop: 8,
     },
 });
 
-export default SignupScreen;
+export default CustomerSignupScreen;

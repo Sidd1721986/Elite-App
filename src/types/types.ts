@@ -20,6 +20,7 @@ export interface User {
   phone: string;
   roleOther?: string;
   referralSource: string;
+  isApproved?: boolean;
 }
 
 export interface AuthContextType {
@@ -37,6 +38,8 @@ export interface AuthContextType {
   ) => Promise<boolean>;
   logout: () => Promise<void>;
   isLoading: boolean;
+  getPendingVendors: () => Promise<User[]>;
+  updateUserStatus: (email: string, approved: boolean) => Promise<boolean>;
 }
 
 export enum JobStatus {
@@ -77,7 +80,9 @@ export interface Job {
 
 export type RootStackParamList = {
   Login: undefined;
-  Signup: undefined;
+  SignupRoleSelector: undefined;
+  CustomerSignup: undefined;
+  VendorSignup: undefined;
   AdminDashboard: undefined;
   VendorDashboard: undefined;
   CustomerDashboard: undefined;
