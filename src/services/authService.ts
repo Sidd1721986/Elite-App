@@ -12,15 +12,15 @@ export const authService = {
 
             // Ensure default accounts exist for testing
             const rolesToSeed = [
-                { username: 'Admin User', email: 'admin', password: '123', role: UserRole.ADMIN },
-                { username: 'Vendor User', email: 'vendor', password: '123', role: UserRole.VENDOR },
-                { username: 'Customer User', email: 'customer', password: '123', role: UserRole.CUSTOMER },
+                { username: 'Admin User', email: 'admin', password: '123', role: UserRole.ADMIN, name: 'Admin', address: '', phone: '', referralSource: '' },
+                { username: 'Vendor User', email: 'vendor', password: '123', role: UserRole.VENDOR, name: 'Vendor', address: '', phone: '', referralSource: '' },
+                { username: 'Customer User', email: 'customer', password: '123', role: UserRole.CUSTOMER, name: 'Customer', address: '', phone: '', referralSource: '' },
             ];
 
             let seededAny = false;
             for (const seed of rolesToSeed) {
                 if (!users.some((u: User) => u.email === seed.email)) {
-                    users.push(seed);
+                    users.push(seed as User);
                     seededAny = true;
                     console.log(`✅ Seeded account: ${seed.email} / ${seed.password} (${seed.role})`);
                 }
@@ -47,7 +47,16 @@ export const authService = {
     },
 
     // Register a new user
-    async signup(username: string, email: string, password: string, role: UserRole): Promise<boolean> {
+    async signup(
+        name: string,
+        email: string,
+        password: string,
+        role: UserRole,
+        address: string,
+        phone: string,
+        referralSource: string,
+        roleOther?: string
+    ): Promise<boolean> {
         try {
             const users = await this.getUsers();
 
@@ -58,7 +67,17 @@ export const authService = {
             }
 
             // Add new user
-            const newUser: User = { username, email, password, role };
+            const newUser: User = {
+                username: email, // Using email as username for now as it was previously used
+                email,
+                password,
+                role,
+                name,
+                address,
+                phone,
+                referralSource,
+                roleOther
+            };
             users.push(newUser);
             await this.saveUsers(users);
             return true;
@@ -73,10 +92,33 @@ export const authService = {
         try {
             const users = await this.getUsers();
 
-            // Find user with matching credentials and role
-            const user = users.find(
-                u => u.email === email && u.password === password && u.role === role
-            );
+            const isCustomerRole = (r: UserRole) => [
+                UserRole.CUSTOMER,
+                UserRole.REALTOR,
+                UserRole.PROPERTY_MANAGER,
+                UserRole.BUSINESS,
+                UserRole.HOME_OWNER,
+                UserRole.LANDLORD,
+                UserRole.OTHER
+            ].includes(r);
+
+            // Find user with matching credentials and role grouping
+            const user = users.find(u => {
+                const credentialsMatch = u.email === email && u.password === password;
+                if (!credentialsMatch) return false;
+
+                // Simple match for Admin/Vendor
+                if (role === UserRole.ADMIN || role === UserRole.VENDOR) {
+                    return u.role === role;
+                }
+
+                // Group all customer sub-roles under UserRole.CUSTOMER for login purposes
+                if (role === UserRole.CUSTOMER) {
+                    return isCustomerRole(u.role);
+                }
+
+                return u.role === role;
+            });
 
             if (user) {
                 // Save current user session

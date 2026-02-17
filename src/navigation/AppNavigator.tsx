@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,7 @@ import SignupScreen from '../screens/SignupScreen';
 import AdminDashboard from '../screens/AdminDashboard';
 import VendorDashboard from '../screens/VendorDashboard';
 import CustomerDashboard from '../screens/CustomerDashboard';
+import JobDetailsScreen from '../screens/JobDetailsScreen';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -22,6 +23,16 @@ const AppNavigator: React.FC = () => {
             </View>
         );
     }
+
+    const isCustomerRole = user && [
+        UserRole.CUSTOMER,
+        UserRole.REALTOR,
+        UserRole.PROPERTY_MANAGER,
+        UserRole.BUSINESS,
+        UserRole.HOME_OWNER,
+        UserRole.LANDLORD,
+        UserRole.OTHER
+    ].includes(user.role);
 
     return (
         <NavigationContainer>
@@ -76,13 +87,20 @@ const AppNavigator: React.FC = () => {
                         />
                     )}
 
-                    {user.role === UserRole.CUSTOMER && (
+                    {isCustomerRole && (
                         <Stack.Screen
                             name="CustomerDashboard"
                             component={CustomerDashboard}
                             options={{ title: 'Customer Dashboard' }}
                         />
                     )}
+
+                    {/* Common Screens */}
+                    <Stack.Screen
+                        name="JobDetails"
+                        component={JobDetailsScreen}
+                        options={{ title: 'Job Details' }}
+                    />
                 </Stack.Navigator>
             )}
         </NavigationContainer>

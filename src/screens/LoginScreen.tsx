@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import * as React from 'react';
+import { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
-import { TextInput, Button, Text, Card, SegmentedButtons, Snackbar } from 'react-native-paper';
+import { TextInput, Button, Text, Card, Snackbar, Menu } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -16,6 +18,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.CUSTOMER);
+    const [showRoleMenu, setShowRoleMenu] = useState(false);
     const [loading, setLoading] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -39,96 +42,113 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.container}
-        >
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.container}
             >
-                <View style={styles.content}>
-                    <View style={styles.logoContainer}>
-                        <Image
-                            source={require('../../assets/logo.png')}
-                            style={styles.logo}
-                            resizeMode="contain"
-                        />
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    <View style={styles.content}>
+                        <View style={styles.logoContainer}>
+                            <Image
+                                source={require('../../assets/logo.png')}
+                                style={styles.logo}
+                                resizeMode="contain"
+                            />
+                        </View>
+                        <Text variant="displaySmall" style={styles.title}>
+                            Welcome Back
+                        </Text>
+                        <Text variant="bodyLarge" style={styles.subtitle}>
+                            Sign in to continue
+                        </Text>
+
+                        <Card style={styles.card}>
+                            <Card.Content>
+                                <TextInput
+                                    label="Email"
+                                    value={email}
+                                    onChangeText={setEmail}
+                                    keyboardType="email-address"
+                                    autoCapitalize="none"
+                                    autoComplete="email"
+                                    mode="outlined"
+                                    style={styles.input}
+                                />
+
+                                <TextInput
+                                    label="Password"
+                                    value={password}
+                                    onChangeText={setPassword}
+                                    secureTextEntry
+                                    autoCapitalize="none"
+                                    mode="outlined"
+                                    style={styles.input}
+                                />
+
+                                <Text variant="labelLarge" style={styles.label}>
+                                    I am an / a
+                                </Text>
+                                <Menu
+                                    visible={showRoleMenu}
+                                    onDismiss={() => setShowRoleMenu(false)}
+                                    anchor={
+                                        <Button
+                                            mode="outlined"
+                                            onPress={() => setShowRoleMenu(true)}
+                                            style={styles.dropdownButton}
+                                            icon="chevron-down"
+                                            contentStyle={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}
+                                        >
+                                            {selectedRole}
+                                        </Button>
+                                    }>
+                                    {[UserRole.ADMIN, UserRole.VENDOR, UserRole.CUSTOMER].map((role) => (
+                                        <Menu.Item
+                                            key={role}
+                                            onPress={() => {
+                                                setSelectedRole(role);
+                                                setShowRoleMenu(false);
+                                            }}
+                                            title={role}
+                                        />
+                                    ))}
+                                </Menu>
+
+                                <Button
+                                    mode="contained"
+                                    onPress={handleLogin}
+                                    loading={loading}
+                                    disabled={loading}
+                                    style={styles.loginButton}
+                                >
+                                    Login
+                                </Button>
+
+                                <Button
+                                    mode="text"
+                                    onPress={() => navigation.navigate('Signup')}
+                                    style={styles.signupButton}
+                                >
+                                    Don't have an account? Sign Up
+                                </Button>
+                            </Card.Content>
+                        </Card>
                     </View>
-                    <Text variant="displaySmall" style={styles.title}>
-                        Welcome Back
-                    </Text>
-                    <Text variant="bodyLarge" style={styles.subtitle}>
-                        Sign in to continue
-                    </Text>
+                </ScrollView>
 
-                    <Card style={styles.card}>
-                        <Card.Content>
-                            <TextInput
-                                label="Email"
-                                value={email}
-                                onChangeText={setEmail}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                                autoComplete="email"
-                                mode="outlined"
-                                style={styles.input}
-                            />
-
-                            <TextInput
-                                label="Password"
-                                value={password}
-                                onChangeText={setPassword}
-                                secureTextEntry
-                                autoCapitalize="none"
-                                mode="outlined"
-                                style={styles.input}
-                            />
-
-                            <Text variant="labelLarge" style={styles.label}>
-                                Select Role
-                            </Text>
-                            <SegmentedButtons
-                                value={selectedRole}
-                                onValueChange={(value) => setSelectedRole(value as UserRole)}
-                                buttons={[
-                                    { value: UserRole.ADMIN, label: 'Admin' },
-                                    { value: UserRole.VENDOR, label: 'Vendor' },
-                                    { value: UserRole.CUSTOMER, label: 'Customer' },
-                                ]}
-                                style={styles.segmentedButtons}
-                            />
-
-                            <Button
-                                mode="contained"
-                                onPress={handleLogin}
-                                loading={loading}
-                                disabled={loading}
-                                style={styles.loginButton}
-                            >
-                                Login
-                            </Button>
-
-                            <Button
-                                mode="text"
-                                onPress={() => navigation.navigate('Signup')}
-                                style={styles.signupButton}
-                            >
-                                Don't have an account? Sign Up
-                            </Button>
-                        </Card.Content>
-                    </Card>
-                </View>
-            </ScrollView>
-
-            <Snackbar
-                visible={snackbarVisible}
-                onDismiss={() => setSnackbarVisible(false)}
-                duration={3000}
-            >
-                {snackbarMessage}
-            </Snackbar>
-        </KeyboardAvoidingView>
+                <Snackbar
+                    visible={snackbarVisible}
+                    onDismiss={() => setSnackbarVisible(false)}
+                    duration={3000}
+                >
+                    {snackbarMessage}
+                </Snackbar>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
 };
 
@@ -173,10 +193,11 @@ const styles = StyleSheet.create({
     },
     label: {
         marginTop: 8,
-        marginBottom: 12,
+        marginBottom: 8,
     },
-    segmentedButtons: {
+    dropdownButton: {
         marginBottom: 24,
+        borderColor: '#757575',
     },
     loginButton: {
         marginTop: 16,

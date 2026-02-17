@@ -29,12 +29,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const signup = async (
-        username: string,
+        name: string,
         email: string,
         password: string,
-        role: UserRole
+        role: UserRole,
+        address: string,
+        phone: string,
+        referralSource: string,
+        roleOther?: string
     ): Promise<boolean> => {
-        return await authService.signup(username, email, password, role);
+        return await authService.signup(name, email, password, role, address, phone, referralSource, roleOther);
     };
 
     const logout = async () => {

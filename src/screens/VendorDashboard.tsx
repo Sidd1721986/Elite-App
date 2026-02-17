@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
-import { Text, Card, Button, Avatar, Divider, Surface, Chip } from 'react-native-paper';
+import * as React from 'react';
+import { View, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text, Card, Button, Avatar, Divider, Surface, Chip, IconButton, List } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -15,14 +16,10 @@ const VendorDashboard: React.FC = () => {
     React.useLayoutEffect(() => {
         navigation.setOptions({
             headerRight: () => (
-                <Button
-                    onPress={handleLogout}
-                    mode="text"
-                    textColor="#D32F2F"
-                    icon="logout"
-                >
-                    Logout
-                </Button>
+                <IconButton
+                    icon="bell-outline"
+                    onPress={() => { }}
+                />
             ),
         });
     }, [navigation]);
@@ -31,203 +28,262 @@ const VendorDashboard: React.FC = () => {
         await logout();
     };
 
+    const stats = [
+        { label: 'Pending', value: '3', icon: 'clock-outline', color: '#FF9800' },
+        { label: 'Active', value: '12', icon: 'hammer-wrench', color: '#2196F3' },
+        { label: 'Earnings', value: '$2,850', icon: 'cash', color: '#4CAF50' },
+    ];
+
     return (
-        <ScrollView style={styles.container}>
-            <Surface style={styles.header}>
-                <Avatar.Icon size={64} icon="store" style={styles.avatar} />
-                <Text variant="headlineMedium" style={styles.title}>
-                    Vendor Dashboard
-                </Text>
-                <Text variant="bodyLarge">Welcome, {user?.username}!</Text>
-                <Text variant="bodyMedium" style={styles.role}>
-                    Role: {user?.role}
-                </Text>
-            </Surface>
-
-            <Card style={styles.infoCard}>
-                <Card.Content>
-                    <View style={styles.infoHeader}>
-                        <Avatar.Icon size={40} icon="store" />
-                        <Text variant="titleMedium" style={styles.infoTitle}>
-                            Vendor Portal
-                        </Text>
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+                <Surface style={styles.header} elevation={1}>
+                    <View style={styles.profileRow}>
+                        <Avatar.Image
+                            size={64}
+                            source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username}` }}
+                        />
+                        <View style={styles.profileText}>
+                            <Text variant="headlineSmall" style={styles.vendorName}>{user?.name || 'QuickFix Pro'}</Text>
+                            <View style={styles.ratingRow}>
+                                <IconButton icon="star" iconColor="#FFD700" size={16} />
+                                <Text variant="labelLarge" style={styles.ratingText}>4.9 (128 reviews)</Text>
+                            </View>
+                        </View>
                     </View>
-                    <Divider style={styles.divider} />
-                    <Text variant="bodyMedium">
-                        Manage your products, view orders, and track your sales performance.
-                    </Text>
-                </Card.Content>
-            </Card>
 
-            <Text variant="titleLarge" style={styles.sectionTitle}>
-                Quick Actions
-            </Text>
-
-            <Card style={styles.featureCard}>
-                <Card.Content style={styles.cardContent}>
-                    <Avatar.Icon size={48} icon="package-variant" style={styles.cardIcon} />
-                    <View style={styles.cardText}>
-                        <Text variant="titleMedium">Product Management</Text>
-                        <Text variant="bodyMedium">Add, edit, and manage your inventory</Text>
+                    <View style={styles.statsContainer}>
+                        {stats.map((stat, index) => (
+                            <Card key={index} style={styles.statCard}>
+                                <Card.Content style={styles.statContent}>
+                                    <Avatar.Icon size={32} icon={stat.icon} style={{ backgroundColor: stat.color + '15' }} color={stat.color} />
+                                    <Text variant="titleMedium" style={styles.statValue}>{stat.value}</Text>
+                                    <Text variant="labelSmall" style={styles.statLabel}>{stat.label}</Text>
+                                </Card.Content>
+                            </Card>
+                        ))}
                     </View>
-                </Card.Content>
-            </Card>
+                </Surface>
 
-            <Card style={styles.featureCard}>
-                <Card.Content style={styles.cardContent}>
-                    <Avatar.Icon size={48} icon="clipboard-list" style={styles.cardIcon} />
-                    <View style={styles.cardText}>
-                        <Text variant="titleMedium">Order Management</Text>
-                        <Text variant="bodyMedium">View and process customer orders</Text>
+                <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                        <Text variant="titleLarge" style={styles.sectionTitle}>Active Orders</Text>
+                        <Button mode="text" labelStyle={{ fontSize: 12 }}>View All</Button>
                     </View>
-                </Card.Content>
-            </Card>
 
-            <Card style={styles.featureCard}>
-                <Card.Content style={styles.cardContent}>
-                    <Avatar.Icon size={48} icon="chart-line" style={styles.cardIcon} />
-                    <View style={styles.cardText}>
-                        <Text variant="titleMedium">Sales Analytics</Text>
-                        <Text variant="bodyMedium">Track performance and insights</Text>
+                    {[1, 2].map((i) => (
+                        <Card key={i} style={styles.orderCard}>
+                            <Card.Content>
+                                <View style={styles.orderTop}>
+                                    <Text variant="titleMedium" style={styles.orderId}>#JOB-8273{i}</Text>
+                                    <Chip compact style={styles.orderChip} textStyle={{ fontSize: 10 }}>URGENT</Chip>
+                                </View>
+                                <Text variant="bodyMedium" style={styles.orderAddress}>123 Maple Ave, Springfield</Text>
+                                <Text variant="bodySmall" numberOfLines={1} style={styles.orderDesc}>Kitchen faucet leaking, requires immediate attention...</Text>
+
+                                <Divider style={styles.orderDivider} />
+
+                                <View style={styles.orderBottom}>
+                                    <View style={styles.customerInfo}>
+                                        <Avatar.Text size={24} label="JS" />
+                                        <Text variant="labelSmall" style={{ marginLeft: 8 }}>John Smith</Text>
+                                    </View>
+                                    <Button mode="contained-tonal" compact labelStyle={{ fontSize: 11 }}>Update Status</Button>
+                                </View>
+                            </Card.Content>
+                        </Card>
+                    ))}
+                </View>
+
+                <View style={styles.section}>
+                    <Text variant="titleLarge" style={styles.sectionTitle}>Tools & Services</Text>
+                    <View style={styles.toolsGrid}>
+                        <TouchableOpacity style={styles.toolItem}>
+                            <Surface style={[styles.toolIcon, { backgroundColor: '#E3F2FD' }]} elevation={0}>
+                                <IconButton icon="package-variant" iconColor="#1976D2" size={28} />
+                            </Surface>
+                            <Text variant="labelMedium" style={styles.toolLabel}>Inventory</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.toolItem}>
+                            <Surface style={[styles.toolIcon, { backgroundColor: '#F3E5F5' }]} elevation={0}>
+                                <IconButton icon="chart-areaspline" iconColor="#7B1FA2" size={28} />
+                            </Surface>
+                            <Text variant="labelMedium" style={styles.toolLabel}>Analytics</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.toolItem}>
+                            <Surface style={[styles.toolIcon, { backgroundColor: '#E8F5E9' }]} elevation={0}>
+                                <IconButton icon="calendar-check" iconColor="#388E3C" size={28} />
+                            </Surface>
+                            <Text variant="labelMedium" style={styles.toolLabel}>Schedule</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.toolItem}>
+                            <Surface style={[styles.toolIcon, { backgroundColor: '#FFF3E0' }]} elevation={0}>
+                                <IconButton icon="account-cog" iconColor="#F57C00" size={28} />
+                            </Surface>
+                            <Text variant="labelMedium" style={styles.toolLabel}>Settings</Text>
+                        </TouchableOpacity>
                     </View>
-                </Card.Content>
-            </Card>
+                </View>
 
-            <Card style={styles.featureCard}>
-                <Card.Content style={styles.cardContent}>
-                    <Avatar.Icon size={48} icon="cog" style={styles.cardIcon} />
-                    <View style={styles.cardText}>
-                        <Text variant="titleMedium">Store Settings</Text>
-                        <Text variant="bodyMedium">Manage profile and preferences</Text>
-                    </View>
-                </Card.Content>
-            </Card>
-
-            <Text variant="titleLarge" style={styles.sectionTitle}>
-                Statistics
-            </Text>
-
-            <View style={styles.statsContainer}>
-                <Card style={styles.statCard}>
-                    <Card.Content style={styles.statContent}>
-                        <Text variant="headlineMedium" style={styles.statNumber}>
-                            0
-                        </Text>
-                        <Text variant="bodyMedium">Products</Text>
-                    </Card.Content>
-                </Card>
-
-                <Card style={styles.statCard}>
-                    <Card.Content style={styles.statContent}>
-                        <Text variant="headlineMedium" style={styles.statNumber}>
-                            0
-                        </Text>
-                        <Text variant="bodyMedium">Orders</Text>
-                    </Card.Content>
-                </Card>
-
-                <Card style={styles.statCard}>
-                    <Card.Content style={styles.statContent}>
-                        <Text variant="headlineMedium" style={styles.statNumber}>
-                            $0
-                        </Text>
-                        <Text variant="bodyMedium">Revenue</Text>
-                    </Card.Content>
-                </Card>
-            </View>
-
-            <Button
-                mode="contained"
-                onPress={handleLogout}
-                icon="logout"
-                style={styles.logoutButton}
-                buttonColor="#D32F2F"
-            >
-                Logout
-            </Button>
-        </ScrollView>
+                <View style={styles.footer}>
+                    <Button
+                        mode="contained"
+                        icon="logout"
+                        onPress={handleLogout}
+                        style={styles.logoutBtn}
+                        buttonColor="#D32F2F"
+                    >
+                        Logout
+                    </Button>
+                    <Text variant="labelSmall" style={styles.versionText}>Vendor Control v2.4.0</Text>
+                </View>
+            </ScrollView>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#F8F9FA',
     },
     header: {
         padding: 24,
-        alignItems: 'center',
-        elevation: 2,
+        backgroundColor: '#fff',
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
     },
-    avatar: {
-        marginBottom: 16,
-        backgroundColor: '#FF9800',
-    },
-    title: {
-        fontWeight: 'bold',
-        marginBottom: 8,
-    },
-    role: {
-        opacity: 0.7,
-        marginTop: 4,
-    },
-    infoCard: {
-        margin: 16,
-        marginBottom: 8,
-    },
-    infoHeader: {
+    profileRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 24,
     },
-    infoTitle: {
-        marginLeft: 12,
-        fontWeight: 'bold',
-    },
-    divider: {
-        marginVertical: 12,
-    },
-    sectionTitle: {
-        marginHorizontal: 16,
-        marginTop: 16,
-        marginBottom: 12,
-        fontWeight: 'bold',
-    },
-    featureCard: {
-        marginHorizontal: 16,
-        marginBottom: 12,
-    },
-    cardContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    cardIcon: {
-        backgroundColor: 'transparent',
-    },
-    cardText: {
+    profileText: {
         marginLeft: 16,
-        flex: 1,
+    },
+    vendorName: {
+        fontWeight: 'bold',
+        color: '#1A1A1A',
+    },
+    ratingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginLeft: -12,
+    },
+    ratingText: {
+        color: '#666',
+        marginLeft: -8,
     },
     statsContainer: {
         flexDirection: 'row',
-        marginHorizontal: 16,
-        marginBottom: 16,
-        gap: 8,
+        justifyContent: 'space-between',
+        marginTop: 8,
     },
     statCard: {
-        flex: 1,
+        width: '31%',
+        borderRadius: 16,
+        backgroundColor: '#fff',
+        elevation: 0,
+        borderWidth: 1,
+        borderColor: '#F0F0F0',
     },
     statContent: {
+        padding: 12,
         alignItems: 'center',
     },
-    statNumber: {
+    statValue: {
         fontWeight: 'bold',
-        color: '#FF9800',
+        marginTop: 8,
     },
-    logoutButton: {
-        margin: 16,
-        marginTop: 24,
-        paddingVertical: 6,
+    statLabel: {
+        color: '#999',
+    },
+    section: {
+        padding: 20,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    sectionTitle: {
+        fontWeight: 'bold',
+        color: '#1A1A1A',
+    },
+    orderCard: {
+        marginBottom: 12,
+        borderRadius: 16,
+        backgroundColor: '#fff',
+        elevation: 1,
+    },
+    orderTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    orderId: {
+        fontWeight: 'bold',
+    },
+    orderChip: {
+        backgroundColor: '#FFEBEE',
+    },
+    orderAddress: {
+        color: '#444',
+        marginTop: 4,
+    },
+    orderDesc: {
+        color: '#888',
+        marginTop: 2,
+    },
+    orderDivider: {
+        marginVertical: 12,
+    },
+    orderBottom: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    customerInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    toolsGrid: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+    },
+    toolItem: {
+        width: '22%',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    toolIcon: {
+        width: 56,
+        height: 56,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    toolLabel: {
+        color: '#444',
+    },
+    footer: {
+        padding: 24,
+        alignItems: 'center',
+    },
+    logoutBtn: {
+        width: '100%',
+        borderRadius: 12,
+        paddingVertical: 4,
+    },
+    versionText: {
+        marginTop: 12,
+        color: '#CCC',
     },
 });
 

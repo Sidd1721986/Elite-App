@@ -1,8 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import * as React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { AuthProvider } from './src/context/AuthContext';
+import { JobProvider } from './src/context/JobContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { StyleSheet } from 'react-native';
 
@@ -20,8 +21,10 @@ export default function App() {
         <GestureHandlerRootView style={styles.container}>
             <PaperProvider theme={theme}>
                 <AuthProvider>
-                    <AppNavigator />
-                    <StatusBar style="auto" />
+                    <JobProvider>
+                        <AppNavigator />
+                        <StatusBar style="auto" />
+                    </JobProvider>
                 </AuthProvider>
             </PaperProvider>
         </GestureHandlerRootView>
