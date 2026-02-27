@@ -1,86 +1,36 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, UserRole } from '../types/types';
+import { apiClient } from './apiClient';
 
 const USERS_KEY = '@users';
 
 export const authService = {
-    // Get all users from storage
-    async getUsers(): Promise<User[]> {
-        try {
-            const usersJson = await AsyncStorage.getItem(USERS_KEY);
-            let users = usersJson ? JSON.parse(usersJson) : [];
-
-            // Ensure default accounts exist for testing
-            const rolesToSeed = [
-                { username: 'Admin User', email: 'admin', password: '123', role: UserRole.ADMIN, name: 'Admin', address: '', phone: '', referralSource: '', isApproved: true },
-                { username: 'Vendor User', email: 'vendor', password: '123', role: UserRole.VENDOR, name: 'Vendor', address: '', phone: '', referralSource: '', isApproved: true },
-                { username: 'Customer User', email: 'customer', password: '123', role: UserRole.CUSTOMER, name: 'Customer', address: '', phone: '', referralSource: '', isApproved: true },
-            ];
-
-            let seededAny = false;
-            for (const seed of rolesToSeed) {
-                if (!users.some((u: User) => u.email === seed.email)) {
-                    users.push(seed as User);
-                    seededAny = true;
-                    console.log(`✅ Seeded account: ${seed.email} / ${seed.password} (${seed.role})`);
-                }
-            }
-
-            if (seededAny) {
-                await this.saveUsers(users);
-            }
-
-            return users;
-        } catch (error) {
-            console.error('Error getting users:', error);
-            return [];
-        }
-    },
-
-    // Save users to storage
-    async saveUsers(users: User[]): Promise<void> {
-        try {
-            await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-        } catch (error) {
-            console.error('Error saving users:', error);
-        }
-    },
-
     // Register a new user
     async signup(
         name: string,
         email: string,
         password: string,
-        role: UserRole,
+        role: UserRole, // This will be the granular role from UI
         address: string,
         phone: string,
         referralSource: string,
         roleOther?: string
     ): Promise<boolean> {
         try {
-            const users = await this.getUsers();
+            // Map granular roles to the 3 main roles expected by the backend
+            let apiRole = 'Customer';
+            if (role === UserRole.ADMIN) apiRole = 'Admin';
+            else if (role === UserRole.VENDOR) apiRole = 'Vendor';
 
-            // Check if email already exists
-            const existingUser = users.find(u => u.email === email);
-            if (existingUser) {
-                return false;
-            }
-
-            // Add new user
-            const newUser: User = {
-                username: email, // Using email as username for now as it was previously used
+            await apiClient.post('/auth/register', {
+                name,
                 email,
                 password,
-                role,
-                name,
+                role: apiRole,
                 address,
-                phone,
-                referralSource,
-                roleOther,
-                isApproved: role === UserRole.VENDOR ? false : true
-            };
-            users.push(newUser);
-            await this.saveUsers(users);
+                phone
+                // referralSource and roleOther might need addition to backend if needed
+            });
             return true;
         } catch (error) {
             console.error('Error signing up:', error);
@@ -91,51 +41,30 @@ export const authService = {
     // Login user
     async login(email: string, password: string, role: UserRole): Promise<User | null> {
         try {
-            const users = await this.getUsers();
+            let apiRole = 'Customer';
+            if (role === UserRole.ADMIN) apiRole = 'Admin';
+            else if (role === UserRole.VENDOR) apiRole = 'Vendor';
 
-            const isCustomerRole = (r: UserRole) => [
-                UserRole.CUSTOMER,
-                UserRole.REALTOR,
-                UserRole.PROPERTY_MANAGER,
-                UserRole.BUSINESS,
-                UserRole.HOME_OWNER,
-                UserRole.LANDLORD,
-                UserRole.OTHER
-            ].includes(r);
-
-            // Find user with matching credentials and role grouping
-            const user = users.find(u => {
-                const credentialsMatch = u.email === email && u.password === password;
-                if (!credentialsMatch) return false;
-
-                // Match for Vendor (must be approved)
-                if (role === UserRole.VENDOR) {
-                    return u.role === UserRole.VENDOR && u.isApproved === true;
-                }
-
-                // Match for Admin
-                if (role === UserRole.ADMIN) {
-                    return u.role === UserRole.ADMIN;
-                }
-
-                // Group all customer sub-roles under UserRole.CUSTOMER for login purposes
-                if (role === UserRole.CUSTOMER) {
-                    return isCustomerRole(u.role);
-                }
-
-                return u.role === role;
+            const response = await apiClient.post<{ token: string, user: any }>('/auth/login', {
+                email,
+                password,
+                role: apiRole
             });
 
-            if (user) {
-                // Save current user session
+            if (response.token) {
+                await AsyncStorage.setItem('@auth_token', response.token);
+                const user: User = {
+                    ...response.user,
+                    role: role, // Keep the granular role locally for UI consistency
+                };
                 await AsyncStorage.setItem('@current_user', JSON.stringify(user));
                 return user;
             }
 
             return null;
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error logging in:', error);
-            return null;
+            throw error; // Rethrow to let UI handle error message
         }
     },
 
@@ -153,6 +82,7 @@ export const authService = {
     // Logout user
     async logout(): Promise<void> {
         try {
+            await AsyncStorage.removeItem('@auth_token');
             await AsyncStorage.removeItem('@current_user');
         } catch (error) {
             console.error('Error logging out:', error);
@@ -161,29 +91,46 @@ export const authService = {
 
     // Get users pending vendor approval
     async getPendingVendors(): Promise<User[]> {
-        const users = await this.getUsers();
-        return users.filter(u => u.role === UserRole.VENDOR && !u.isApproved);
+        try {
+            return await apiClient.get<User[]>('/users/pending-vendors');
+        } catch (error) {
+            console.error('Error getting pending vendors:', error);
+            return [];
+        }
     },
 
     // Approve or deny a vendor
-    async updateUserStatus(email: string, approved: boolean): Promise<boolean> {
+    async updateUserStatus(userId: string, approved: boolean): Promise<boolean> {
         try {
-            const users = await this.getUsers();
-            const userIndex = users.findIndex(u => u.email === email);
-
-            if (userIndex === -1) return false;
-
             if (approved) {
-                users[userIndex].isApproved = true;
-                if (!users[userIndex].name) users[userIndex].name = users[userIndex].username;
+                await apiClient.post(`/users/approve-vendor/${userId}`, {});
             } else {
-                users.splice(userIndex, 1);
+                await apiClient.post(`/users/deny-vendor/${userId}`, {});
             }
-
-            await this.saveUsers(users);
             return true;
         } catch (error) {
             console.error('Error updating user status:', error);
+            return false;
+        }
+    },
+
+    // Get users who are approved vendors
+    async getApprovedVendors(): Promise<User[]> {
+        try {
+            return await apiClient.get<User[]>('/users/approved-vendors');
+        } catch (error) {
+            console.error('Error getting approved vendors:', error);
+            return [];
+        }
+    },
+
+    // Remove a vendor
+    async removeVendor(userId: string): Promise<boolean> {
+        try {
+            await apiClient.delete(`/users/remove-vendor/${userId}`);
+            return true;
+        } catch (error) {
+            console.error('Error removing vendor:', error);
             return false;
         }
     },

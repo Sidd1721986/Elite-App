@@ -1,162 +1,177 @@
 import * as React from 'react';
 import { useCallback, useMemo } from 'react';
-import { View, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, StyleSheet, FlatList, Image, RefreshControl, ScrollView, Platform } from 'react-native';
 import { Text, Card, Button, Avatar, Divider, Surface, Chip, IconButton, List } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
+import { useJobs } from '../context/JobContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../types/types';
+import { RootStackParamList, Job, JobStatus, Urgency } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
 const VendorDashboard: React.FC = () => {
     const { user, logout } = useAuth();
+    const { jobs, refreshJobs } = useJobs();
     const navigation = useNavigation<NavigationProp>();
+    const [refreshing, setRefreshing] = React.useState(false);
 
-    React.useLayoutEffect(() => {
-        navigation.setOptions({
-            headerRight: () => (
-                <IconButton
-                    icon="bell-outline"
-                    onPress={() => { }}
-                />
-            ),
-        });
-    }, [navigation]);
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await refreshJobs();
+        setRefreshing(false);
+    }, [refreshJobs]);
+
+    React.useEffect(() => {
+        refreshJobs();
+    }, [refreshJobs]);
 
     const handleLogout = useCallback(async () => {
         await logout();
     }, [logout]);
 
-    const stats = useMemo(() => [
-        { label: 'Pending', value: '3', icon: 'clock-outline', color: '#FF9800' },
-        { label: 'Active', value: '12', icon: 'hammer-wrench', color: '#2196F3' },
-        { label: 'Earnings', value: '$2,850', icon: 'cash', color: '#4CAF50' },
-    ], []);
+    const activeJobs = useMemo(() =>
+        jobs.filter(j => j.status === JobStatus.ASSIGNED || j.status === JobStatus.ACCEPTED || j.status === JobStatus.SALE),
+        [jobs]
+    );
 
-    const renderOrderCard = useCallback(({ item: i }: { item: number }) => (
-        <Card style={styles.orderCard}>
+    const stats = useMemo(() => [
+        { label: 'Active', value: activeJobs.length.toString(), icon: 'hammer-wrench', color: '#6366F1' },
+        { label: 'Pending', value: jobs.filter(j => j.status === JobStatus.ASSIGNED).length.toString(), icon: 'clock-outline', color: '#F59E0B' },
+        { label: 'Ranking', value: '#3', icon: 'trophy-outline', color: '#10B981' },
+    ], [activeJobs.length, jobs]);
+
+    const renderOrderCard = useCallback(({ item: job }: { item: Job }) => (
+        <Card
+            style={styles.orderCard}
+            elevation={0}
+            onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
+        >
             <Card.Content>
                 <View style={styles.orderTop}>
-                    <Text variant="titleMedium" style={styles.orderId}>#JOB-8273{i}</Text>
-                    <Chip compact style={styles.orderChip} textStyle={{ fontSize: 10 }}>URGENT</Chip>
+                    <Text variant="labelSmall" style={styles.orderId}>#JOB-{(job.id || '').substring(0, 8).toUpperCase()}</Text>
+                    {job.urgency === Urgency.IMMEDIATE && (
+                        <Chip compact style={styles.urgentChip} textStyle={styles.urgentText}>IMMEDIATE</Chip>
+                    )}
                 </View>
-                <Text variant="bodyMedium" style={styles.orderAddress}>123 Maple Ave, Springfield</Text>
-                <Text variant="bodySmall" numberOfLines={1} style={styles.orderDesc}>Kitchen faucet leaking, requires immediate attention...</Text>
+                <Text variant="titleMedium" style={styles.orderAddress} numberOfLines={1}>{job.address}</Text>
+                <Text variant="bodySmall" numberOfLines={2} style={styles.orderDesc}>{job.description}</Text>
+
+                {(job.contactPhone || job.contactEmail) && (
+                    <View style={{ flexDirection: 'row', marginTop: 8, alignItems: 'center' }}>
+                        <IconButton icon="phone-outline" size={14} style={{ margin: 0 }} iconColor="#6366F1" />
+                        <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: 'bold' }}>{job.contactPhone || 'N/A'}</Text>
+                        <IconButton icon="email-outline" size={14} style={{ margin: 0, marginLeft: 8 }} iconColor="#94A3B8" />
+                        <Text variant="labelSmall" style={{ color: '#64748B', flex: 1 }} numberOfLines={1}>{job.contactEmail || 'N/A'}</Text>
+                    </View>
+                )}
 
                 <Divider style={styles.orderDivider} />
 
                 <View style={styles.orderBottom}>
-                    <View style={styles.customerInfo}>
-                        <Avatar.Text size={24} label="JS" />
-                        <Text variant="labelSmall" style={{ marginLeft: 8 }}>John Smith</Text>
+                    <View style={styles.customerRow}>
+                        <Avatar.Text size={24} label={(job.address || '??').substring(0, 2).toUpperCase()} style={styles.miniAvatar} />
+                        <Text variant="labelSmall" style={styles.customerType}>{job.status === JobStatus.ASSIGNED ? 'NEW ASSIGNMENT' : 'ACTIVE PROJECT'}</Text>
                     </View>
-                    <Button mode="contained-tonal" compact labelStyle={{ fontSize: 11 }}>Update Status</Button>
+                    <Button
+                        mode="contained"
+                        compact
+                        style={[styles.quoteBtn, job.status === JobStatus.ASSIGNED && { backgroundColor: '#F59E0B' }]}
+                        labelStyle={{ fontSize: 10, fontWeight: 'bold' }}
+                        onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
+                    >
+                        {job.status === JobStatus.ASSIGNED ? 'ACCEPT JOB' : 'VIEW DETAILS'}
+                    </Button>
                 </View>
             </Card.Content>
         </Card>
-    ), []);
+    ), [navigation]);
 
     const renderHeader = useCallback(() => (
-        <View>
-            <Surface style={styles.header} elevation={1}>
-                <View style={styles.profileRow}>
-                    <Avatar.Image
-                        size={64}
-                        source={{ uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username}` }}
+        <View style={styles.headerWrapper}>
+            <Surface style={styles.header} elevation={0}>
+                <View style={styles.headerTop}>
+                    <Surface style={styles.logoBox} elevation={1}>
+                        <Image
+                            source={require('../assets/logo.png')}
+                            style={styles.headerLogo}
+                            resizeMode="contain"
+                        />
+                    </Surface>
+                    <IconButton
+                        icon="logout"
+                        iconColor="#EF4444"
+                        mode="contained"
+                        containerColor="#FEF2F2"
+                        size={20}
+                        onPress={handleLogout}
                     />
-                    <View style={styles.profileText}>
+                </View>
+
+                <View style={styles.profileBox}>
+                    <View style={styles.profileInfo}>
                         <Text variant="headlineSmall" style={styles.vendorName}>{user?.name || 'QuickFix Pro'}</Text>
-                        <View style={styles.ratingRow}>
-                            <IconButton icon="star" iconColor="#FFD700" size={16} />
+                        <View style={styles.ratingBox}>
+                            <IconButton icon="star" iconColor="#F59E0B" size={16} style={{ margin: 0 }} />
                             <Text variant="labelLarge" style={styles.ratingText}>4.9 (128 reviews)</Text>
                         </View>
                     </View>
+                    <Avatar.Text
+                        size={64}
+                        label={user?.name?.substring(0, 2).toUpperCase() || 'VX'}
+                        style={styles.mainAvatar}
+                    />
                 </View>
 
-                <View style={styles.statsContainer}>
-                    {stats.map((stat, index) => (
-                        <Card key={index} style={styles.statCard}>
-                            <Card.Content style={styles.statContent}>
-                                <Avatar.Icon size={32} icon={stat.icon} style={{ backgroundColor: stat.color + '15' }} color={stat.color} />
-                                <Text variant="titleMedium" style={styles.statValue}>{stat.value}</Text>
-                                <Text variant="labelSmall" style={styles.statLabel}>{stat.label}</Text>
-                            </Card.Content>
-                        </Card>
+                <View style={styles.statsRow}>
+                    {stats.map((s, i) => (
+                        <View key={i} style={styles.statItem}>
+                            <IconButton icon={s.icon} iconColor={s.color} size={20} style={{ margin: 0 }} />
+                            <View>
+                                <Text variant="titleMedium" style={styles.statValue}>{s.value}</Text>
+                                <Text variant="labelSmall" style={styles.statLabel}>{s.label}</Text>
+                            </View>
+                        </View>
                     ))}
                 </View>
             </Surface>
 
-            <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                    <Text variant="titleLarge" style={styles.sectionTitle}>Active Orders</Text>
-                    <Button mode="text" labelStyle={{ fontSize: 12 }}>View All</Button>
-                </View>
+            <View style={styles.balanceCard}>
+                <Surface style={styles.balanceInner} elevation={2}>
+                    <View>
+                        <Text variant="labelSmall" style={styles.balanceLabel}>AVAILABLE BALANCE</Text>
+                        <Text variant="headlineMedium" style={styles.balanceValue}>$1,240.50</Text>
+                    </View>
+                    <Button mode="contained" buttonColor="#000" style={styles.payoutBtn}>Payout</Button>
+                </Surface>
             </View>
         </View>
-    ), [user, stats]);
-
-    const renderFooter = useCallback(() => (
-        <View>
-            <View style={styles.section}>
-                <Text variant="titleLarge" style={styles.sectionTitle}>Tools & Services</Text>
-                <View style={styles.toolsGrid}>
-                    <TouchableOpacity style={styles.toolItem}>
-                        <Surface style={[styles.toolIcon, { backgroundColor: '#E3F2FD' }]} elevation={0}>
-                            <IconButton icon="package-variant" iconColor="#1976D2" size={28} />
-                        </Surface>
-                        <Text variant="labelMedium" style={styles.toolLabel}>Inventory</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.toolItem}>
-                        <Surface style={[styles.toolIcon, { backgroundColor: '#F3E5F5' }]} elevation={0}>
-                            <IconButton icon="chart-areaspline" iconColor="#7B1FA2" size={28} />
-                        </Surface>
-                        <Text variant="labelMedium" style={styles.toolLabel}>Analytics</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.toolItem}>
-                        <Surface style={[styles.toolIcon, { backgroundColor: '#E8F5E9' }]} elevation={0}>
-                            <IconButton icon="calendar-check" iconColor="#388E3C" size={28} />
-                        </Surface>
-                        <Text variant="labelMedium" style={styles.toolLabel}>Schedule</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.toolItem}>
-                        <Surface style={[styles.toolIcon, { backgroundColor: '#FFF3E0' }]} elevation={0}>
-                            <IconButton icon="account-cog" iconColor="#F57C00" size={28} />
-                        </Surface>
-                        <Text variant="labelMedium" style={styles.toolLabel}>Settings</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-
-            <View style={styles.footer}>
-                <Button
-                    mode="contained"
-                    icon="logout"
-                    onPress={handleLogout}
-                    style={styles.logoutBtn}
-                    buttonColor="#D32F2F"
-                >
-                    Logout
-                </Button>
-                <Text variant="labelSmall" style={styles.versionText}>Vendor Control v2.4.0</Text>
-            </View>
-        </View>
-    ), [handleLogout]);
+    ), [user, handleLogout, stats]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <FlatList
-                data={[1, 2]}
-                keyExtractor={i => i.toString()}
+                data={activeJobs}
+                keyExtractor={item => item.id}
                 renderItem={renderOrderCard}
                 ListHeaderComponent={renderHeader}
-                ListFooterComponent={renderFooter}
-                contentContainerStyle={{ flexGrow: 1 }}
-                showsVerticalScrollIndicator={false}
+                initialNumToRender={6}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                removeClippedSubviews={Platform.OS === 'android'}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                ListHeaderComponentStyle={styles.headerList}
+                ListEmptyComponent={() => (
+                    <View style={styles.emptyBox}>
+                        <IconButton icon="briefcase-variant-off-outline" size={48} iconColor="#E2E8F0" />
+                        <Text variant="bodyLarge" style={styles.emptyText}>No available jobs in your area.</Text>
+                        <Button mode="text" onPress={onRefresh}>Refresh Feed</Button>
+                    </View>
+                )}
+                contentContainerStyle={styles.listContent}
             />
         </SafeAreaView>
     );
@@ -165,143 +180,180 @@ const VendorDashboard: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#F8FAFC',
+    },
+    headerWrapper: {
+        marginBottom: 20,
     },
     header: {
+        backgroundColor: '#FFFFFF',
         padding: 24,
-        backgroundColor: '#fff',
+        paddingBottom: 40,
         borderBottomLeftRadius: 32,
         borderBottomRightRadius: 32,
     },
-    profileRow: {
+    headerTop: {
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 24,
     },
-    profileText: {
-        marginLeft: 16,
-    },
-    vendorName: {
-        fontWeight: 'bold',
-        color: '#1A1A1A',
-    },
-    ratingRow: {
-        flexDirection: 'row',
+    logoBox: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: '#FFFFFF',
+        justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: -12,
     },
-    ratingText: {
-        color: '#666',
-        marginLeft: -8,
+    headerLogo: {
+        width: 28,
+        height: 28,
     },
-    statsContainer: {
+    profileBox: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginTop: 8,
-    },
-    statCard: {
-        width: '31%',
-        borderRadius: 16,
-        backgroundColor: '#fff',
-        elevation: 0,
-        borderWidth: 1,
-        borderColor: '#F0F0F0',
-    },
-    statContent: {
-        padding: 12,
         alignItems: 'center',
+        marginBottom: 32,
+    },
+    profileInfo: {
+        flex: 1,
+    },
+    vendorName: {
+        fontWeight: '900',
+        color: '#1E293B',
+        letterSpacing: -0.5,
+    },
+    ratingBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    ratingText: {
+        color: '#64748B',
+    },
+    mainAvatar: {
+        backgroundColor: '#6366F1',
+    },
+    statsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    statItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
     statValue: {
         fontWeight: 'bold',
-        marginTop: 8,
+        color: '#1E293B',
+        lineHeight: 20,
     },
     statLabel: {
-        color: '#999',
+        color: '#94A3B8',
+        textTransform: 'uppercase',
+        fontSize: 9,
+        letterSpacing: 0.5,
     },
-    section: {
+    balanceCard: {
+        marginTop: -24,
+        paddingHorizontal: 24,
+    },
+    balanceInner: {
+        backgroundColor: '#6366F1',
+        borderRadius: 24,
         padding: 20,
-    },
-    sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
     },
-    sectionTitle: {
-        fontWeight: 'bold',
-        color: '#1A1A1A',
+    balanceLabel: {
+        color: '#E0E7FF',
+        letterSpacing: 1,
+    },
+    balanceValue: {
+        color: '#FFFFFF',
+        fontWeight: '900',
+    },
+    payoutBtn: {
+        borderRadius: 12,
+    },
+    headerList: {
+        marginBottom: 24,
+    },
+    listContent: {
+        paddingBottom: 40,
     },
     orderCard: {
-        marginBottom: 12,
-        borderRadius: 16,
-        backgroundColor: '#fff',
-        elevation: 1,
+        marginHorizontal: 24,
+        marginBottom: 16,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
     },
     orderTop: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        marginBottom: 8,
     },
     orderId: {
+        color: '#94A3B8',
+        fontWeight: 'bold',
+        letterSpacing: 1,
+    },
+    urgentChip: {
+        backgroundColor: '#FEF2F2',
+        height: 22,
+    },
+    urgentText: {
+        color: '#EF4444',
+        fontSize: 9,
         fontWeight: 'bold',
     },
-    orderChip: {
-        backgroundColor: '#FFEBEE',
-    },
     orderAddress: {
-        color: '#444',
-        marginTop: 4,
+        fontWeight: '900',
+        color: '#1E293B',
+        marginBottom: 4,
     },
     orderDesc: {
-        color: '#888',
-        marginTop: 2,
+        color: '#64748B',
+        lineHeight: 18,
     },
     orderDivider: {
-        marginVertical: 12,
+        marginVertical: 16,
+        backgroundColor: '#F1F5F9',
     },
     orderBottom: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
     },
-    customerInfo: {
+    customerRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 8,
     },
-    toolsGrid: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
+    miniAvatar: {
+        backgroundColor: '#F1F5F9',
     },
-    toolItem: {
-        width: '22%',
+    customerType: {
+        color: '#94A3B8',
+    },
+    quoteBtn: {
+        borderRadius: 8,
+        backgroundColor: '#1E293B',
+    },
+    emptyBox: {
         alignItems: 'center',
-        marginBottom: 16,
-    },
-    toolIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 16,
         justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
+        paddingVertical: 60,
     },
-    toolLabel: {
-        color: '#444',
-    },
-    footer: {
-        padding: 24,
-        alignItems: 'center',
-    },
-    logoutBtn: {
-        width: '100%',
-        borderRadius: 12,
-        paddingVertical: 4,
-    },
-    versionText: {
-        marginTop: 12,
-        color: '#CCC',
+    emptyText: {
+        color: '#94A3B8',
+        marginTop: 16,
     },
 });
 
-export default VendorDashboard;
+export default React.memo(VendorDashboard);

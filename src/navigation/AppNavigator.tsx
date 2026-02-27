@@ -3,6 +3,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
 import { UserRole, RootStackParamList } from '../types/types';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+
 import LoginScreen from '../screens/LoginScreen';
 import SignupRoleSelectorScreen from '../screens/SignupRoleSelectorScreen';
 import CustomerSignupScreen from '../screens/CustomerSignupScreen';
@@ -11,100 +13,79 @@ import AdminDashboard from '../screens/AdminDashboard';
 import VendorDashboard from '../screens/VendorDashboard';
 import CustomerDashboard from '../screens/CustomerDashboard';
 import JobDetailsScreen from '../screens/JobDetailsScreen';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import AssignVendorScreen from '../screens/AssignVendorScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
+
+// Memoize static screen options to prevent re-creation on each render
+const authScreenOptions = { headerShown: false } as const;
+
+const mainScreenOptions = {
+    headerStyle: { backgroundColor: '#6366F1' },
+    headerTintColor: '#fff',
+    headerTitleStyle: { fontWeight: '900' as const, letterSpacing: -0.5 },
+};
+
+const CUSTOMER_ROLES = new Set([
+    UserRole.CUSTOMER,
+    UserRole.REALTOR,
+    UserRole.PROPERTY_MANAGER,
+    UserRole.BUSINESS,
+    UserRole.HOME_OWNER,
+    UserRole.LANDLORD,
+    UserRole.OTHER,
+]);
 
 const AppNavigator: React.FC = () => {
     const { user, isLoading } = useAuth();
 
+    const isCustomerRole = React.useMemo(
+        () => user ? CUSTOMER_ROLES.has(user.role) : false,
+        [user?.role]
+    );
+
+    console.log('AppNavigator rendering, user:', user?.email, 'isLoading:', isLoading);
+
     if (isLoading) {
+        console.log('AppNavigator: Showing ActivityIndicator');
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#007AFF" />
+                <ActivityIndicator size="large" color="#6366F1" />
             </View>
         );
     }
 
-    const isCustomerRole = user && [
-        UserRole.CUSTOMER,
-        UserRole.REALTOR,
-        UserRole.PROPERTY_MANAGER,
-        UserRole.BUSINESS,
-        UserRole.HOME_OWNER,
-        UserRole.LANDLORD,
-        UserRole.OTHER
-    ].includes(user.role);
+    console.log('AppNavigator: Showing Navigator, user authenticated:', !!user);
 
     return (
         <NavigationContainer>
             {!user ? (
-                // Auth Stack - shown when user is not logged in
-                <Stack.Navigator
-                    screenOptions={{
-                        headerShown: false,
-                    }}
-                >
+                <Stack.Navigator screenOptions={authScreenOptions}>
                     <Stack.Screen name="Login" component={LoginScreen} />
                     <Stack.Screen name="SignupRoleSelector" component={SignupRoleSelectorScreen} />
                     <Stack.Screen name="CustomerSignup" component={CustomerSignupScreen} />
                     <Stack.Screen name="VendorSignup" component={VendorSignupScreen} />
                 </Stack.Navigator>
             ) : (
-                // Main Stack - shown when user is logged in
-                <Stack.Navigator
-                    screenOptions={{
-                        headerStyle: {
-                            backgroundColor: '#007AFF',
-                        },
-                        headerTintColor: '#fff',
-                        headerTitleStyle: {
-                            fontWeight: 'bold',
-                        },
-                    }}
-                >
+                <Stack.Navigator screenOptions={mainScreenOptions}>
                     {user.role === UserRole.ADMIN && (
                         <>
-                            <Stack.Screen
-                                name="AdminDashboard"
-                                component={AdminDashboard}
-                                options={{ title: 'Admin Dashboard' }}
-                            />
-                            <Stack.Screen
-                                name="VendorDashboard"
-                                component={VendorDashboard}
-                                options={{ title: 'Vendor Dashboard' }}
-                            />
-                            <Stack.Screen
-                                name="CustomerDashboard"
-                                component={CustomerDashboard}
-                                options={{ title: 'Customer Dashboard' }}
-                            />
+                            <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ headerShown: false }} />
+                            <Stack.Screen name="VendorDashboard" component={VendorDashboard} options={{ headerShown: false }} />
+                            <Stack.Screen name="CustomerDashboard" component={CustomerDashboard} options={{ headerShown: false }} />
                         </>
                     )}
 
                     {user.role === UserRole.VENDOR && (
-                        <Stack.Screen
-                            name="VendorDashboard"
-                            component={VendorDashboard}
-                            options={{ title: 'Vendor Dashboard' }}
-                        />
+                        <Stack.Screen name="VendorDashboard" component={VendorDashboard} options={{ headerShown: false }} />
                     )}
 
                     {isCustomerRole && (
-                        <Stack.Screen
-                            name="CustomerDashboard"
-                            component={CustomerDashboard}
-                            options={{ title: 'Customer Dashboard' }}
-                        />
+                        <Stack.Screen name="CustomerDashboard" component={CustomerDashboard} options={{ headerShown: false }} />
                     )}
 
-                    {/* Common Screens */}
-                    <Stack.Screen
-                        name="JobDetails"
-                        component={JobDetailsScreen}
-                        options={{ title: 'Job Details' }}
-                    />
+                    <Stack.Screen name="JobDetails" component={JobDetailsScreen} options={{ title: 'Job Details' }} />
+                    <Stack.Screen name="AssignVendor" component={AssignVendorScreen} options={{ title: 'Assign Vendor' }} />
                 </Stack.Navigator>
             )}
         </NavigationContainer>
@@ -120,4 +101,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default AppNavigator;
+export default React.memo(AppNavigator);

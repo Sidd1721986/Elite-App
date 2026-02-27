@@ -1,4 +1,4 @@
-# Multi-User Authentication App
+# Elite Services
 
 A React Native application built with Expo that supports three user types: **Admin**, **Vendor**, and **Customer**. The app features role-based authentication and access control, working on both iOS and Android platforms.
 
@@ -94,7 +94,7 @@ After creating these users during signup, you can test with:
 ## Project Structure
 
 ```
-multi-user-auth-app/
+elite-home-service/
 ├── src/
 │   ├── context/
 │   │   └── AuthContext.tsx        # Authentication context

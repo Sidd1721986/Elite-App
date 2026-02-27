@@ -11,7 +11,8 @@ export enum UserRole {
 }
 
 export interface User {
-  username: string;
+  id?: string;
+  username?: string;
   email: string;
   password: string;
   role: UserRole;
@@ -25,7 +26,7 @@ export interface User {
 
 export interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string, role: UserRole) => Promise<boolean>;
+  login: (email: string, password: string, role: UserRole) => Promise<boolean | string>;
   signup: (
     name: string,
     email: string,
@@ -35,20 +36,26 @@ export interface AuthContextType {
     phone: string,
     referralSource: string,
     roleOther?: string
-  ) => Promise<boolean>;
+  ) => Promise<boolean | string>;
   logout: () => Promise<void>;
   isLoading: boolean;
   getPendingVendors: () => Promise<User[]>;
-  updateUserStatus: (email: string, approved: boolean) => Promise<boolean>;
+  getApprovedVendors: () => Promise<User[]>;
+  updateUserStatus: (userId: string, approved: boolean) => Promise<boolean>;
+  removeVendor: (userId: string) => Promise<boolean>;
 }
 
 export enum JobStatus {
   SUBMITTED = 'Submitted',
-  SENT_TO_VENDORS = 'Sent to Vendor(s)',
-  RECEIVED = 'Received',
-  QUOTED = 'Quoted',
-  SCHEDULED = 'Scheduled',
-  COMPLETED_AWAITING_PAYMENT = 'Completed/Awaiting payment',
+  ASSIGNED = 'Assigned',
+  ACCEPTED = 'Accepted',
+  REACHED_OUT = 'Reached Out',
+  APPT_SET = 'Appt Set',
+  SALE = 'Sale',
+  FOLLOW_UP = 'Follow Up',
+  EXPIRED = 'Expired',
+  COMPLETED = 'Completed',
+  INVOICED = 'Invoiced'
 }
 
 export enum Urgency {
@@ -64,18 +71,39 @@ export interface Contact {
   email: string;
 }
 
+export interface JobNote {
+  id: string;
+  jobId: string;
+  authorId: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface Job {
   id: string;
   customerId: string;
+  customer?: User;
+  vendorId?: string;
+  vendor?: User;
   address: string;
+  contactPhone?: string;
+  contactEmail?: string;
   contacts: Contact[];
   description: string;
   photos: string[];
   urgency: Urgency;
   otherDetails?: string;
-  status: JobStatus;
+  status: string;
+  assignedAt?: string;
+  acceptedAt?: string;
+  scopeOfWork?: string;
+  contractAmount?: number;
+  workStartDate?: string;
+  completedPhotos?: string;
+  isInvoiced?: boolean;
   scheduledDate?: string;
   createdAt: string;
+  notes?: JobNote[];
 }
 
 export type RootStackParamList = {
@@ -87,4 +115,5 @@ export type RootStackParamList = {
   VendorDashboard: undefined;
   CustomerDashboard: undefined;
   JobDetails: { jobId: string };
+  AssignVendor: { jobId: string };
 };

@@ -65,7 +65,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
         }
 
         setLoading(true);
-        const success = await signup(
+        const result = await signup(
             name,
             email,
             password,
@@ -75,7 +75,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
             referralSource
         );
 
-        if (success) {
+        if (result === true) {
             setSnackbarMessage('Account created! Please wait for Admin approval.');
             setSnackbarVisible(true);
             setTimeout(() => {
@@ -84,7 +84,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
             }, 3000);
         } else {
             setLoading(false);
-            setSnackbarMessage('Email already exists');
+            setSnackbarMessage(typeof result === 'string' ? result : 'Email already exists');
             setSnackbarVisible(true);
         }
     };
@@ -108,7 +108,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
                         <View style={styles.content}>
                             <View style={styles.logoContainer}>
                                 <Image
-                                    source={require('../../assets/logo.png')}
+                                    source={require('../assets/logo.png')}
                                     style={styles.logo}
                                     resizeMode="contain"
                                 />
