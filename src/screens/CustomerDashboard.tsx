@@ -665,7 +665,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        overflow: 'hidden',
     },
     bannerTextContainer: {
         flex: 1,

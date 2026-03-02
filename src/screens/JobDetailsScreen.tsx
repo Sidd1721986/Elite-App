@@ -468,7 +468,6 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         borderWidth: 1,
         borderColor: '#F1F5F9',
-        overflow: 'hidden',
     },
     notesList: {
         maxHeight: 300,

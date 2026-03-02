@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://192.168.1.65:5260/api';
+const BASE_URL = 'http://localhost:5260/api';
 
 // Response cache with TTL
 const cache = new Map<string, { data: any, timestamp: number }>();
