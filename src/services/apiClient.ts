@@ -2,15 +2,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BASE_URL = 'http://localhost:5260/api';
 
-// Response cache with TTL
+// Response cache with TTL — set to 0 to always fetch fresh data and avoid stale lists
 const cache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 0; // Disabled: always hit server for fresh data
 
-// In-flight request deduplication — prevents multiple identical GET requests
+// In-flight request deduplication — prevents duplicate identical GETs within same tick
 const pendingRequests = new Map<string, Promise<any>>();
 
 // Request timeout (10 seconds)
 const REQUEST_TIMEOUT = 10000;
+
+let onUnauthorized: (() => void | Promise<void>) | null = null;
+
+export function setApiClientOnUnauthorized(callback: () => void | Promise<void>) {
+    onUnauthorized = callback;
+}
 
 const fetchWithTimeout = (url: string, options: RequestInit, timeout: number): Promise<Response> => {
     return Promise.race([
@@ -56,7 +62,15 @@ export const apiClient = {
 
                 if (!response.ok) {
                     const errorText = await response.text().catch(() => 'No response body');
-                    console.error(`API Error [${response.status}] ${method} ${endpoint}:`, errorText);
+                    if (__DEV__) console.error(`API Error [${response.status}] ${method} ${endpoint}:`, errorText);
+
+                    if (response.status === 401 && onUnauthorized) {
+                        try {
+                            await Promise.resolve(onUnauthorized());
+                        } catch (e) {
+                            if (__DEV__) console.error('onUnauthorized error:', e);
+                        }
+                    }
 
                     let errorMessage = `HTTP error! status: ${response.status}`;
                     try {
@@ -85,14 +99,14 @@ export const apiClient = {
                             errorMessage = errorText;
                         }
                     }
-                    console.log('API CLIENT THROWING:', errorMessage);
+                    if (__DEV__) console.log('API CLIENT THROWING:', errorMessage);
                     throw new Error(errorMessage);
                 }
 
                 const data = await response.json();
 
-                // Cache successful GET responses
-                if (method === 'GET') {
+                // Cache successful GET responses only when caching is enabled
+                if (method === 'GET' && CACHE_TTL > 0) {
                     cache.set(endpoint, { data, timestamp: Date.now() });
                 }
 

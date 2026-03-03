@@ -1,18 +1,21 @@
 import * as React from 'react';
-import { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text, Card, Snackbar, Menu, Surface } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AppLogo from '../components/AppLogo';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
 interface Props {
     navigation: LoginScreenNavigationProp;
 }
+
+const ROLES: UserRole[] = [UserRole.ADMIN, UserRole.VENDOR, UserRole.CUSTOMER];
 
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const [email, setEmail] = useState('');
@@ -24,22 +27,26 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const { login } = useAuth();
 
-    const handleLogin = async () => {
+    const handleLogin = useCallback(async () => {
         if (!email || !password) {
             setSnackbarMessage('Please fill in all fields');
             setSnackbarVisible(true);
             return;
         }
-
         setLoading(true);
         const result = await login(email, password, selectedRole);
         setLoading(false);
-
         if (result !== true) {
             setSnackbarMessage(typeof result === 'string' ? result : 'Invalid credentials or wrong role selected');
             setSnackbarVisible(true);
         }
-    };
+    }, [email, password, selectedRole, login]);
+
+    const handleSignupPress = useCallback(() => {
+        navigation.navigate('SignupRoleSelector');
+    }, [navigation]);
+
+    const dismissSnackbar = useCallback(() => setSnackbarVisible(false), []);
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -55,13 +62,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 >
                     <View style={styles.content}>
                         <View style={styles.headerSection}>
-                            <Surface style={styles.logoSurface} elevation={2}>
-                                <Image
-                                    source={require('../assets/logo.png')}
-                                    style={styles.logo}
-                                    resizeMode="contain"
-                                />
-                            </Surface>
+                            <AppLogo size={60} />
                             <Text variant="displayMedium" style={styles.brandTitle}>
                                 Elite Services
                             </Text>
@@ -118,7 +119,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                         }
                                         contentStyle={styles.menuContent}
                                     >
-                                        {[UserRole.ADMIN, UserRole.VENDOR, UserRole.CUSTOMER].map((role) => (
+                                        {ROLES.map((role) => (
                                             <Menu.Item
                                                 key={role}
                                                 onPress={() => {
@@ -147,7 +148,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                 <View style={styles.footerLinks}>
                                     <Button
                                         mode="text"
-                                        onPress={() => navigation.navigate('SignupRoleSelector')}
+                                        onPress={handleSignupPress}
                                         style={styles.signupButton}
                                         labelStyle={styles.signupButtonLabel}
                                     >
@@ -161,7 +162,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
                 <Snackbar
                     visible={snackbarVisible}
-                    onDismiss={() => setSnackbarVisible(false)}
+                    onDismiss={dismissSnackbar}
                     duration={3000}
                     style={styles.snackbar}
                 >
@@ -198,19 +199,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 40,
     },
-    logoSurface: {
-        width: 100,
-        height: 100,
-        borderRadius: 24,
-        backgroundColor: '#FFFFFF',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    logo: {
-        width: 60,
-        height: 60,
-    },
     brandTitle: {
         color: '#1E293B',
         fontWeight: '900',
@@ -228,7 +216,8 @@ const styles = StyleSheet.create({
         borderColor: '#F1F5F9',
     },
     cardInner: {
-        padding: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 18,
     },
     input: {
         marginBottom: 16,
@@ -290,4 +279,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default LoginScreen;
+export default React.memo(LoginScreen);

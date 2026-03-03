@@ -9,41 +9,29 @@ interface JobItemProps {
     onModify?: (jobId: string) => void;
 }
 
+const DEFAULT_STATUS = { progress: 0.1, color: '#64748B', bgColor: '#F1F5F9' };
+
+const STATUS_INFO_MAP: Record<string, { progress: number; color: string; bgColor: string }> = {
+    [JobStatus.SUBMITTED]: { progress: 1 / 8, color: '#6366F1', bgColor: '#EEF2FF' },
+    [JobStatus.ASSIGNED]: { progress: 2 / 8, color: '#8B5CF6', bgColor: '#F5F3FF' },
+    [JobStatus.ACCEPTED]: { progress: 3 / 8, color: '#3B82F6', bgColor: '#EFF6FF' },
+    [JobStatus.REACHED_OUT]: { progress: 4 / 8, color: '#2563EB', bgColor: '#EBF2FF' },
+    [JobStatus.APPT_SET]: { progress: 5 / 8, color: '#F59E0B', bgColor: '#FFFBEB' },
+    [JobStatus.SALE]: { progress: 6 / 8, color: '#10B981', bgColor: '#ECFDF5' },
+    [JobStatus.COMPLETED]: { progress: 7 / 8, color: '#059669', bgColor: '#ECFDF5' },
+    [JobStatus.INVOICED]: { progress: 1, color: '#15803D', bgColor: '#F0FDF4' },
+    [JobStatus.EXPIRED]: { progress: 0.1, color: '#EF4444', bgColor: '#FEF2F2' },
+    [JobStatus.FOLLOW_UP]: { progress: 0.5, color: '#7C3AED', bgColor: '#F5F3FF' },
+};
+
+function getStatusInfo(status: string) {
+    return STATUS_INFO_MAP[status] ?? DEFAULT_STATUS;
+}
+
 const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify }) => {
-    const getStatusInfo = React.useCallback((status: string) => {
-        const steps = [
-            JobStatus.SUBMITTED,
-            JobStatus.ASSIGNED,
-            JobStatus.ACCEPTED,
-            JobStatus.REACHED_OUT,
-            JobStatus.APPT_SET,
-            JobStatus.SALE,
-            JobStatus.COMPLETED,
-            JobStatus.INVOICED
-        ];
-        const index = steps.indexOf(status as JobStatus);
-        const progress = index === -1 ? 0.1 : (index + 1) / steps.length;
-
-        let color = '#64748B';
-        let bgColor = '#F1F5F9';
-
-        switch (status) {
-            case JobStatus.SUBMITTED: color = '#6366F1'; bgColor = '#EEF2FF'; break;
-            case JobStatus.ASSIGNED: color = '#8B5CF6'; bgColor = '#F5F3FF'; break;
-            case JobStatus.ACCEPTED: color = '#3B82F6'; bgColor = '#EFF6FF'; break;
-            case JobStatus.REACHED_OUT: color = '#2563EB'; bgColor = '#EBF2FF'; break;
-            case JobStatus.APPT_SET: color = '#F59E0B'; bgColor = '#FFFBEB'; break;
-            case JobStatus.SALE: color = '#10B981'; bgColor = '#ECFDF5'; break;
-            case JobStatus.COMPLETED: color = '#059669'; bgColor = '#ECFDF5'; break;
-            case JobStatus.INVOICED: color = '#15803D'; bgColor = '#F0FDF4'; break;
-            case JobStatus.EXPIRED: color = '#EF4444'; bgColor = '#FEF2F2'; break;
-            case JobStatus.FOLLOW_UP: color = '#7C3AED'; bgColor = '#F5F3FF'; break;
-        }
-
-        return { progress, color, bgColor };
-    }, []);
-
     const { progress, color, bgColor } = getStatusInfo(job.status);
+    const handleViewDetails = React.useCallback(() => onViewDetails(job.id), [job.id, onViewDetails]);
+    const handleModify = React.useCallback(() => onModify?.(job.id), [job.id, onModify]);
 
     return (
         <Card style={styles.jobCard} elevation={0}>
@@ -104,7 +92,7 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify }) => {
                 <View style={styles.actions}>
                     <Button
                         mode="contained"
-                        onPress={() => onViewDetails(job.id)}
+                        onPress={handleViewDetails}
                         style={styles.detailsBtn}
                         contentStyle={styles.btnContent}
                     >
@@ -113,7 +101,7 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify }) => {
                     {onModify && job.status === JobStatus.SUBMITTED && (
                         <Button
                             mode="outlined"
-                            onPress={() => onModify(job.id)}
+                            onPress={handleModify}
                             style={styles.modifyBtn}
                             contentStyle={styles.btnContent}
                         >
@@ -128,14 +116,20 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify }) => {
 
 const styles = StyleSheet.create({
     jobCard: {
-        marginBottom: 20,
+        marginBottom: 16,
         backgroundColor: '#FFFFFF',
         borderRadius: 20,
         borderWidth: 1,
         borderColor: '#F1F5F9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 2,
     },
     content: {
-        padding: 4,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
     },
     jobHeader: {
         flexDirection: 'row',
@@ -152,7 +146,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#1E293B',
         marginTop: 2,
-        maxWidth: 200,
+        maxWidth: '75%',
     },
     statusChip: {
         height: 28,
@@ -246,7 +240,7 @@ const styles = StyleSheet.create({
         borderColor: '#E2E8F0',
     },
     btnContent: {
-        height: 40,
+        height: 44,
     },
 });
 

@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { useCallback, useMemo } from 'react';
-import { View, StyleSheet, FlatList, Image, RefreshControl, ScrollView, Platform } from 'react-native';
+import { View, StyleSheet, FlatList, RefreshControl, ScrollView, Platform } from 'react-native';
 import { Text, Card, Button, Avatar, Divider, Surface, Chip, IconButton, List } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
+import AppLogo from '../components/AppLogo';
 import { useJobs } from '../context/JobContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -93,11 +94,7 @@ const VendorDashboard: React.FC = () => {
             <Surface style={styles.header} elevation={0}>
                 <View style={styles.headerTop}>
                     <Surface style={styles.logoBox} elevation={1}>
-                        <Image
-                            source={require('../assets/logo.png')}
-                            style={styles.headerLogo}
-                            resizeMode="contain"
-                        />
+                        <AppLogo size={36} showSurface={false} />
                     </Surface>
                     <IconButton
                         icon="logout"

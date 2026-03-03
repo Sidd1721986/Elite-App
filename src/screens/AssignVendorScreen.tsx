@@ -54,7 +54,8 @@ const AssignVendorScreen: React.FC = () => {
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <IconButton icon="chevron-left" size={24} onPress={() => navigation.goBack()} />
-                <Text variant="headlineSmall" style={styles.title}>Assign Vendor</Text>
+                <Text variant="titleLarge" style={styles.title}>Assign Vendor</Text>
+                <View style={styles.headerSpacer} />
             </View>
 
             <View style={styles.jobInfo}>
@@ -132,13 +133,20 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingTop: 8,
+        paddingHorizontal: 4,
+        paddingVertical: 8,
+        backgroundColor: '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E2E8F0',
+    },
+    headerSpacer: {
+        width: 40,
     },
     title: {
+        flex: 1,
         fontWeight: '900',
         color: '#1E293B',
-        marginLeft: 8,
+        textAlign: 'center',
     },
     jobInfo: {
         paddingHorizontal: 20,

@@ -45,20 +45,18 @@ export const authService = {
             if (role === UserRole.ADMIN) apiRole = 'Admin';
             else if (role === UserRole.VENDOR) apiRole = 'Vendor';
 
-            const response = await apiClient.post<{ token: string, user: any }>('/auth/login', {
+            const response = await apiClient.post<{ token?: string; user?: any }>('/auth/login', {
                 email,
                 password,
                 role: apiRole
             });
 
-            if (response.token) {
-                await AsyncStorage.setItem('@auth_token', response.token);
-                const user: User = {
-                    ...response.user,
-                    role: role, // Keep the granular role locally for UI consistency
-                };
-                await AsyncStorage.setItem('@current_user', JSON.stringify(user));
-                return user;
+            const token = response.token ?? (response as any).accessToken ?? (response as any).Token;
+            const userPayload = response.user ?? (response as any).User;
+            if (token && userPayload) {
+                await AsyncStorage.setItem('@auth_token', token);
+                await AsyncStorage.setItem('@current_user', JSON.stringify(userPayload));
+                return userPayload as User;
             }
 
             return null;
@@ -89,12 +87,12 @@ export const authService = {
         }
     },
 
-    // Get users pending vendor approval
+    // Get users pending vendor approval (bypass cache so token is always sent)
     async getPendingVendors(): Promise<User[]> {
         try {
-            return await apiClient.get<User[]>('/users/pending-vendors');
+            return await apiClient.get<User[]>('/users/pending-vendors', true);
         } catch (error) {
-            console.error('Error getting pending vendors:', error);
+            if (__DEV__) console.error('Error getting pending vendors:', error);
             return [];
         }
     },
@@ -114,12 +112,12 @@ export const authService = {
         }
     },
 
-    // Get users who are approved vendors
+    // Get users who are approved vendors (bypass cache so token is always sent)
     async getApprovedVendors(): Promise<User[]> {
         try {
-            return await apiClient.get<User[]>('/users/approved-vendors');
+            return await apiClient.get<User[]>('/users/approved-vendors', true);
         } catch (error) {
-            console.error('Error getting approved vendors:', error);
+            if (__DEV__) console.error('Error getting approved vendors:', error);
             return [];
         }
     },

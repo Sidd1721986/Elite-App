@@ -39,16 +39,16 @@ describe('apiClient', () => {
         await expect(apiClient.get('/error')).rejects.toThrow('HTTP error! status: 404');
     });
 
-    it('should cache GET requests', async () => {
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
+    it('should not use response cache when CACHE_TTL is 0 (always fresh)', async () => {
+        (global.fetch as jest.Mock).mockResolvedValue({
             ok: true,
-            json: async () => ({ data: 'cached' }),
+            json: async () => ({ data: 'fresh' }),
         });
 
         await apiClient.get('/cached');
         await apiClient.get('/cached');
 
-        expect(global.fetch).toHaveBeenCalledTimes(1);
+        expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
     it('should invalidate cache on mutation', async () => {

@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TextInput, Button, Text, Card, Snackbar, Menu } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
+import AppLogo from '../components/AppLogo';
 
 type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, 'CustomerSignup'>;
 
@@ -122,11 +123,7 @@ const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
                     >
                         <View style={styles.content}>
                             <View style={styles.logoContainer}>
-                                <Image
-                                    source={require('../assets/logo.png')}
-                                    style={styles.logo}
-                                    resizeMode="contain"
-                                />
+                                <AppLogo size={56} showSurface={false} />
                             </View>
                             <Text variant="displaySmall" style={styles.title}>
                                 Customer Signup
@@ -315,42 +312,54 @@ const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#F8FAFC',
     },
     scrollView: {
         flex: 1,
     },
     scrollContent: {
         flexGrow: 1,
-        padding: 16,
+        paddingHorizontal: 24,
+        paddingVertical: 24,
         paddingBottom: 40,
     },
-    content: {
-    },
+    content: {},
     title: {
         textAlign: 'center',
         marginBottom: 8,
-        fontWeight: 'bold',
+        fontWeight: '900',
+        color: '#1E293B',
     },
     logoContainer: {
         alignItems: 'center',
-        marginBottom: 10,
+        marginBottom: 12,
     },
     logo: {
-        width: 60,
-        height: 60,
-        borderRadius: 12,
+        width: 72,
+        height: 72,
+        borderRadius: 16,
     },
     subtitle: {
         textAlign: 'center',
-        marginBottom: 16,
-        opacity: 0.7,
+        marginBottom: 20,
+        opacity: 0.8,
+        color: '#64748B',
     },
     card: {
         marginTop: 16,
+        borderRadius: 24,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 3,
     },
     input: {
         marginBottom: 16,
+        backgroundColor: '#FFFFFF',
     },
     label: {
         marginTop: 8,
@@ -361,7 +370,8 @@ const styles = StyleSheet.create({
     },
     dropdownButton: {
         marginTop: 4,
-        borderColor: '#757575',
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
     },
     dropdownButtonContent: {
         justifyContent: 'flex-start',
@@ -369,7 +379,8 @@ const styles = StyleSheet.create({
     },
     signupButton: {
         marginTop: 16,
-        paddingVertical: 6,
+        paddingVertical: 8,
+        borderRadius: 14,
     },
     backButton: {
         marginTop: 8,

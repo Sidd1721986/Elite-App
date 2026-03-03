@@ -10,6 +10,30 @@ const STORAGE_KEY = '@jobs_cache';
 import { normalizeUser, normalizeJob } from '../utils/normalization';
 import { useAuth } from './AuthContext';
 
+// Ensure each user only sees their own jobs (except Admins who see all)
+const scopeJobsToUser = (jobs: Job[], user: User | null): Job[] => {
+    if (!user) return jobs;
+
+    const role = (user.role || '').toString();
+    if (role.toLowerCase() === 'admin') {
+        return jobs;
+    }
+
+    // Vendors: jobs assigned to this vendor
+    if (role.toLowerCase() === 'vendor') {
+        return jobs.filter(job => {
+            const vendorId = (job.vendorId || job.vendor?.id || '').toString();
+            return vendorId && user.id && vendorId === user.id.toString();
+        });
+    }
+
+    // Customers (and other non-admin roles): jobs created by this customer
+    return jobs.filter(job => {
+        const customerId = (job.customerId || job.customer?.id || '').toString();
+        return customerId && user.id && customerId === user.id.toString();
+    });
+};
+
 interface JobContextType {
     jobs: Job[];
     addJob: (jobData: any) => Promise<void>;
@@ -38,7 +62,6 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const loadJobs = useCallback(async (isRefreshing = false) => {
         if (!user) {
-            console.log('JobContext: Skipping job load (no user logged in)');
             setIsLoading(false);
             return;
         }
@@ -50,7 +73,8 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (cachedJobs && isMounted.current) {
                     const parsed = JSON.parse(cachedJobs);
                     const normalized = Array.isArray(parsed) ? parsed.map(normalizeJob) : [];
-                    setJobs(normalized);
+                    const scoped = scopeJobsToUser(normalized, user);
+                    setJobs(scoped);
                     setIsLoading(false);
                 }
             } catch {
@@ -65,15 +89,15 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (isMounted.current) {
                     const jobsArray = Array.isArray(remoteJobs) ? remoteJobs : (remoteJobs && typeof remoteJobs === 'object' ? [remoteJobs] : []);
                     const normalized = jobsArray.map(normalizeJob);
-                    setJobs(normalized);
+                    const scoped = scopeJobsToUser(normalized, user);
+                    setJobs(scoped);
                     setError(null);
-                    // Cache normalized data
-                    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)).catch(() => { });
+                    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(scoped)).catch(() => { });
                 }
             } catch (err) {
                 if (isMounted.current) {
                     setError(err instanceof Error ? err.message : 'Failed to load jobs');
-                    console.error('Error loading jobs:', err);
+                    if (__DEV__) console.error('Error loading jobs:', err);
                 }
             } finally {
                 if (isMounted.current) {
@@ -81,7 +105,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
             }
         });
-    }, []);
+    }, [user?.id]);
 
     useEffect(() => {
         loadJobs();
@@ -128,7 +152,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setError(null);
         } catch (err: any) {
             const msg = err?.message || 'Failed to update job';
-            console.error('JobContext: Update failed:', msg);
+            if (__DEV__) console.error('JobContext: Update failed:', msg);
             // Revert to snapshot
             setJobs(snapshot);
             setError(msg);

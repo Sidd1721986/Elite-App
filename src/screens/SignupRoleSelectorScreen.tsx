@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { View, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text, Card, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
+import AppLogo from '../components/AppLogo';
 
 type RoleSelectorNavigationProp = StackNavigationProp<RootStackParamList, 'SignupRoleSelector'>;
 
@@ -16,11 +17,7 @@ const SignupRoleSelectorScreen: React.FC<Props> = ({ navigation }) => {
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.logoContainer}>
-                    <Image
-                        source={require('../assets/logo.png')}
-                        style={styles.logo}
-                        resizeMode="contain"
-                    />
+                    <AppLogo size={56} showSurface={false} />
                 </View>
 
                 <Text variant="displaySmall" style={styles.title}>
@@ -73,37 +70,46 @@ const SignupRoleSelectorScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#F8FAFC',
     },
     content: {
         flex: 1,
-        padding: 24,
+        paddingHorizontal: 24,
+        paddingVertical: 32,
         justifyContent: 'center',
     },
     logoContainer: {
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 24,
     },
     logo: {
-        width: 100,
-        height: 100,
-        borderRadius: 20,
+        width: 96,
+        height: 96,
+        borderRadius: 24,
     },
     title: {
         textAlign: 'center',
-        fontWeight: 'bold',
+        fontWeight: '900',
         marginBottom: 8,
+        color: '#1E293B',
     },
     subtitle: {
         textAlign: 'center',
-        marginBottom: 40,
-        opacity: 0.7,
+        marginBottom: 32,
+        opacity: 0.8,
+        color: '#64748B',
     },
     card: {
         marginBottom: 16,
-        borderRadius: 16,
-        backgroundColor: '#fff',
-        elevation: 2,
+        borderRadius: 20,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 3,
     },
     vendorCard: {
         marginBottom: 32,
@@ -111,7 +117,8 @@ const styles = StyleSheet.create({
     cardContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
     },
     iconContainer: {
         marginRight: 16,
@@ -131,14 +138,15 @@ const styles = StyleSheet.create({
     },
     cardTitle: {
         fontWeight: 'bold',
-        color: '#333',
+        color: '#1E293B',
     },
     cardDesc: {
-        color: '#666',
+        color: '#64748B',
         marginTop: 4,
     },
     loginButton: {
-        marginTop: 16,
+        marginTop: 24,
+        alignSelf: 'center',
     },
 });
 

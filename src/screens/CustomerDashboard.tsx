@@ -10,6 +10,7 @@ import {
 } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useJobs } from '../context/JobContext';
+import AppLogo from '../components/AppLogo';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, JobStatus, Urgency, Job } from '../types/types';
@@ -170,11 +171,7 @@ const CustomerDashboard: React.FC = () => {
             <Surface style={styles.header} elevation={0}>
                 <View style={styles.headerTop}>
                     <Surface style={styles.headerLogoSurface} elevation={1}>
-                        <Image
-                            source={require('../assets/logo.png')}
-                            style={styles.headerLogo}
-                            resizeMode="contain"
-                        />
+                        <AppLogo size={36} showSurface={false} />
                     </Surface>
                     <IconButton
                         icon="power"
@@ -250,11 +247,7 @@ const CustomerDashboard: React.FC = () => {
                                 Request Service
                             </Button>
                         </View>
-                        <Image
-                            source={require('../assets/logo.png')}
-                            style={styles.bannerImage}
-                            resizeMode="contain"
-                        />
+                        <AppLogo size={80} showSurface={false} />
                     </Surface>
 
                     {activeJobs.length > 0 && (
@@ -903,4 +896,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default CustomerDashboard;
+export default React.memo(CustomerDashboard);

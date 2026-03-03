@@ -3,7 +3,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
 import { UserRole, RootStackParamList } from '../types/types';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Text, Pressable } from 'react-native';
+import { DevSettings } from 'react-native';
 
 import LoginScreen from '../screens/LoginScreen';
 import SignupRoleSelectorScreen from '../screens/SignupRoleSelectorScreen';
@@ -44,18 +45,19 @@ const AppNavigator: React.FC = () => {
         [user?.role]
     );
 
-    console.log('AppNavigator rendering, user:', user?.email, 'isLoading:', isLoading);
-
     if (isLoading) {
-        console.log('AppNavigator: Showing ActivityIndicator');
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#6366F1" />
+                <Text style={styles.loadingText}>Loading…</Text>
+                {__DEV__ && typeof DevSettings?.reload === 'function' && (
+                    <Pressable style={styles.reloadButton} onPress={() => DevSettings.reload()}>
+                        <Text style={styles.reloadButtonText}>Reload</Text>
+                    </Pressable>
+                )}
             </View>
         );
     }
-
-    console.log('AppNavigator: Showing Navigator, user authenticated:', !!user);
 
     return (
         <NavigationContainer>
@@ -84,8 +86,8 @@ const AppNavigator: React.FC = () => {
                         <Stack.Screen name="CustomerDashboard" component={CustomerDashboard} options={{ headerShown: false }} />
                     )}
 
-                    <Stack.Screen name="JobDetails" component={JobDetailsScreen} options={{ title: 'Job Details' }} />
-                    <Stack.Screen name="AssignVendor" component={AssignVendorScreen} options={{ title: 'Assign Vendor' }} />
+                    <Stack.Screen name="JobDetails" component={JobDetailsScreen} options={{ title: 'Job Details', headerShown: false }} />
+                    <Stack.Screen name="AssignVendor" component={AssignVendorScreen} options={{ title: 'Assign Vendor', headerShown: false }} />
                 </Stack.Navigator>
             )}
         </NavigationContainer>
@@ -97,7 +99,24 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f8f9fa',
+        backgroundColor: '#F8FAFC',
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        color: '#64748B',
+    },
+    reloadButton: {
+        marginTop: 24,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        backgroundColor: '#6366F1',
+        borderRadius: 8,
+    },
+    reloadButtonText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '600',
     },
 });
 
