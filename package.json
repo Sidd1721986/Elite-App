@@ -4,8 +4,12 @@
   "main": "index.js",
   "scripts": {
     "start": "react-native start",
-    "ios": "react-native run-ios",
+    "start:reset": "react-native start --reset-cache",
+    "ios": "npx @react-native-community/cli run-ios",
+    "ios:no-packager": "npx @react-native-community/cli run-ios --no-packager",
     "android": "react-native run-android",
+    "clean": "rm -rf node_modules/.cache",
+    "clean:ios": "cd ios && rm -rf build Pods Podfile.lock && cd ..",
     "lint": "eslint ."
   },
   "dependencies": {

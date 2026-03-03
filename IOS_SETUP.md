@@ -1,5 +1,35 @@
 # iOS Setup (Elite App)
 
+## Clean build (fix white screen / stale bundle)
+
+If you see a white screen or stale UI, do a full clean and rebuild:
+
+1. **Clear caches**
+   ```bash
+   watchman watch-del-all          # if you have Watchman
+   npm run clean                   # removes node_modules/.cache
+   npm run clean:ios               # removes ios/build, Pods, Podfile.lock
+   ```
+
+2. **Reinstall Pods**
+   ```bash
+   cd ios && pod install && cd ..
+   ```
+
+3. **Start Metro with a clean bundle**
+   ```bash
+   npm run start:reset             # or: npx react-native start --reset-cache
+   ```
+
+4. **In another terminal, run the app**
+   ```bash
+   npm run ios                     # builds and launches simulator
+   # or if Metro is already running:
+   npm run ios:no-packager
+   ```
+
+---
+
 ## If the app doesn't display on the simulator
 
 Your project path contains a **space** (`Elite App`). Xcode and React Native's codegen scripts can fail or behave oddly with spaces in paths.
