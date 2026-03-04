@@ -8,6 +8,7 @@ import { JobProvider } from './src/context/JobContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { StyleSheet } from 'react-native';
 
+
 class AppErrorBoundary extends React.Component<
     { children: React.ReactNode },
     { hasError: boolean; error: Error | null }
@@ -55,7 +56,9 @@ const theme = {
 export default function App() {
     const [ready, setReady] = React.useState(false);
     React.useEffect(() => {
-        const t = setTimeout(() => setReady(true), 150);
+        const t = setTimeout(() => {
+            setReady(true);
+        }, 150);
         return () => clearTimeout(t);
     }, []);
 

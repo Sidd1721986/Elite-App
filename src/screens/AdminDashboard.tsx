@@ -57,6 +57,13 @@ const AdminDashboard: React.FC = () => {
         () => jobs.filter(j => j.status === JobStatus.SALE).length,
         [jobs],
     );
+    const jobsInProgressCount = useMemo(() => jobs.filter(j =>
+        j.status === JobStatus.ACCEPTED ||
+        j.status === JobStatus.REACHED_OUT ||
+        j.status === JobStatus.APPT_SET ||
+        j.status === JobStatus.FOLLOW_UP
+    ).length, [jobs]);
+
     const activeProjects = useMemo(() => jobs.filter(j =>
         j.status === JobStatus.ASSIGNED ||
         j.status === JobStatus.ACCEPTED ||
@@ -140,11 +147,11 @@ const AdminDashboard: React.FC = () => {
     }, [logout]);
 
     const stats = useMemo(() => [
-        { label: 'Job Done', value: completedJobsCount.toString(), icon: 'check-decagram', color: '#22C55E', sectionKey: 'completedJobs' },
-        { label: 'Active Jobs', value: activeJobsCount.toString(), icon: 'hammer-wrench', color: '#10B981', sectionKey: 'activeProjects' },
-        { label: 'Pending Job', value: pendingJobCount.toString(), icon: 'clock-outline', color: '#F59E0B', sectionKey: 'jobRequests' },
-        { label: 'Number of Sale', value: salesCount.toString(), icon: 'cash-multiple', color: '#8B5CF6', sectionKey: 'activeProjects' },
-    ], [completedJobsCount, activeJobsCount, pendingJobCount, salesCount]);
+        { label: 'Pending Vendors', value: pendingVendors.length.toString(), icon: 'account-clock', color: '#F59E0B', sectionKey: 'vendorVerification' },
+        { label: 'Assign vendors', value: submittedJobs.length.toString(), icon: 'account-plus-outline', color: '#6366F1', sectionKey: 'jobRequests' },
+        { label: 'Job in progress', value: jobsInProgressCount.toString(), icon: 'progress-wrench', color: '#10B981', sectionKey: 'activeProjects' },
+        { label: 'Number of Sale', value: salesCount.toString(), icon: 'cash-multiple', color: '#8B5CF6', sectionKey: 'completedJobs' },
+    ], [pendingVendors.length, submittedJobs.length, jobsInProgressCount, salesCount]);
 
     const renderHeader = useCallback(() => (
         <View style={styles.headerWrapper}>
@@ -237,25 +244,6 @@ const AdminDashboard: React.FC = () => {
         </Card>
     ), []);
 
-    const logs = useMemo(() => [
-        { id: '1', title: 'Security Audit', desc: 'All systems operational • 5m ago', icon: 'shield-check', color: '#10B981' },
-        { id: '2', title: 'New Job Request', desc: 'Leakage fix request in Manhattan', icon: 'lightning-bolt', color: '#F59E0B' },
-        { id: '3', title: 'Database Backup', desc: 'Successful automatic backup • 1h ago', icon: 'database-check', color: '#6366F1' },
-    ], []);
-
-    const renderLogItem = useCallback(({ item }: { item: typeof logs[0] }) => (
-        <Surface key={item.id} style={styles.logItem} elevation={0}>
-            <List.Item
-                title={item.title}
-                description={item.desc}
-                titleStyle={styles.logTitle}
-                descriptionStyle={styles.logDesc}
-                left={props => <Avatar.Icon {...props} size={40} icon={item.icon} style={{ backgroundColor: item.color + '10' }} color={item.color} />}
-            />
-            <Divider />
-        </Surface>
-    ), []);
-
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <ScrollView
@@ -270,196 +258,188 @@ const AdminDashboard: React.FC = () => {
                 <View
                     onLayout={(e) => updateSectionY('jobRequests', e.nativeEvent.layout.y)}
                 >
-                <View style={styles.sectionHeaderBar}>
-                    <Text variant="titleLarge" style={styles.sectionTitle}>Job Requests</Text>
-                    <Chip style={styles.sectionChip}>{submittedJobs.length} New</Chip>
-                </View>
+                    <View style={styles.sectionHeaderBar}>
+                        <Text variant="titleLarge" style={styles.sectionTitle}>Job Requests</Text>
+                        <Chip style={styles.sectionChip}>{submittedJobs.length} New</Chip>
+                    </View>
 
-                {submittedJobs.length > 0 ? (
-                    submittedJobs.map(job => (
-                        <Card key={job.id} style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}>
-                            <Card.Content style={styles.cardInner}>
-                                <View style={styles.requestCardRow}>
-                                    <View style={[styles.timelineBar, { backgroundColor: getTimelineBarColor(job.createdAt) }]} />
-                                    <View style={styles.requestCardContent}>
-                                        <View style={styles.vendorInfo}>
-                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                <Text variant="titleMedium" style={styles.vendorName} numberOfLines={1}>{job.address}</Text>
-                                            </View>
-                                            <Text variant="labelSmall" style={{ color: '#64748B', fontWeight: 'bold' }} numberOfLines={1}>{job.customer?.name || 'Homeowner'}</Text>
-                                            <Text variant="labelSmall" style={styles.vendorEmail} numberOfLines={1}>{job.description}</Text>
-                                            {(job.contactPhone || job.contactEmail) && (
-                                                <View style={{ flexDirection: 'row', marginTop: 4 }}>
-                                                    {job.contactPhone && <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: 'bold' }}>{job.contactPhone} </Text>}
-                                                    {job.contactEmail && <Text variant="labelSmall" style={{ color: '#94A3B8' }}>• {job.contactEmail}</Text>}
+                    {submittedJobs.length > 0 ? (
+                        submittedJobs.map(job => (
+                            <Card key={job.id} style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}>
+                                <Card.Content style={styles.cardInner}>
+                                    <View style={styles.requestCardRow}>
+                                        <View style={[styles.timelineBar, { backgroundColor: getTimelineBarColor(job.createdAt) }]} />
+                                        <View style={styles.requestCardContent}>
+                                            <View style={styles.vendorInfo}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                    <Text variant="titleMedium" style={styles.vendorName} numberOfLines={1}>{job.address}</Text>
                                                 </View>
-                                            )}
-                                        </View>
+                                                <Text variant="labelSmall" style={{ color: '#64748B', fontWeight: 'bold' }} numberOfLines={1}>{job.customer?.name || 'Homeowner'}</Text>
+                                                <Text variant="labelSmall" style={styles.vendorEmail} numberOfLines={1}>{job.description}</Text>
+                                                {(job.contactPhone || job.contactEmail) && (
+                                                    <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                                                        {job.contactPhone && <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: 'bold' }}>{job.contactPhone} </Text>}
+                                                        {job.contactEmail && <Text variant="labelSmall" style={{ color: '#94A3B8' }}>• {job.contactEmail}</Text>}
+                                                    </View>
+                                                )}
+                                            </View>
 
-                                        <View style={styles.actionColumn}>
-                                            <Button
-                                                mode="contained"
-                                                compact
-                                                onPress={() => navigation.navigate('AssignVendor', { jobId: job.id })}
-                                                style={styles.jobActionBtn}
-                                                icon="account-plus-outline"
-                                                labelStyle={{ fontSize: 11 }}
-                                            >
-                                                Assign
-                                            </Button>
+                                            <View style={styles.actionColumn}>
+                                                <Button
+                                                    mode="contained"
+                                                    compact
+                                                    onPress={() => navigation.navigate('AssignVendor', { jobId: job.id })}
+                                                    style={styles.jobActionBtn}
+                                                    icon="account-plus-outline"
+                                                    labelStyle={{ fontSize: 11 }}
+                                                >
+                                                    Assign
+                                                </Button>
+                                            </View>
                                         </View>
                                     </View>
-                                </View>
-                            </Card.Content>
-                        </Card>
-                    ))
-                ) : (
-                    <View style={styles.emptyBox}>
-                        <IconButton icon="briefcase-check-outline" size={48} iconColor="#E2E8F0" />
-                        <Text variant="bodyLarge" style={styles.emptyText}>No new job requests.</Text>
-                    </View>
-                )}
-
+                                </Card.Content>
+                            </Card>
+                        ))
+                    ) : (
+                        <View style={styles.emptyBox}>
+                            <IconButton icon="briefcase-check-outline" size={48} iconColor="#E2E8F0" />
+                            <Text variant="bodyLarge" style={styles.emptyText}>No new job requests.</Text>
+                        </View>
+                    )}
                 </View>
 
                 <View
                     onLayout={(e) => updateSectionY('vendorVerification', e.nativeEvent.layout.y)}
                 >
-                <View style={styles.sectionHeader}>
-                    <Text variant="titleLarge" style={styles.sectionTitle}>Vendor Verification</Text>
-                    <Chip style={{ backgroundColor: '#F1F5F9' }}>{pendingVendors.length} New</Chip>
-                </View>
-
-                {pendingVendors.length > 0 ? (
-                    pendingVendors.map(vendor => (
-                        <View key={vendor.id}>{renderVendorItem({ item: vendor })}</View>
-                    ))
-                ) : (
-                    <View style={styles.emptyBox}>
-                        <IconButton icon="account-check-outline" size={48} iconColor="#E2E8F0" />
-                        <Text variant="bodyLarge" style={styles.emptyText}>All vendors are verified.</Text>
+                    <View style={styles.sectionHeader}>
+                        <Text variant="titleLarge" style={styles.sectionTitle}>Vendor Verification</Text>
+                        <Chip style={{ backgroundColor: '#F1F5F9' }}>{pendingVendors.length} New</Chip>
                     </View>
-                )}
 
+                    {pendingVendors.length > 0 ? (
+                        pendingVendors.map(vendor => (
+                            <View key={vendor.id}>{renderVendorItem({ item: vendor })}</View>
+                        ))
+                    ) : (
+                        <View style={styles.emptyBox}>
+                            <IconButton icon="account-check-outline" size={48} iconColor="#E2E8F0" />
+                            <Text variant="bodyLarge" style={styles.emptyText}>All vendors are verified.</Text>
+                        </View>
+                    )}
                 </View>
 
                 <View
                     onLayout={(e) => updateSectionY('activeProjects', e.nativeEvent.layout.y)}
                 >
-                <View style={styles.sectionHeader}>
-                    <Text variant="titleLarge" style={styles.sectionTitle}>Active Projects</Text>
-                    <Chip style={{ backgroundColor: '#ECFDF5' }}>{activeProjects.length} Total</Chip>
-                </View>
-
-                {activeProjects.length > 0 ? (
-                    activeProjects.map(job => (
-                        <Card key={job.id} style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}>
-                            <Card.Content style={styles.cardInner}>
-                                <View style={styles.cardHeader}>
-                                    <Avatar.Icon size={40} icon="hammer-wrench" style={{ backgroundColor: '#ECFDF5' }} color="#10B981" />
-                                    <View style={styles.vendorInfo}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <Text variant="titleMedium" style={styles.vendorName}>{job.address}</Text>
-                                        </View>
-                                        <Text variant="labelSmall" style={{ color: '#94A3B8' }}>{job.customer?.name || 'Homeowner'} • {(job.status || 'SUBMITTED').toUpperCase()}</Text>
-                                        {(job.contactPhone || job.contactEmail) && (
-                                            <View style={{ flexDirection: 'row', marginTop: 4 }}>
-                                                {job.contactPhone && <Text variant="labelSmall" style={{ color: '#10B981', fontWeight: 'bold' }}>{job.contactPhone} </Text>}
-                                                {job.contactEmail && <Text variant="labelSmall" style={{ color: '#94A3B8' }}>• {job.contactEmail}</Text>}
-                                            </View>
-                                        )}
-                                    </View>
-                                    <IconButton icon="chevron-right" />
-                                </View>
-                            </Card.Content>
-                        </Card>
-                    ))
-                ) : (
-                    <View style={styles.emptyBox}>
-                        <IconButton icon="progress-wrench" size={48} iconColor="#E2E8F0" />
-                        <Text variant="bodyLarge" style={styles.emptyText}>No active projects found.</Text>
+                    <View style={styles.sectionHeader}>
+                        <Text variant="titleLarge" style={styles.sectionTitle}>Active Projects</Text>
+                        <Chip style={{ backgroundColor: '#ECFDF5' }}>{activeProjects.length} Total</Chip>
                     </View>
-                )}
+
+                    {activeProjects.length > 0 ? (
+                        activeProjects.map(job => (
+                            <Card key={job.id} style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}>
+                                <Card.Content style={styles.cardInner}>
+                                    <View style={styles.cardHeader}>
+                                        <Avatar.Icon size={40} icon="hammer-wrench" style={{ backgroundColor: '#ECFDF5' }} color="#10B981" />
+                                        <View style={styles.vendorInfo}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Text variant="titleMedium" style={styles.vendorName}>{job.address}</Text>
+                                            </View>
+                                            <Text variant="labelSmall" style={{ color: '#94A3B8' }}>{job.customer?.name || 'Homeowner'} • {(job.status || 'SUBMITTED').toUpperCase()}</Text>
+                                            {(job.contactPhone || job.contactEmail) && (
+                                                <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                                                    {job.contactPhone && <Text variant="labelSmall" style={{ color: '#10B981', fontWeight: 'bold' }}>{job.contactPhone} </Text>}
+                                                    {job.contactEmail && <Text variant="labelSmall" style={{ color: '#94A3B8' }}>• {job.contactEmail}</Text>}
+                                                </View>
+                                            )}
+                                        </View>
+                                        <IconButton icon="chevron-right" />
+                                    </View>
+                                </Card.Content>
+                            </Card>
+                        ))
+                    ) : (
+                        <View style={styles.emptyBox}>
+                            <IconButton icon="progress-wrench" size={48} iconColor="#E2E8F0" />
+                            <Text variant="bodyLarge" style={styles.emptyText}>No active projects found.</Text>
+                        </View>
+                    )}
+                </View>
 
                 <View
                     onLayout={(e) => updateSectionY('verifiedVendors', e.nativeEvent.layout.y)}
                 >
-                <View style={styles.sectionHeader}>
-                    <Text variant="titleLarge" style={styles.sectionTitle}>Verified Vendors</Text>
-                    <Chip style={{ backgroundColor: '#EEF2FF' }}>{approvedVendors.length} Total</Chip>
-                </View>
-
-                {approvedVendors.length > 0 ? (
-                    approvedVendors.map(vendor => (
-                        <Card key={vendor.id} style={styles.approvalCard} elevation={0}>
-                            <Card.Content style={styles.cardInner}>
-                                <View style={styles.cardHeader}>
-                                    <Avatar.Text size={40} label={(vendor.email || '??').substring(0, 2).toUpperCase()} style={{ backgroundColor: '#F0FDF4' }} color="#15803D" />
-                                    <View style={styles.vendorInfo}>
-                                        <Text variant="titleMedium" style={styles.vendorName}>{vendor.name || 'Anonymous Vendor'}</Text>
-                                        <Text variant="labelSmall" style={styles.vendorEmail}>{vendor.email}</Text>
-                                    </View>
-                                    <Chip icon="check-decagram" style={{ backgroundColor: '#F0FDF4' }} textStyle={{ color: '#15803D' }}>VERIFIED</Chip>
-                                </View>
-                                <View style={styles.cardActions}>
-                                    <Button
-                                        mode="outlined"
-                                        onPress={() => handleRemoveVendor(vendor.id || '')}
-                                        style={styles.denyBtn}
-                                        textColor="#EF4444"
-                                        icon="trash-can-outline"
-                                    >
-                                        Remove Vendor
-                                    </Button>
-                                </View>
-                            </Card.Content>
-                        </Card>
-                    ))
-                ) : (
-                    <View style={styles.emptyBox}>
-                        <Text variant="bodyLarge" style={styles.emptyText}>No verified vendors yet.</Text>
+                    <View style={styles.sectionHeader}>
+                        <Text variant="titleLarge" style={styles.sectionTitle}>Verified Vendors</Text>
+                        <Chip style={{ backgroundColor: '#EEF2FF' }}>{approvedVendors.length} Total</Chip>
                     </View>
-                )}
+
+                    {approvedVendors.length > 0 ? (
+                        approvedVendors.map(vendor => (
+                            <Card key={vendor.id} style={styles.approvalCard} elevation={0}>
+                                <Card.Content style={styles.cardInner}>
+                                    <View style={styles.cardHeader}>
+                                        <Avatar.Text size={40} label={(vendor.email || '??').substring(0, 2).toUpperCase()} style={{ backgroundColor: '#F0FDF4' }} color="#15803D" />
+                                        <View style={styles.vendorInfo}>
+                                            <Text variant="titleMedium" style={styles.vendorName}>{vendor.name || 'Anonymous Vendor'}</Text>
+                                            <Text variant="labelSmall" style={styles.vendorEmail}>{vendor.email}</Text>
+                                        </View>
+                                        <Chip icon="check-decagram" style={{ backgroundColor: '#F0FDF4' }} textStyle={{ color: '#15803D' }}>VERIFIED</Chip>
+                                    </View>
+                                    <View style={styles.cardActions}>
+                                        <Button
+                                            mode="outlined"
+                                            onPress={() => handleRemoveVendor(vendor.id || '')}
+                                            style={styles.denyBtn}
+                                            textColor="#EF4444"
+                                            icon="trash-can-outline"
+                                        >
+                                            Remove Vendor
+                                        </Button>
+                                    </View>
+                                </Card.Content>
+                            </Card>
+                        ))
+                    ) : (
+                        <View style={styles.emptyBox}>
+                            <Text variant="bodyLarge" style={styles.emptyText}>No verified vendors yet.</Text>
+                        </View>
+                    )}
+                </View>
 
                 <View
                     onLayout={(e) => updateSectionY('completedJobs', e.nativeEvent.layout.y)}
                 >
-                <View style={styles.sectionHeader}>
-                    <Text variant="titleLarge" style={styles.sectionTitle}>Completed Jobs</Text>
-                    <Chip style={{ backgroundColor: '#F0FDF4' }}>{completedJobs.length} Total</Chip>
-                </View>
-
-                {completedJobs.length > 0 ? (
-                    completedJobs.map(job => (
-                        <Card key={job.id} style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}>
-                            <Card.Content style={styles.cardInner}>
-                                <View style={styles.cardHeader}>
-                                    <Avatar.Icon size={40} icon="check-decagram" style={{ backgroundColor: '#ECFDF5' }} color="#059669" />
-                                    <View style={styles.vendorInfo}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                            <Text variant="titleMedium" style={styles.vendorName}>{job.address}</Text>
-                                        </View>
-                                        <Text variant="labelSmall" style={{ color: '#94A3B8' }}>{job.customer?.name || 'Homeowner'} • {(job.status || '').toUpperCase()}</Text>
-                                    </View>
-                                    <IconButton icon="chevron-right" />
-                                </View>
-                            </Card.Content>
-                        </Card>
-                    ))
-                ) : (
-                    <View style={styles.emptyBox}>
-                        <IconButton icon="check-circle-outline" size={48} iconColor="#E2E8F0" />
-                        <Text variant="bodyLarge" style={styles.emptyText}>No completed jobs yet.</Text>
+                    <View style={styles.sectionHeader}>
+                        <Text variant="titleLarge" style={styles.sectionTitle}>Completed Jobs</Text>
+                        <Chip style={{ backgroundColor: '#F0FDF4' }}>{completedJobs.length} Total</Chip>
                     </View>
-                )}
-                </View>
 
-                <View style={styles.sectionHeader}>
-                    <Text variant="titleLarge" style={styles.sectionTitle}>System Logs</Text>
-                    <Surface style={styles.logBox} elevation={0}>
-                        {logs.map(log => renderLogItem({ item: log }))}
-                    </Surface>
-                    <Button mode="text" style={{ marginTop: 8 }}>View Full System Audit</Button>
+                    {completedJobs.length > 0 ? (
+                        completedJobs.map(job => (
+                            <Card key={job.id} style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}>
+                                <Card.Content style={styles.cardInner}>
+                                    <View style={styles.cardHeader}>
+                                        <Avatar.Icon size={40} icon="check-decagram" style={{ backgroundColor: '#ECFDF5' }} color="#059669" />
+                                        <View style={styles.vendorInfo}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Text variant="titleMedium" style={styles.vendorName}>{job.address}</Text>
+                                            </View>
+                                            <Text variant="labelSmall" style={{ color: '#94A3B8' }}>{job.customer?.name || 'Homeowner'} • {(job.status || '').toUpperCase()}</Text>
+                                        </View>
+                                        <IconButton icon="chevron-right" />
+                                    </View>
+                                </Card.Content>
+                            </Card>
+                        ))
+                    ) : (
+                        <View style={styles.emptyBox}>
+                            <IconButton icon="check-circle-outline" size={48} iconColor="#E2E8F0" />
+                            <Text variant="bodyLarge" style={styles.emptyText}>No completed jobs yet.</Text>
+                        </View>
+                    )}
                 </View>
             </ScrollView>
 
@@ -680,29 +660,6 @@ const styles = StyleSheet.create({
     emptyText: {
         color: '#94A3B8',
         marginTop: 16,
-    },
-    logSection: {
-        paddingHorizontal: 24,
-        marginTop: 32,
-    },
-    logBox: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 24,
-        marginTop: 16,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    logItem: {
-        backgroundColor: '#FFFFFF',
-    },
-    logTitle: {
-        fontWeight: 'bold',
-        color: '#1E293B',
-        fontSize: 14,
-    },
-    logDesc: {
-        fontSize: 12,
-        color: '#64748B',
     },
     snackbar: {
         marginBottom: 20,

@@ -43,3 +43,13 @@ yarn-error.*
 # logs and images
 *.log
 *.png
+
+# Backend / .NET
+[Bb]in/
+[Oo]bj/
+backend/bin/
+backend/obj/
+*.db-shm
+*.db-wal
+backend/eliteapp*.db*
+!backend/eliteapp.db
