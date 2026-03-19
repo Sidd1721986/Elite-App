@@ -41,6 +41,9 @@ interface JobContextType {
     assignVendor: (jobId: string, vendorId: string) => Promise<void>;
     acceptJob: (jobId: string) => Promise<void>;
     completeSale: (jobId: string, saleData: any) => Promise<void>;
+    reachOut: (jobId: string) => Promise<void>;
+    setAppointment: (jobId: string) => Promise<void>;
+    completeJob: (jobId: string, photos?: string[]) => Promise<void>;
     getJobById: (jobId: string) => Job | undefined;
     isLoading: boolean;
     refreshJobs: () => Promise<void>;
@@ -96,8 +99,10 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
             } catch (err) {
                 if (isMounted.current) {
-                    setError(err instanceof Error ? err.message : 'Failed to load jobs');
-                    if (__DEV__) console.error('Error loading jobs:', err);
+                    const errorMsg = err instanceof Error ? err.message : String(err);
+                    if (__DEV__ && !errorMsg.includes('401') && !errorMsg.toLowerCase().includes('unauthorized')) {
+                        console.error('Error loading jobs:', err);
+                    }
                 }
             } finally {
                 if (isMounted.current) {
@@ -196,6 +201,42 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, []);
 
+    const reachOut = useCallback(async (jobId: string) => {
+        try {
+            const updatedJob = await jobService.reachOut(jobId);
+            const normalized = normalizeJob(updatedJob);
+            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to reach out');
+            throw err;
+        }
+    }, []);
+
+    const setAppointment = useCallback(async (jobId: string) => {
+        try {
+            const updatedJob = await jobService.setAppointment(jobId);
+            const normalized = normalizeJob(updatedJob);
+            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to set appointment');
+            throw err;
+        }
+    }, []);
+
+    const completeJob = useCallback(async (jobId: string, photos?: string[]) => {
+        try {
+            const updatedJob = await jobService.completeJob(jobId, photos);
+            const normalized = normalizeJob(updatedJob);
+            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to complete job');
+            throw err;
+        }
+    }, []);
+
     // Memoize job lookup with a Map for O(1) access
     const jobsMap = useMemo(() => {
         const map = new Map<string, Job>();
@@ -214,11 +255,14 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         assignVendor,
         acceptJob,
         completeSale,
+        reachOut,
+        setAppointment,
+        completeJob,
         getJobById,
         isLoading,
         refreshJobs,
         error
-    }), [jobs, addJob, updateJob, assignVendor, acceptJob, completeSale, getJobById, isLoading, refreshJobs, error]);
+    }), [jobs, addJob, updateJob, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, getJobById, isLoading, refreshJobs, error]);
 
     return (
         <JobContext.Provider value={value}>

@@ -90,7 +90,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("seed")]
-    [AllowAnonymous] // Allow seeding without auth for setup convenience
+    [AllowAnonymous] // WARNING: Development-only route. Remove or protect in production.
     public async Task<IActionResult> Seed()
     {
         if (await _context.Users.AnyAsync())
@@ -100,9 +100,9 @@ public class UsersController : ControllerBase
         
         var users = new List<User>
         {
-            new User { Id = Guid.NewGuid(), Email = "admin@test.com", PasswordHash = "admin123", Role = "Admin", Name = "Admin User", IsApproved = true },
-            new User { Id = Guid.NewGuid(), Email = "vendor@test.com", PasswordHash = "vendor123", Role = "Vendor", Name = "Vendor User", IsApproved = true },
-            new User { Id = Guid.NewGuid(), Email = "customer@test.com", PasswordHash = "customer123", Role = "Customer", Name = "Customer User", IsApproved = true }
+            new User { Id = Guid.NewGuid(), Email = "admin@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"), Role = "Admin", Name = "Admin User", IsApproved = true },
+            new User { Id = Guid.NewGuid(), Email = "vendor@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Vendor User", IsApproved = true },
+            new User { Id = Guid.NewGuid(), Email = "customer@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("customer123"), Role = "Customer", Name = "Customer User", IsApproved = true }
         };
         
         _context.Users.AddRange(users);

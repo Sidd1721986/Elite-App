@@ -36,5 +36,17 @@ export const jobService = {
 
     async completeSale(jobId: string, saleData: { scopeOfWork: string; contractAmount: number; workStartDate: string }): Promise<Job> {
         return apiClient.post<Job>(`/jobs/${jobId}/complete-sale`, saleData);
+    },
+
+    async reachOut(jobId: string): Promise<Job> {
+        return apiClient.post<Job>(`/jobs/${jobId}/reach-out`, {});
+    },
+
+    async setAppointment(jobId: string): Promise<Job> {
+        return apiClient.post<Job>(`/jobs/${jobId}/set-appointment`, {});
+    },
+
+    async completeJob(jobId: string, completedPhotos?: string[]): Promise<Job> {
+        return apiClient.post<Job>(`/jobs/${jobId}/complete`, { completedPhotos });
     }
 };

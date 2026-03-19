@@ -49,10 +49,7 @@ const AdminDashboard: React.FC = () => {
         () => jobs.filter(j => j.status === JobStatus.COMPLETED || j.status === JobStatus.INVOICED).length,
         [jobs],
     );
-    const pendingJobCount = useMemo(
-        () => jobs.filter(j => j.status === JobStatus.SUBMITTED).length,
-        [jobs],
-    );
+    // pendingJobCount removed: use submittedJobs.length directly (same computation)
     const salesCount = useMemo(
         () => jobs.filter(j => j.status === JobStatus.SALE).length,
         [jobs],
@@ -76,7 +73,7 @@ const AdminDashboard: React.FC = () => {
 
     const scrollViewRef = React.useRef<ScrollView>(null);
     const sectionYRef = React.useRef<Record<string, number>>({});
-    const [sectionY, setSectionY] = React.useState<Record<string, number>>({});
+    // sectionY state removed — scrollToSection reads sectionYRef directly
 
     const scrollToSection = useCallback((key: string) => {
         const y = sectionYRef.current[key];
@@ -87,7 +84,6 @@ const AdminDashboard: React.FC = () => {
 
     const updateSectionY = useCallback((key: string, y: number) => {
         sectionYRef.current = { ...sectionYRef.current, [key]: y };
-        setSectionY(prev => ({ ...prev, [key]: y }));
     }, []);
 
     const getTimelineBarColor = useCallback((createdAt: string): string => {
@@ -239,10 +235,18 @@ const AdminDashboard: React.FC = () => {
                     >
                         Deny
                     </Button>
+                    <Button
+                        mode="outlined"
+                        onPress={() => navigation.navigate('Chat', { otherUserId: vendor.id || vendor.email, otherUserName: vendor.name || 'Vendor' })}
+                        style={styles.messageBtn}
+                        icon="message-outline"
+                    >
+                        Chat
+                    </Button>
                 </View>
             </Card.Content>
         </Card>
-    ), []);
+    ), [handleApproval, handleRemoveVendor, navigation]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -694,6 +698,11 @@ const styles = StyleSheet.create({
         backgroundColor: '#6366F1',
         elevation: 0,
         width: '100%',
+    },
+    messageBtn: {
+        flex: 1,
+        borderRadius: 12,
+        borderColor: '#6366F1',
     },
 });
 

@@ -32,9 +32,9 @@ builder.Services.Configure<GzipCompressionProviderOptions>(options =>
 // Services
 builder.Services.AddScoped<EliteApp.API.Services.IAuthService, EliteApp.API.Services.AuthService>();
 
-// Add Entity Framework Core with SQLite
+// Add Entity Framework Core with PostgreSQL
 builder.Services.AddDbContext<EliteApp.API.Data.AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "supersecretsupersecretsupersecret123!";
@@ -95,7 +95,7 @@ using (var scope = app.Services.CreateScope())
         {
             Id = Guid.NewGuid(),
             Email = "admin@elite.com",
-            PasswordHash = "admin123", // Simple password for now
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"),
             Role = EliteApp.API.Models.UserRole.Admin.ToString(),
             Name = "Elite Admin",
             IsApproved = true,

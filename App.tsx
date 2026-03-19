@@ -67,7 +67,7 @@ export default function App() {
             {!ready ? (
                 <View style={styles.bootstrap}>
                     <Text style={styles.bootstrapText}>Elite</Text>
-                    <Text style={styles.bootstrapSub}>Loading…</Text>
+                    <Text style={styles.bootstrapSub}>Loading...</Text>
                 </View>
             ) : (
                 <AppErrorBoundary>

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useCallback, useMemo } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl, ScrollView, Platform } from 'react-native';
+import { View, StyleSheet, RefreshControl, ScrollView, Platform } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Text, Card, Button, Avatar, Divider, Surface, Chip, IconButton, List } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import AppLogo from '../components/AppLogo';
@@ -33,15 +34,17 @@ const VendorDashboard: React.FC = () => {
     }, [logout]);
 
     const activeJobs = useMemo(() =>
-        jobs.filter(j => j.status === JobStatus.ASSIGNED || j.status === JobStatus.ACCEPTED || j.status === JobStatus.SALE),
+        jobs.filter(j => j.status === JobStatus.ASSIGNED || j.status === JobStatus.ACCEPTED || j.status === JobStatus.REACHED_OUT || j.status === JobStatus.APPT_SET || j.status === JobStatus.SALE),
         [jobs]
     );
 
+    const pendingCount = useMemo(() => jobs.filter(j => j.status === JobStatus.ASSIGNED).length, [jobs]);
+
     const stats = useMemo(() => [
         { label: 'Active', value: activeJobs.length.toString(), icon: 'hammer-wrench', color: '#6366F1' },
-        { label: 'Pending', value: jobs.filter(j => j.status === JobStatus.ASSIGNED).length.toString(), icon: 'clock-outline', color: '#F59E0B' },
+        { label: 'Pending', value: pendingCount.toString(), icon: 'clock-outline', color: '#F59E0B' },
         { label: 'Ranking', value: '#3', icon: 'trophy-outline', color: '#10B981' },
-    ], [activeJobs.length, jobs]);
+    ], [activeJobs.length, pendingCount]);
 
     const renderOrderCard = useCallback(({ item: job }: { item: Job }) => (
         <Card
@@ -96,14 +99,24 @@ const VendorDashboard: React.FC = () => {
                     <Surface style={styles.logoBox} elevation={1}>
                         <AppLogo size={36} showSurface={false} />
                     </Surface>
-                    <IconButton
-                        icon="logout"
-                        iconColor="#EF4444"
-                        mode="contained"
-                        containerColor="#FEF2F2"
-                        size={20}
-                        onPress={handleLogout}
-                    />
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <IconButton
+                            icon="message-outline"
+                            iconColor="#6366F1"
+                            mode="contained"
+                            containerColor="#EEF2FF"
+                            size={20}
+                            onPress={() => navigation.navigate('Chat', { otherUserId: 'admin', otherUserName: 'Elite Admin' })}
+                        />
+                        <IconButton
+                            icon="logout"
+                            iconColor="#EF4444"
+                            mode="contained"
+                            containerColor="#FEF2FF"
+                            size={20}
+                            onPress={handleLogout}
+                        />
+                    </View>
                 </View>
 
                 <View style={styles.profileBox}>
@@ -148,15 +161,13 @@ const VendorDashboard: React.FC = () => {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <FlatList
-                data={activeJobs}
-                keyExtractor={item => item.id}
-                renderItem={renderOrderCard}
-                ListHeaderComponent={renderHeader}
-                initialNumToRender={6}
-                maxToRenderPerBatch={10}
-                windowSize={5}
-                removeClippedSubviews={Platform.OS === 'android'}
+            <View style={{ flex: 1 }}>
+                <FlashList
+                    data={activeJobs}
+                    keyExtractor={item => item.id}
+                    renderItem={renderOrderCard}
+                    estimatedItemSize={250}
+                    ListHeaderComponent={renderHeader}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }
@@ -169,7 +180,8 @@ const VendorDashboard: React.FC = () => {
                     </View>
                 )}
                 contentContainerStyle={styles.listContent}
-            />
+                />
+            </View>
         </SafeAreaView>
     );
 };

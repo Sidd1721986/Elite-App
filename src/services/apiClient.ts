@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://localhost:5260/api';
+// In production, change this to your Azure Web App URL (e.g., https://eliteapp-app-prod.azurewebsites.net/api)
+const PROD_URL = 'https://elite-services-api.azurewebsites.net/api'; 
+const BASE_URL = __DEV__ ? 'http://localhost:5260/api' : PROD_URL;
 
 // Response cache with TTL — set to 0 to always fetch fresh data and avoid stale lists
 const cache = new Map<string, { data: any, timestamp: number }>();
@@ -62,7 +64,9 @@ export const apiClient = {
 
                 if (!response.ok) {
                     const errorText = await response.text().catch(() => 'No response body');
-                    if (__DEV__) console.error(`API Error [${response.status}] ${method} ${endpoint}:`, errorText);
+                    if (__DEV__ && response.status !== 401) {
+                        console.error(`API Error [${response.status}] ${method} ${endpoint}:`, errorText);
+                    }
 
                     if (response.status === 401 && onUnauthorized) {
                         try {
@@ -127,7 +131,8 @@ export const apiClient = {
             }
         })();
 
-        // Track in-flight GET requests for deduplication
+        // Track in-flight GET requests for deduplication BEFORE returning
+        // (set immediately after promise creation to close the race window)
         if (method === 'GET') {
             pendingRequests.set(endpoint, requestPromise);
         }

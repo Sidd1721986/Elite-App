@@ -36,9 +36,12 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# Native excludes
+ios/build/
+ios/Pods/
+android/app/build/
+android/.gradle/
+android/build/
 
 # logs and images
 *.log
@@ -52,4 +55,14 @@ backend/obj/
 *.db-shm
 *.db-wal
 backend/eliteapp*.db*
-!backend/eliteapp.db
+# local caches and pids
+*_pid.txt
+metro_cache/
+.terminal_history
+*.png
+*.log
+
+# debug files
+minimal.js
+debug_index.js
+test_metro.js

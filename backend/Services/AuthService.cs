@@ -35,7 +35,7 @@ public class AuthService : IAuthService
         // In a real app, hash the password properly (e.g., BCrypt). 
         // For this demo, we'll store it as is or a simple hash to match the requirement of "setup".
         // Let's stick to simple for now but acknowledge it's not prod-ready security.
-        user.PasswordHash = password; 
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password); 
         
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
@@ -47,18 +47,18 @@ public class AuthService : IAuthService
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
 
-        if (user == null || user.PasswordHash != password)
+        if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
         {
             return (null, null, "Invalid credentials");
         }
 
-        // Role check
+        // Role check — reject if the requested role doesn't match the stored role
         if (!string.IsNullOrEmpty(role) && !string.Equals(user.Role, role, StringComparison.OrdinalIgnoreCase))
         {
-             // Allow flexible role matching if needed, but strict for now based on request
-             // actually, the frontend might send "Vendor" but user is stored as "Vendor"
+            return (null, null, "Invalid credentials");
         }
-        
+
+        // Vendor approval check
         if (user.Role == UserRole.Vendor.ToString() && !user.IsApproved)
         {
             return (null, null, "Account not approved yet");

@@ -8,9 +8,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Run session check in background so login screen shows immediately
+    const checkSession = useCallback(async () => {
+        try {
+            const currentUser = await authService.getCurrentUser();
+            setUser(normalizeUser(currentUser) || null);
+        } catch (error) {
+            if (__DEV__) console.error('AuthContext: Session check failed:', error);
+        }
+    }, []);
+
+    // Run session check in background
     useEffect(() => {
         let cancelled = false;
         checkSession().then(() => {
@@ -28,15 +37,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             apiClient.clearCache();
             setUser(null);
         });
-    }, []);
-
-    const checkSession = useCallback(async () => {
-        try {
-            const currentUser = await authService.getCurrentUser();
-            setUser(normalizeUser(currentUser) || null);
-        } catch (error) {
-            if (__DEV__) console.error('AuthContext: Session check failed:', error);
-        }
     }, []);
 
     const login = useCallback(async (email: string, password: string, role: UserRole): Promise<boolean | string> => {

@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { View, ScrollView, StyleSheet, Image, Dimensions } from 'react-native';
+import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import FastImage from 'react-native-fast-image';
 import { Text, Card, Button, Avatar, Divider, List, Chip, Surface, IconButton, ProgressBar, TextInput } from 'react-native-paper';
 import { useJobs } from '../context/JobContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,10 +13,23 @@ type JobDetailsRouteProp = RouteProp<RootStackParamList, 'JobDetails'>;
 
 const { width } = Dimensions.get('window');
 
+const getStatusStyle = (status: string) => {
+    switch (status) {
+        case JobStatus.SUBMITTED: return { color: '#6366F1', bg: '#EEF2FF', icon: 'send-circle-outline' };
+        case JobStatus.ASSIGNED: return { color: '#8B5CF6', bg: '#F5F3FF', icon: 'account-arrow-right-outline' };
+        case JobStatus.ACCEPTED: return { color: '#3B82F6', bg: '#EFF6FF', icon: 'check-circle-outline' };
+        case 'ReachedOut': return { color: '#F59E0B', bg: '#FFFBEB', icon: 'phone-outgoing-outline' };
+        case 'ApptSet': return { color: '#EC4899', bg: '#FDF2F8', icon: 'calendar-check-outline' };
+        case JobStatus.SALE: return { color: '#10B981', bg: '#ECFDF5', icon: 'currency-usd' };
+        case JobStatus.COMPLETED: return { color: '#059669', bg: '#ECFDF5', icon: 'flag-checkered' };
+        default: return { color: '#64748B', bg: '#F1F5F9', icon: 'help-circle-outline' };
+    }
+};
+
 const JobDetailsScreen: React.FC = () => {
     const route = useRoute<JobDetailsRouteProp>();
     const navigation = useNavigation();
-    const { getJobById, assignVendor, acceptJob, completeSale } = useJobs();
+    const { getJobById, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob } = useJobs();
     const { user, getApprovedVendors } = useAuth();
     const { jobId } = route.params;
 
@@ -59,16 +73,7 @@ const JobDetailsScreen: React.FC = () => {
         );
     }
 
-    const getStatusStyle = (status: string) => {
-        switch (status) {
-            case JobStatus.SUBMITTED: return { color: '#6366F1', bg: '#EEF2FF', icon: 'send-circle-outline' };
-            case JobStatus.ASSIGNED: return { color: '#8B5CF6', bg: '#F5F3FF', icon: 'account-arrow-right-outline' };
-            case JobStatus.ACCEPTED: return { color: '#3B82F6', bg: '#EFF6FF', icon: 'check-circle-outline' };
-            case JobStatus.SALE: return { color: '#10B981', bg: '#ECFDF5', icon: 'currency-usd' };
-            case JobStatus.COMPLETED: return { color: '#059669', bg: '#ECFDF5', icon: 'flag-checkered' };
-            default: return { color: '#64748B', bg: '#F1F5F9', icon: 'help-circle-outline' };
-        }
-    };
+
 
     const handleAddNote = async () => {
         if (!noteContent.trim()) return;
@@ -178,13 +183,17 @@ const JobDetailsScreen: React.FC = () => {
 
                     {/* Job Photos Section */}
                     <View style={styles.section}>
-                        <Text variant="titleMedium" style={styles.sectionTitle}>Job Documentation</Text>
+                        <Text variant="titleMedium" style={styles.sectionTitle}>Request Photos</Text>
                         <Surface style={styles.photosBox} elevation={0}>
                             {job.photos && job.photos.length > 0 ? (
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
                                     {job.photos.map((uri, index) => uri ? (
                                         <View key={index} style={styles.photoWrapper}>
-                                            <Image source={{ uri }} style={styles.photoThumbnail} />
+                                            <FastImage 
+                                                source={{ uri, priority: FastImage.priority.normal }} 
+                                                style={styles.photoThumbnail} 
+                                                resizeMode={FastImage.resizeMode.cover}
+                                            />
                                         </View>
                                     ) : null)}
                                 </ScrollView>
@@ -196,6 +205,27 @@ const JobDetailsScreen: React.FC = () => {
                             )}
                         </Surface>
                     </View>
+
+                    {/* Completion Photos Section */}
+                    {job.completedPhotos && job.completedPhotos.length > 0 && (
+                        <View style={styles.section}>
+                            <Text variant="titleMedium" style={styles.sectionTitle}>Completed Work Photos</Text>
+                            <Surface style={[styles.photosBox, { borderColor: '#10B98120', backgroundColor: '#F0FDF430' }]} elevation={0}>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
+                                    {job.completedPhotos.map((uri, index) => uri ? (
+                                        <View key={index} style={styles.photoWrapper}>
+                                            <FastImage 
+                                                source={{ uri, priority: FastImage.priority.normal }} 
+                                                style={[styles.photoThumbnail, { borderColor: '#10B981' }]} 
+                                                resizeMode={FastImage.resizeMode.cover}
+                                            />
+                                        </View>
+                                    ) : null)}
+                                </ScrollView>
+                            </Surface>
+                        </View>
+                    )}
+
 
                     <View style={styles.section}>
                         <Text variant="titleMedium" style={styles.sectionTitle}>Portal Notes</Text>
@@ -324,31 +354,127 @@ const JobDetailsScreen: React.FC = () => {
 
             <View style={styles.footerActions}>
                 {user?.role === 'Vendor' && job.status === JobStatus.ASSIGNED && (
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <Button
+                            mode="outlined"
+                            style={[styles.mainActionBtn, { flex: 1, borderColor: '#6366F1' }]}
+                            contentStyle={{ height: 56 }}
+                            textColor="#6366F1"
+                            icon="message-outline"
+                            onPress={() => (navigation as any).navigate('Chat', { otherUserId: 'admin', otherUserName: 'Elite Admin' })}
+                        >
+                            Message Admin
+                        </Button>
+                        <Button
+                            mode="contained"
+                            style={[styles.mainActionBtn, { flex: 1 }]}
+                            contentStyle={{ height: 56 }}
+                            onPress={() => acceptJob(job.id)}
+                            loading={isProcessing}
+                        >
+                            Accept Order
+                        </Button>
+                    </View>
+                )}
+                {user?.role === 'Vendor' && job.status === JobStatus.ACCEPTED && (
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <Button
+                            mode="contained"
+                            style={[styles.mainActionBtn, { flex: 1 }]}
+                            contentStyle={{ height: 56 }}
+                            buttonColor="#F59E0B"
+                            icon="phone-outline"
+                            onPress={async () => {
+                                setIsProcessing(true);
+                                try {
+                                    await reachOut(job.id);
+                                    // Removed goBack() to show the updated status in-place
+                                } catch (e) {
+                                    console.error(e);
+                                } finally {
+                                    setIsProcessing(false);
+                                }
+                            }}
+                            loading={isProcessing}
+                        >
+                            Reached Out
+                        </Button>
+                        <Button
+                            mode="contained"
+                            style={[styles.mainActionBtn, { flex: 1 }]}
+                            contentStyle={{ height: 56 }}
+                            buttonColor="#10B981"
+                            icon="currency-usd"
+                            onPress={() => completeSale(job.id, {
+                                scopeOfWork: job.description,
+                                contractAmount: 1500,
+                                workStartDate: new Date().toISOString()
+                            })}
+                            loading={isProcessing}
+                        >
+                            Mark as Sale
+                        </Button>
+                    </View>
+                )}
+                {user?.role === 'Vendor' && job.status === 'ReachedOut' && (
                     <Button
                         mode="contained"
                         style={styles.mainActionBtn}
                         contentStyle={{ height: 56 }}
-                        onPress={() => acceptJob(job.id)}
+                        buttonColor="#EC4899"
+                        icon="calendar-clock"
+                        onPress={async () => {
+                            setIsProcessing(true);
+                            try {
+                                await setAppointment(job.id);
+                            } catch (e) {
+                                console.error(e);
+                            } finally {
+                                setIsProcessing(false);
+                            }
+                        }}
                     >
-                        Accept This Order
+                        Set Appointment
                     </Button>
                 )}
-                {user?.role === 'Vendor' && job.status === JobStatus.ACCEPTED && (
+                {user?.role === 'Vendor' && job.status === 'ApptSet' && (
                     <Button
                         mode="contained"
                         style={styles.mainActionBtn}
                         contentStyle={{ height: 56 }}
                         buttonColor="#10B981"
+                        icon="currency-usd"
                         onPress={() => completeSale(job.id, {
                             scopeOfWork: job.description,
                             contractAmount: 1500,
                             workStartDate: new Date().toISOString()
                         })}
                     >
-                        Mark as Sale
+                        Submit Sale
                     </Button>
                 )}
-                {job.status === JobStatus.SALE && (
+                {user?.role === 'Vendor' && job.status === JobStatus.SALE && (
+                    <Button
+                        mode="contained"
+                        style={styles.mainActionBtn}
+                        contentStyle={{ height: 56 }}
+                        buttonColor="#059669"
+                        icon="check-decagram"
+                        onPress={async () => {
+                            setIsProcessing(true);
+                            try {
+                                await completeJob(job.id, []);
+                            } catch (e) {
+                                console.error(e);
+                            } finally {
+                                setIsProcessing(false);
+                            }
+                        }}
+                    >
+                        Finalize & Complete
+                    </Button>
+                )}
+                {job.status === JobStatus.COMPLETED && (
                     <Button
                         mode="contained"
                         style={styles.mainActionBtn}
@@ -356,7 +482,7 @@ const JobDetailsScreen: React.FC = () => {
                         buttonColor="#000"
                         onPress={() => { }}
                     >
-                        View Sale Contract
+                        Order Archived
                     </Button>
                 )}
             </View>
@@ -595,4 +721,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default JobDetailsScreen;
+export default React.memo(JobDetailsScreen);

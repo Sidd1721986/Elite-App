@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: eliteapp_api
+    ports:
+      - "5265:5260" # Local port changed to 5265 to avoid conflict with running API
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    restart: unless-stopped
+    # If a local database is needed in the future, it can be added as a separate service below

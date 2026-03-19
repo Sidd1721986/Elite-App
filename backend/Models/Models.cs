@@ -98,3 +98,28 @@ public class JobNote
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+public class Message
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    [Required]
+    public Guid SenderId { get; set; }
+
+    [Required]
+    public Guid ReceiverId { get; set; }
+
+    [Required]
+    public string Content { get; set; } = string.Empty;
+
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+
+    public bool IsRead { get; set; } = false;
+
+    [ForeignKey("SenderId")]
+    public User? Sender { get; set; }
+
+    [ForeignKey("ReceiverId")]
+    public User? Receiver { get; set; }
+}

@@ -1,5 +1,7 @@
 import * as React from 'react';
-import { View, StyleSheet, FlatList, ScrollView } from 'react-native';
+import { useMemo } from 'react';
+import { View, StyleSheet, ScrollView } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Text, Card, Button, Avatar, IconButton, Searchbar, Surface, Chip, Snackbar } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useJobs } from '../context/JobContext';
@@ -28,10 +30,10 @@ const AssignVendorScreen: React.FC = () => {
         getApprovedVendors().then(setVendors);
     }, [getApprovedVendors]);
 
-    const filteredVendors = vendors.filter(v =>
-        v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        v.email?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredVendors = useMemo(() => vendors.filter(v =>
+        (v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.email?.toLowerCase().includes(searchQuery.toLowerCase())) && v.id
+    ), [vendors, searchQuery]);
 
     const handleAssign = async (vendorId: string) => {
         setIsLoading(true);
@@ -73,45 +75,48 @@ const AssignVendorScreen: React.FC = () => {
                 elevation={1}
             />
 
-            <FlatList
-                data={filteredVendors}
-                keyExtractor={(item) => item.id!}
-                contentContainerStyle={styles.listContent}
-                renderItem={({ item }) => (
-                    <Card style={styles.vendorCard} elevation={0}>
-                        <Card.Content style={styles.cardContent}>
-                            <Avatar.Text
-                                size={48}
-                                label={item.name?.substring(0, 2).toUpperCase() || 'VX'}
-                                style={styles.avatar}
-                            />
-                            <View style={styles.vendorInfo}>
-                                <Text variant="titleMedium" style={styles.vendorName}>{item.name}</Text>
-                                <Text variant="bodySmall" style={styles.vendorEmail}>{item.email}</Text>
-                                <View style={styles.ratingRow}>
-                                    <IconButton icon="star" iconColor="#F59E0B" size={16} style={{ margin: 0 }} />
-                                    <Text variant="labelSmall" style={styles.ratingText}>4.9 (Verified)</Text>
+            <View style={{ flex: 1 }}>
+                <FlashList
+                    data={filteredVendors}
+                    keyExtractor={(item) => item.id!}
+                    contentContainerStyle={styles.listContent}
+                    estimatedItemSize={100}
+                    renderItem={({ item }) => (
+                        <Card style={styles.vendorCard} elevation={0}>
+                            <Card.Content style={styles.cardContent}>
+                                <Avatar.Text
+                                    size={48}
+                                    label={item.name?.substring(0, 2).toUpperCase() || 'VX'}
+                                    style={styles.avatar}
+                                />
+                                <View style={styles.vendorInfo}>
+                                    <Text variant="titleMedium" style={styles.vendorName}>{item.name}</Text>
+                                    <Text variant="bodySmall" style={styles.vendorEmail}>{item.email}</Text>
+                                    <View style={styles.ratingRow}>
+                                        <IconButton icon="star" iconColor="#F59E0B" size={16} style={{ margin: 0 }} />
+                                        <Text variant="labelSmall" style={styles.ratingText}>4.9 (Verified)</Text>
+                                    </View>
                                 </View>
-                            </View>
-                            <Button
-                                mode="contained"
-                                onPress={() => handleAssign(item.id!)}
-                                loading={isLoading}
-                                disabled={isLoading}
-                                style={styles.assignBtn}
-                            >
-                                Assign
-                            </Button>
-                        </Card.Content>
-                    </Card>
-                )}
-                ListEmptyComponent={() => (
-                    <View style={styles.emptyBox}>
-                        <IconButton icon="account-search-outline" size={48} iconColor="#E2E8F0" />
-                        <Text variant="bodyLarge" style={styles.emptyText}>No verified vendors found.</Text>
-                    </View>
-                )}
-            />
+                                <Button
+                                    mode="contained"
+                                    onPress={() => handleAssign(item.id!)}
+                                    loading={isLoading}
+                                    disabled={isLoading}
+                                    style={styles.assignBtn}
+                                >
+                                    Assign
+                                </Button>
+                            </Card.Content>
+                        </Card>
+                    )}
+                    ListEmptyComponent={() => (
+                        <View style={styles.emptyBox}>
+                            <IconButton icon="account-search-outline" size={48} iconColor="#E2E8F0" />
+                            <Text variant="bodyLarge" style={styles.emptyText}>No verified vendors found.</Text>
+                        </View>
+                    )}
+                />
+            </View>
 
             <Snackbar
                 visible={snackbarVisible}

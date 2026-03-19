@@ -1,10 +1,11 @@
 import * as React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import FastImage from 'react-native-fast-image';
 import { Surface } from 'react-native-paper';
 
 /**
- * In-app logo placeholder. Use this instead of require('../assets/logo.png')
- * so the app runs when the image file is missing.
+ * In-app logo component. 
+ * Displays the company logo from assets/logo.png
  */
 export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = ({
     size = 60,
@@ -12,9 +13,14 @@ export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = ({
 }) => {
     const content = (
         <View style={[styles.inner, { width: size, height: size }]}>
-            <Text style={[styles.letter, { fontSize: size * 0.5 }]}>E</Text>
+            <FastImage
+                source={require('../../assets/logo.png')}
+                style={{ width: size * 0.8, height: size * 0.8 }}
+                resizeMode={FastImage.resizeMode.contain}
+            />
         </View>
     );
+
     if (showSurface) {
         return (
             <Surface style={[styles.surface, { width: size + 40, height: size + 40 }]} elevation={2}>
@@ -42,10 +48,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#6366F1',
         borderRadius: 16,
-    },
-    letter: {
-        color: '#FFFFFF',
-        fontWeight: '900',
     },
 });
 

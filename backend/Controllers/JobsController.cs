@@ -30,11 +30,7 @@ public class JobsController : ControllerBase
             return Unauthorized();
         }
 
-        IQueryable<Job> query = _context.Jobs.AsNoTracking()
-            .Include(j => j.Customer)
-            .Include(j => j.Vendor);
-
-        // Auto-expire jobs assigned > 48h ago
+        // Auto-expire jobs assigned > 48h ago (separate tracked operation)
         var now = DateTime.UtcNow;
         var expiredJobs = await _context.Jobs
             .Where(j => j.Status == "Assigned" && j.AssignedAt.HasValue && j.AssignedAt.Value.AddHours(48) < now)
@@ -45,6 +41,11 @@ public class JobsController : ControllerBase
             foreach (var ej in expiredJobs) ej.Status = "Expired";
             await _context.SaveChangesAsync();
         }
+
+        // Main read-only query (separate from tracked expiry above)
+        IQueryable<Job> query = _context.Jobs.AsNoTracking()
+            .Include(j => j.Customer)
+            .Include(j => j.Vendor);
 
         if (User.IsInRole("Customer") || User.IsInRole("customer"))
         {
@@ -272,6 +273,59 @@ public class JobsController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok(job);
     }
+
+    [HttpPost("{id}/reach-out")]
+    public async Task<IActionResult> ReachOut(Guid id)
+    {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var userId)) return Unauthorized();
+
+        var job = await _context.Jobs.FindAsync(id);
+        if (job == null) return NotFound();
+
+        if (job.VendorId != userId) return Forbid();
+
+        job.Status = "ReachedOut";
+        await _context.SaveChangesAsync();
+        return Ok(job);
+    }
+
+    [HttpPost("{id}/set-appointment")]
+    public async Task<IActionResult> SetAppointment(Guid id)
+    {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var userId)) return Unauthorized();
+
+        var job = await _context.Jobs.FindAsync(id);
+        if (job == null) return NotFound();
+
+        if (job.VendorId != userId) return Forbid();
+
+        job.Status = "ApptSet";
+        await _context.SaveChangesAsync();
+        return Ok(job);
+    }
+
+    [HttpPost("{id}/complete")]
+    public async Task<IActionResult> CompleteJob(Guid id, [FromBody] CompleteJobRequest request)
+    {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var userId)) return Unauthorized();
+
+        var job = await _context.Jobs.FindAsync(id);
+        if (job == null) return NotFound();
+
+        if (job.VendorId != userId) return Forbid();
+
+        job.Status = "Completed";
+        if (request.CompletedPhotos != null && request.CompletedPhotos.Any())
+        {
+            job.CompletedPhotos = string.Join(",", request.CompletedPhotos);
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(job);
+    }
 }
 
 public class AssignVendorRequest
@@ -290,6 +344,12 @@ public class CompleteSaleRequest
     public decimal ContractAmount { get; set; }
     public DateTime WorkStartDate { get; set; }
 }
+
+public class CompleteJobRequest
+{
+    public List<string>? CompletedPhotos { get; set; }
+}
+
 
 public class CreateJobRequest
 {

@@ -49,8 +49,8 @@ export enum JobStatus {
   SUBMITTED = 'Submitted',
   ASSIGNED = 'Assigned',
   ACCEPTED = 'Accepted',
-  REACHED_OUT = 'Reached Out',
-  APPT_SET = 'Appt Set',
+  REACHED_OUT = 'ReachedOut',
+  APPT_SET = 'ApptSet',
   SALE = 'Sale',
   FOLLOW_UP = 'Follow Up',
   EXPIRED = 'Expired',
@@ -99,11 +99,31 @@ export interface Job {
   scopeOfWork?: string;
   contractAmount?: number;
   workStartDate?: string;
-  completedPhotos?: string;
+  completedPhotos: string[];
   isInvoiced?: boolean;
   scheduledDate?: string;
   createdAt: string;
   notes?: JobNote[];
+}
+
+export interface Message {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  timestamp: string;
+  isRead: boolean;
+  sender?: User;
+  receiver?: User;
+}
+
+export interface Conversation {
+  otherUserId: string;
+  otherUserName: string;
+  otherUserEmail: string;
+  latestMessage: string;
+  timestamp: string;
+  unreadCount: number;
 }
 
 export type RootStackParamList = {
@@ -116,4 +136,5 @@ export type RootStackParamList = {
   CustomerDashboard: undefined;
   JobDetails: { jobId: string };
   AssignVendor: { jobId: string };
+  Chat: { otherUserId: string; otherUserName: string };
 };

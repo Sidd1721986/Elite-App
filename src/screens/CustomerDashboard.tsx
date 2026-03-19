@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Platform, FlatList, RefreshControl, Image, ScrollView, Dimensions } from 'react-native';
+import { View, StyleSheet, Platform, RefreshControl, ScrollView, Dimensions } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import FastImage from 'react-native-fast-image';
 import {
     Text, Card, Button, Avatar, Divider, Surface,
     Portal, Modal, TextInput, List, IconButton,
@@ -166,7 +168,7 @@ const CustomerDashboard: React.FC = () => {
         />
     ), [handleViewDetails, handleModifyJob]);
 
-    const renderHeader = () => (
+    const renderHeader = useCallback(() => (
         <View style={styles.headerContainer}>
             <Surface style={styles.header} elevation={0}>
                 <View style={styles.headerTop}>
@@ -214,17 +216,15 @@ const CustomerDashboard: React.FC = () => {
                 style={styles.segmentedButtons}
             />
         </View>
-    );
+    ), [user, activeTab]);
 
     const renderActiveTab = () => (
-        <FlatList
-            data={activeJobs}
-            keyExtractor={item => item.id}
-            renderItem={renderJobItem}
-            initialNumToRender={5}
-            maxToRenderPerBatch={10}
-            windowSize={5}
-            removeClippedSubviews={Platform.OS === 'android'}
+        <View style={{ flex: 1 }}>
+            <FlashList
+                data={activeJobs}
+                keyExtractor={item => item.id}
+                renderItem={renderJobItem}
+                estimatedItemSize={250}
             refreshControl={
                 <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
@@ -284,7 +284,8 @@ const CustomerDashboard: React.FC = () => {
                 </View>
             )}
             contentContainerStyle={styles.tabContent}
-        />
+            />
+        </View>
     );
 
     const renderExploreTab = () => (
@@ -505,7 +506,7 @@ const CustomerDashboard: React.FC = () => {
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
                                     {photos.map((uri, index) => (
                                         <View key={index} style={styles.photoWrapper}>
-                                            <Image source={{ uri }} style={styles.photoThumbnail} />
+                                            <FastImage source={{ uri }} style={styles.photoThumbnail} />
                                             <IconButton
                                                 icon="close-circle"
                                                 size={20}

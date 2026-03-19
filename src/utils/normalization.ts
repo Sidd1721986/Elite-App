@@ -57,7 +57,7 @@ export const normalizeJob = (job: any): Job => {
         customer: normalizeUser(job.customer || job.Customer),
         vendor: normalizeUser(job.vendor || job.Vendor),
         photos: typeof rawPhotos === 'string' ? rawPhotos.split(',').filter(Boolean) : (Array.isArray(rawPhotos) ? rawPhotos : []),
-        completedPhotos: typeof rawCompletedPhotos === 'string' ? rawCompletedPhotos : (Array.isArray(rawCompletedPhotos) ? rawCompletedPhotos.join(',') : ''),
+        completedPhotos: typeof rawCompletedPhotos === 'string' ? rawCompletedPhotos.split(',').filter(Boolean) : (Array.isArray(rawCompletedPhotos) ? rawCompletedPhotos : []),
         createdAt: job.createdAt || job.CreatedAt || new Date().toISOString(),
         notes: Array.isArray(job.notes || job.Notes) ? (job.notes || job.Notes) : [],
     } as Job;

@@ -50,7 +50,9 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-            <View style={styles.decoratorCircle} />
+            <View style={styles.decoratorCircle1} />
+            <View style={styles.decoratorCircle2} />
+            <View style={styles.decoratorCircle3} />
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.container}
@@ -63,11 +65,12 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                     <View style={styles.content}>
                         <View style={styles.headerSection}>
                             <AppLogo size={60} />
-                            <Text variant="displayMedium" style={styles.brandTitle}>
-                                Elite Services
+                            <Text variant="headlineMedium" style={styles.brandTitle} numberOfLines={1}>
+                                <Text style={styles.brandElite}>Elite</Text>
+                                <Text style={styles.brandHome}> Home Services</Text>
                             </Text>
-                            <Text variant="bodyLarge" style={styles.brandSubtitle}>
-                                Premium Services. Seamless Experience.
+                            <Text variant="labelMedium" style={styles.brandSubtitle} numberOfLines={1}>
+                                PREMIUM SERVICES • SEAMLESS EXPERIENCE
                             </Text>
                         </View>
 
@@ -176,16 +179,34 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8FAFC',
+        backgroundColor: '#F8FAFC', // Soft bright slate
     },
-    decoratorCircle: {
+    decoratorCircle1: {
         position: 'absolute',
         top: -100,
         right: -50,
         width: 300,
         height: 300,
         borderRadius: 150,
-        backgroundColor: '#6366F110',
+        backgroundColor: '#6366F115', // Indigo Glow (subtle)
+    },
+    decoratorCircle2: {
+        position: 'absolute',
+        bottom: -50,
+        left: -80,
+        width: 250,
+        height: 250,
+        borderRadius: 125,
+        backgroundColor: '#06B6D410', // Cyan Glow (subtle)
+    },
+    decoratorCircle3: {
+        position: 'absolute',
+        top: '40%',
+        right: -100,
+        width: 200,
+        height: 200,
+        borderRadius: 100,
+        backgroundColor: '#F43F5E08', // Rose Glow (very subtle)
     },
     scrollContent: {
         flexGrow: 1,
@@ -200,20 +221,39 @@ const styles = StyleSheet.create({
         marginBottom: 40,
     },
     brandTitle: {
-        color: '#1E293B',
         fontWeight: '900',
-        letterSpacing: -1,
+        letterSpacing: -1.0,
+        textAlign: 'center',
+        textShadowColor: 'rgba(99, 102, 241, 0.12)',
+        textShadowOffset: { width: 0, height: 4 },
+        textShadowRadius: 12,
+        fontSize: 32,
+    },
+    brandElite: {
+        color: '#6366F1', // Back to Indigo
+    },
+    brandHome: {
+        color: '#1E293B', // Back to Dark Slate
     },
     brandSubtitle: {
-        color: '#64748B',
-        marginTop: 4,
-        letterSpacing: 0.5,
+        color: '#94A3B8',
+        marginTop: 8,
+        letterSpacing: 1.5,
+        fontWeight: '700',
+        opacity: 0.85,
+        fontSize: 10,
     },
     card: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 24,
+        backgroundColor: 'rgba(255, 255, 255, 0.7)', // Brighter glassmorphism
+        borderRadius: 32,
         borderWidth: 1,
-        borderColor: '#F1F5F9',
+        borderColor: 'rgba(255, 255, 255, 0.8)',
+        shadowColor: '#6366F1',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 5,
+        overflow: 'hidden',
     },
     cardInner: {
         paddingHorizontal: 20,
@@ -221,7 +261,7 @@ const styles = StyleSheet.create({
     },
     input: {
         marginBottom: 16,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(255, 255, 255, 0.5)', // Brighter blending
     },
     roleContainer: {
         marginVertical: 12,
@@ -233,9 +273,10 @@ const styles = StyleSheet.create({
     },
     roleButton: {
         borderRadius: 12,
-        borderColor: '#E2E8F0',
+        borderColor: 'rgba(226, 232, 240, 0.8)',
         height: 50,
         justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.4)',
     },
     roleButtonLabel: {
         color: '#1E293B',
