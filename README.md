@@ -1,6 +1,6 @@
 # Elite Services
 
-A React Native application built with Expo that supports three user types: **Admin**, **Vendor**, and **Customer**. The app features role-based authentication and access control, working on both iOS and Android platforms.
+A React Native application for **Admin**, **Vendor**, and **Customer** roles. It uses role-based authentication and access control on iOS and Android.
 
 ## Features
 
@@ -28,7 +28,7 @@ A React Native application built with Expo that supports three user types: **Adm
 
 ## Tech Stack
 
-- **Framework**: React Native + Expo
+- **Framework**: React Native 0.76 (CLI)
 - **Language**: TypeScript
 - **Navigation**: React Navigation (Stack Navigator)
 - **Storage**: AsyncStorage
@@ -38,9 +38,9 @@ A React Native application built with Expo that supports three user types: **Adm
 
 ### Prerequisites
 
-- Node.js (v14 or higher)
-- npm or yarn
-- Expo Go app on your mobile device (optional, for testing on physical device)
+- **Node.js 20.x** (see `.nvmrc`; run `nvm use` in the project root)
+- **npm 10.x** (comes with Node 20)
+- **Xcode** (iOS) / **Android Studio** (Android) for native builds — not Expo Go
 
 ### Installation
 
@@ -54,15 +54,17 @@ A React Native application built with Expo that supports three user types: **Adm
    npm install
    ```
 
-3. Start the development server:
+3. Start Metro:
    ```bash
-   npx expo start
+   npm start
    ```
 
-4. Run on your preferred platform:
-   - Press `i` for iOS Simulator (Mac only)
-   - Press `a` for Android Emulator
-   - Scan QR code with Expo Go app on your phone
+4. Run the native app (separate terminal, with Metro running):
+   ```bash
+   npm run ios
+   # or
+   npm run android
+   ```
 
 ## Usage
 
@@ -145,7 +147,7 @@ elite-home-service/
 ### Metro Bundler Issues
 If you encounter bundler issues, try:
 ```bash
-npx expo start -c
+npm run start:reset
 ```
 
 ### Cache Issues

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * Keeps local tooling on Node 20 to avoid Metro/runtime instability on newer majors.
+ * Requires Node 20.x (see package.json engines and .nvmrc). Blocks other majors.
  */
 const major = Number((process.versions.node || '0').split('.')[0]);
-const required = 20;
+const requiredMajor = 20;
 
-if (major !== required) {
+if (major !== requiredMajor) {
   console.error(
-    `\n[node-version] Detected Node ${process.versions.node}. This project requires Node ${required}.x for stable Metro.\n` +
+    `\n[node-version] Detected Node ${process.versions.node}. This project requires Node ${requiredMajor}.x (see .nvmrc and package.json engines).\n` +
       '  Fix:\n' +
-      '  nvm use 20\n'
+      '  nvm use\n'
   );
   process.exit(1);
 }

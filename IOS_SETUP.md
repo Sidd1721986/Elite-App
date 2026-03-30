@@ -1,5 +1,7 @@
 # iOS Setup (Elite App)
 
+Use **Node.js 20.x** in this repo (`.nvmrc` + `package.json` `engines`).
+
 ## Clean build (fix white screen / stale bundle)
 
 If you see a white screen or stale UI, do a full clean and rebuild:
