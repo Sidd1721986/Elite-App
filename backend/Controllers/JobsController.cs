@@ -19,6 +19,15 @@ public class JobsController : ControllerBase
         _context = context;
     }
 
+    /// <summary>Returns true if the caller may view this job (customer, assigned vendor, or admin).</summary>
+    private bool CurrentUserCanAccessJob(Guid userId, Job job)
+    {
+        if (User.IsInRole("Admin") || User.IsInRole("admin")) return true;
+        if (job.CustomerId == userId) return true;
+        if (job.VendorId == userId) return true;
+        return false;
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetJobs([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
@@ -30,19 +39,7 @@ public class JobsController : ControllerBase
             return Unauthorized();
         }
 
-        // Auto-expire jobs assigned > 48h ago (separate tracked operation)
-        var now = DateTime.UtcNow;
-        var expiredJobs = await _context.Jobs
-            .Where(j => j.Status == "Assigned" && j.AssignedAt.HasValue && j.AssignedAt.Value.AddHours(48) < now)
-            .ToListAsync();
-            
-        if (expiredJobs.Any())
-        {
-            foreach (var ej in expiredJobs) ej.Status = "Expired";
-            await _context.SaveChangesAsync();
-        }
-
-        // Main read-only query (separate from tracked expiry above)
+        // Keep this endpoint read-only for consistent latency.
         IQueryable<Job> query = _context.Jobs.AsNoTracking()
             .Include(j => j.Customer)
             .Include(j => j.Vendor);
@@ -69,15 +66,16 @@ public class JobsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetJob(Guid id)
     {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var userId)) return Unauthorized();
+
         var job = await _context.Jobs.AsNoTracking()
             .Include(j => j.Customer)
             .Include(j => j.Vendor)
             .FirstOrDefaultAsync(j => j.Id == id);
 
-        if (job == null)
-        {
-            return NotFound();
-        }
+        if (job == null) return NotFound();
+        if (!CurrentUserCanAccessJob(userId, job)) return NotFound();
 
         return Ok(job);
     }
@@ -90,6 +88,9 @@ public class JobsController : ControllerBase
         {
             return Unauthorized();
         }
+
+        if (!User.IsInRole("Customer") && !User.IsInRole("customer"))
+            return StatusCode(403, new { message = "Only customers can create service requests." });
 
         if (string.IsNullOrWhiteSpace(request.Description) || 
             string.IsNullOrWhiteSpace(request.Address) || 
@@ -229,6 +230,7 @@ public class JobsController : ControllerBase
 
         var job = await _context.Jobs.FindAsync(id);
         if (job == null) return NotFound();
+        if (!CurrentUserCanAccessJob(userId, job)) return NotFound();
 
         var note = new JobNote
         {
@@ -247,6 +249,13 @@ public class JobsController : ControllerBase
     [HttpGet("{id}/notes")]
     public async Task<IActionResult> GetNotes(Guid id)
     {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var userId)) return Unauthorized();
+
+        var job = await _context.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == id);
+        if (job == null) return NotFound();
+        if (!CurrentUserCanAccessJob(userId, job)) return NotFound();
+
         var notes = await _context.JobNotes
             .Where(n => n.JobId == id)
             .OrderByDescending(n => n.CreatedAt)

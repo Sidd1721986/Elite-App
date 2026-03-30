@@ -61,34 +61,7 @@ public class MessagesController : ControllerBase
         return Ok(message);
     }
 
-    // GET: api/messages/{otherUserId}
-    [HttpGet("{otherUserId}")]
-    public async Task<ActionResult<IEnumerable<Message>>> GetMessages(Guid otherUserId)
-    {
-        var currentUserId = GetCurrentUserId();
-        if (currentUserId == Guid.Empty)
-            return Unauthorized();
-
-        var messages = await _context.Messages
-            .Where(m => (m.SenderId == currentUserId && m.ReceiverId == otherUserId) ||
-                        (m.SenderId == otherUserId && m.ReceiverId == currentUserId))
-            .OrderBy(m => m.Timestamp)
-            .ToListAsync();
-
-        // Mark messages as read
-        var unreadMessages = messages.Where(m => m.ReceiverId == currentUserId && !m.IsRead).ToList();
-        if (unreadMessages.Any())
-        {
-            foreach (var msg in unreadMessages)
-            {
-                msg.IsRead = true;
-            }
-            await _context.SaveChangesAsync();
-        }
-
-        return Ok(messages);
-    }
-
+    // Static segments must be registered before {otherUserId} or "conversations" is parsed as a Guid and this route never runs.
     // GET: api/messages/conversations
     [HttpGet("conversations")]
     public async Task<ActionResult<IEnumerable<ConversationDto>>> GetConversations()
@@ -97,20 +70,36 @@ public class MessagesController : ControllerBase
         if (currentUserId == Guid.Empty)
             return Unauthorized();
 
-        // Get all messages where the current user is either sender or receiver
+        // Read only the fields needed to build the conversation list.
         var messages = await _context.Messages
+            .AsNoTracking()
             .Where(m => m.SenderId == currentUserId || m.ReceiverId == currentUserId)
             .OrderByDescending(m => m.Timestamp)
+            .Select(m => new
+            {
+                m.SenderId,
+                m.ReceiverId,
+                m.Content,
+                m.Timestamp,
+                m.IsRead
+            })
             .ToListAsync();
 
         var grouped = messages
             .GroupBy(m => m.SenderId == currentUserId ? m.ReceiverId : m.SenderId);
 
-        var conversations = new List<ConversationDto>();
+        var otherUserIds = grouped.Select(g => g.Key).Distinct().ToList();
+        var usersById = await _context.Users
+            .AsNoTracking()
+            .Where(u => otherUserIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.Name, u.Email })
+            .ToDictionaryAsync(u => u.Id);
+
+        var conversations = new List<ConversationDto>(grouped.Count());
         foreach (var g in grouped)
         {
             var otherUserId = g.Key;
-            var otherUser = await _context.Users.FindAsync(otherUserId);
+            usersById.TryGetValue(otherUserId, out var otherUser);
             var latestMessage = g.First();
             var unreadCount = g.Count(m => m.ReceiverId == currentUserId && !m.IsRead);
 
@@ -126,6 +115,29 @@ public class MessagesController : ControllerBase
         }
 
         return Ok(conversations);
+    }
+
+    // GET: api/messages/{otherUserId}
+    [HttpGet("{otherUserId}")]
+    public async Task<ActionResult<IEnumerable<Message>>> GetMessages(Guid otherUserId)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == Guid.Empty)
+            return Unauthorized();
+
+        // Mark incoming unread messages in one DB-side update.
+        await _context.Messages
+            .Where(m => m.SenderId == otherUserId && m.ReceiverId == currentUserId && !m.IsRead)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(m => m.IsRead, true));
+
+        var messages = await _context.Messages
+            .AsNoTracking()
+            .Where(m => (m.SenderId == currentUserId && m.ReceiverId == otherUserId) ||
+                        (m.SenderId == otherUserId && m.ReceiverId == currentUserId))
+            .OrderBy(m => m.Timestamp)
+            .ToListAsync();
+
+        return Ok(messages);
     }
 }
 

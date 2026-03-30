@@ -1,6 +1,5 @@
 import * as React from 'react';
-import { View, StyleSheet } from 'react-native';
-import FastImage from 'react-native-fast-image';
+import { View, StyleSheet, Image } from 'react-native';
 import { Surface } from 'react-native-paper';
 
 /**
@@ -13,10 +12,10 @@ export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = ({
 }) => {
     const content = (
         <View style={[styles.inner, { width: size, height: size }]}>
-            <FastImage
+            <Image
                 source={require('../../assets/logo.png')}
                 style={{ width: size * 0.8, height: size * 0.8 }}
-                resizeMode={FastImage.resizeMode.contain}
+                resizeMode="contain"
             />
         </View>
     );

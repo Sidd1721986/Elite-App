@@ -1,6 +1,8 @@
 using EliteApp.API.Models;
 using EliteApp.API.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EliteApp.API.Controllers;
 
@@ -15,6 +17,7 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
+    [EnableRateLimiting("auth-login")]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
@@ -39,6 +42,7 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Registration successful" });
     }
 
+    [EnableRateLimiting("auth-login")]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
@@ -65,6 +69,49 @@ public class AuthController : ControllerBase
             }
         });
     }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("password-reset")]
+    [HttpPost("forgot-password-eligibility")]
+    public async Task<IActionResult> ForgotPasswordEligibility([FromBody] ForgotPasswordEligibilityRequest body)
+    {
+        var can = await _authService.CanShowForgotPasswordAsync(body.Email ?? string.Empty, body.Role ?? string.Empty);
+        return Ok(new { canShowForgotPassword = can });
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("password-reset")]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest body)
+    {
+        var result = await _authService.RequestPasswordResetAsync(
+            body.Email ?? string.Empty,
+            body.Role ?? string.Empty);
+
+        if (result.Status == ForgotPasswordRequestStatus.InvalidInput)
+            return BadRequest(new { message = result.Message });
+
+        if (result.Status == ForgotPasswordRequestStatus.EmailDeliveryFailed)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = result.Message });
+
+        return Ok(new { message = result.Message });
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("password-reset")]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithTokenRequest body)
+    {
+        var (ok, error) = await _authService.ResetPasswordAsync(
+            body.Email ?? string.Empty,
+            body.Token ?? string.Empty,
+            body.NewPassword ?? string.Empty);
+
+        if (!ok)
+            return BadRequest(new { message = error });
+
+        return Ok(new { message = "Password updated. You can sign in." });
+    }
 }
 
 public class RegisterRequest
@@ -82,4 +129,23 @@ public class LoginRequest
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
+}
+
+public class ForgotPasswordEligibilityRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+}
+
+public class ForgotPasswordRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+}
+
+public class ResetPasswordWithTokenRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string Token { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
 }

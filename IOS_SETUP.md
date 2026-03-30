@@ -57,6 +57,14 @@ Your project path contains a **space** (`Elite App`). Xcode and React Native's c
 
 ### Run from Xcode
 
-1. `open ios/EliteAppTemp.xcworkspace`
-2. Select scheme **EliteAppTemp** and an iPhone simulator.
+1. `open ios/multiuserauthapp.xcworkspace` (create the workspace with `cd ios && pod install` if needed).
+2. Select the **multiuserauthapp** scheme and an iPhone simulator.
 3. Press Run. Keep Metro running (`npm run start`) in another terminal.
+
+---
+
+## Release builds and physical devices
+
+- Set your **HTTPS** production API in `src/config/appConfig.ts` (`PRODUCTION_API_BASE_URL`) before archiving for the App Store.
+- **Physical device + local HTTP API**: App Transport Security blocks arbitrary HTTP (e.g. `http://192.168.x.x:5260`). Prefer hitting your **HTTPS** deployed API, or use a TLS tunnel for development.
+

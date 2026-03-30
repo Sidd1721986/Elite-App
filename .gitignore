@@ -32,6 +32,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env.prod
 
 # typescript
 *.tsbuildinfo
@@ -42,6 +43,7 @@ ios/Pods/
 android/app/build/
 android/.gradle/
 android/build/
+android/keystore.properties
 
 # logs and images
 *.log
@@ -66,3 +68,13 @@ metro_cache/
 minimal.js
 debug_index.js
 test_metro.js
+
+# Accidental duplicate / local junk (do not commit)
+* 2.lock
+* 3.lock
+package-lock 2.json
+*_pid*.txt
+build/
+build-test.bundle
+debug_codegen.json
+agentDebugEarly.js

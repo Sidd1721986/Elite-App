@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<Job> Jobs { get; set; }
     public DbSet<JobNote> JobNotes { get; set; }
     public DbSet<Message> Messages { get; set; }
+    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,5 +21,26 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();
+
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasIndex(t => t.Token)
+            .IsUnique();
+
+        // Job query patterns
+        modelBuilder.Entity<Job>()
+            .HasIndex(j => new { j.CustomerId, j.CreatedAt });
+
+        modelBuilder.Entity<Job>()
+            .HasIndex(j => new { j.VendorId, j.CreatedAt });
+
+        modelBuilder.Entity<Job>()
+            .HasIndex(j => new { j.Status, j.AssignedAt });
+
+        // Messaging query patterns
+        modelBuilder.Entity<Message>()
+            .HasIndex(m => new { m.ReceiverId, m.IsRead, m.Timestamp });
+
+        modelBuilder.Entity<Message>()
+            .HasIndex(m => new { m.SenderId, m.ReceiverId, m.Timestamp });
     }
 }

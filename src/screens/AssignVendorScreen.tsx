@@ -14,7 +14,7 @@ type AssignVendorRouteProp = RouteProp<RootStackParamList, 'AssignVendor'>;
 const AssignVendorScreen: React.FC = () => {
     const route = useRoute<AssignVendorRouteProp>();
     const navigation = useNavigation();
-    const { jobId } = route.params;
+    const jobId = route.params?.jobId;
     const { getApprovedVendors } = useAuth();
     const { assignVendor, getJobById } = useJobs();
 
@@ -24,11 +24,29 @@ const AssignVendorScreen: React.FC = () => {
     const [snackbarVisible, setSnackbarVisible] = React.useState(false);
     const [snackbarMessage, setSnackbarMessage] = React.useState('');
 
-    const job = getJobById(jobId);
+    const job = jobId ? getJobById(jobId) : undefined;
 
     React.useEffect(() => {
         getApprovedVendors().then(setVendors);
     }, [getApprovedVendors]);
+
+    if (!jobId) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top']}>
+                <View style={styles.header}>
+                    <IconButton icon="chevron-left" size={24} onPress={() => navigation.goBack()} />
+                    <Text variant="titleLarge" style={styles.title}>Assign Vendor</Text>
+                    <View style={styles.headerSpacer} />
+                </View>
+                <View style={{ padding: 24 }}>
+                    <Text variant="bodyLarge">Missing job information.</Text>
+                    <Button mode="contained" onPress={() => navigation.goBack()} style={{ marginTop: 16 }}>
+                        Go back
+                    </Button>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     const filteredVendors = useMemo(() => vendors.filter(v =>
         (v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||

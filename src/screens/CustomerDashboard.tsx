@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Platform, RefreshControl, ScrollView, Dimensions } from 'react-native';
+import { View, StyleSheet, Platform, RefreshControl, ScrollView, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import FastImage from 'react-native-fast-image';
 import {
@@ -8,12 +8,13 @@ import {
     Portal, Modal, TextInput, List, IconButton,
     Chip, Checkbox,
     Menu, SegmentedButtons, Snackbar,
-    ProgressBar
+    ProgressBar, Dialog
 } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useJobs } from '../context/JobContext';
 import AppLogo from '../components/AppLogo';
 import { useNavigation } from '@react-navigation/native';
+import { useChatInboxNotifications } from '../hooks/useChatInboxNotifications';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, JobStatus, Urgency, Job } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,11 +22,12 @@ import JobItem from '../components/JobItem';
 import { launchImageLibrary } from 'react-native-image-picker';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
-const { width } = Dimensions.get('window');
 
 const CustomerDashboard: React.FC = () => {
-    const { user, logout } = useAuth();
+    const { width: windowWidth } = useWindowDimensions();
+    const { user, logout, deleteAccount } = useAuth();
     const { jobs, addJob, updateJob, getJobById, refreshJobs } = useJobs();
+    const { messageUnreadTotal, refreshInbox } = useChatInboxNotifications();
     const navigation = useNavigation<NavigationProp>();
 
     // UI States
@@ -35,12 +37,15 @@ const CustomerDashboard: React.FC = () => {
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [refreshing, setRefreshing] = useState(false);
     const [editingJobId, setEditingJobId] = useState<string | null>(null);
+    const [settingsMenuVisible, setSettingsMenuVisible] = useState(false);
+    const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        await refreshJobs();
+        await Promise.all([refreshJobs(), refreshInbox()]);
         setRefreshing(false);
-    }, [refreshJobs]);
+    }, [refreshJobs, refreshInbox]);
 
     // Form States for New Job
     const [address, setAddress] = useState(user?.address || '');
@@ -53,8 +58,27 @@ const CustomerDashboard: React.FC = () => {
     const [showUrgencyMenu, setShowUrgencyMenu] = useState(false);
 
     const handleLogout = useCallback(async () => {
+        setSettingsMenuVisible(false);
         await logout();
     }, [logout]);
+
+    const handleDeleteAccount = useCallback(async () => {
+        setSettingsMenuVisible(false);
+        setDeleteDialogVisible(false);
+        setIsDeleting(true);
+        try {
+            const result = await deleteAccount();
+            if (result !== true) {
+                setSnackbarMessage(typeof result === 'string' ? result : 'Failed to delete account');
+                setSnackbarVisible(true);
+            }
+        } catch (error) {
+            setSnackbarMessage('An unexpected error occurred');
+            setSnackbarVisible(true);
+        } finally {
+            setIsDeleting(false);
+        }
+    }, [deleteAccount]);
 
     const handlePickImage = useCallback(async () => {
         const result = await launchImageLibrary({
@@ -175,15 +199,67 @@ const CustomerDashboard: React.FC = () => {
                     <Surface style={styles.headerLogoSurface} elevation={1}>
                         <AppLogo size={36} showSurface={false} />
                     </Surface>
-                    <IconButton
-                        icon="power"
-                        mode="contained"
-                        containerColor="#FEF2F2"
-                        iconColor="#EF4444"
-                        size={22}
-                        onPress={handleLogout}
-                        style={styles.headerLogout}
-                    />
+                    <View style={styles.headerActions}>
+                        <View style={styles.chatIconWrap}>
+                            <IconButton
+                                icon="message-text-outline"
+                                iconColor="#6366F1"
+                                mode="contained"
+                                containerColor="#EEF2FF"
+                                size={22}
+                                onPress={() =>
+                                    navigation.navigate('Chat', {
+                                        otherUserId: 'admin',
+                                        otherUserName: 'Elite Admin',
+                                    })
+                                }
+                                accessibilityLabel="Messages with Elite Admin"
+                            />
+                            {messageUnreadTotal > 0 ? (
+                                <View style={styles.chatBadge} pointerEvents="none">
+                                    <Text style={styles.chatBadgeText}>
+                                        {messageUnreadTotal > 99 ? '99+' : String(messageUnreadTotal)}
+                                    </Text>
+                                </View>
+                            ) : null}
+                        </View>
+                        <Menu
+                            visible={settingsMenuVisible}
+                            onDismiss={() => setSettingsMenuVisible(false)}
+                            anchor={
+                                <IconButton
+                                    icon="menu"
+                                    mode="contained"
+                                    containerColor="#F1F5F9"
+                                    size={24}
+                                    onPress={() => setSettingsMenuVisible(true)}
+                                />
+                            }
+                        >
+                            <Menu.Item
+                                leadingIcon="account-circle-outline"
+                                onPress={() => { setSettingsMenuVisible(false); setActiveTab('profile'); }}
+                                title="Profile Settings"
+                            />
+                            <Menu.Item
+                                leadingIcon="information-outline"
+                                onPress={() => { setSettingsMenuVisible(false); setActiveTab('profile'); }}
+                                title="Account Details"
+                            />
+                            <Divider />
+                            <Menu.Item
+                                leadingIcon="logout"
+                                onPress={handleLogout}
+                                title="Logout"
+                            />
+                            <Menu.Item
+                                leadingIcon="delete-outline"
+                                onPress={() => { setSettingsMenuVisible(false); setDeleteDialogVisible(true); }}
+                                title="Delete Account"
+                                titleStyle={{ color: '#EF4444' }}
+                            />
+                        </Menu>
+                    </View>
                 </View>
 
                 <View style={styles.welcomeSection}>
@@ -216,7 +292,7 @@ const CustomerDashboard: React.FC = () => {
                 style={styles.segmentedButtons}
             />
         </View>
-    ), [user, activeTab]);
+    ), [user, activeTab, settingsMenuVisible, handleLogout, navigation, messageUnreadTotal]);
 
     const renderActiveTab = () => (
         <View style={{ flex: 1 }}>
@@ -302,7 +378,11 @@ const CustomerDashboard: React.FC = () => {
                     { title: 'HVAC', icon: 'air-conditioner', color: '#10B981' },
                     { title: 'Remodeling', icon: 'home-edit-outline', color: '#6366F1' },
                 ].map((s, i) => (
-                    <Surface key={i} style={styles.serviceItem} elevation={1}>
+                    <Surface
+                        key={i}
+                        style={[styles.serviceItem, { width: Math.max(0, (windowWidth - 64) / 2) }]}
+                        elevation={1}
+                    >
                         <IconButton icon={s.icon} iconColor={s.color} mode="contained" containerColor={`${s.color}10`} />
                         <Text variant="labelLarge" style={styles.serviceText}>{s.title}</Text>
                     </Surface>
@@ -378,16 +458,6 @@ const CustomerDashboard: React.FC = () => {
                     right={props => <List.Icon {...props} icon="chevron-right" />}
                 />
             </View>
-
-            <Button
-                mode="outlined"
-                onPress={handleLogout}
-                style={styles.logoutBtn}
-                textColor="#EF4444"
-                icon="logout"
-            >
-                Log Out
-            </Button>
         </ScrollView>
     );
 
@@ -555,6 +625,28 @@ const CustomerDashboard: React.FC = () => {
             >
                 {snackbarMessage}
             </Snackbar>
+
+            <Portal>
+                <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
+                    <Dialog.Icon icon="alert-circle" color="#EF4444" />
+                    <Dialog.Title style={{ textAlign: 'center' }}>Delete Account?</Dialog.Title>
+                    <Dialog.Content>
+                        <Text variant="bodyMedium" style={{ textAlign: 'center', color: '#64748B' }}>
+                            This will deactivate your profile and all services. This action initiates a deletion request for your data.
+                        </Text>
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setDeleteDialogVisible(false)} textColor="#64748B">Cancel</Button>
+                        <Button
+                            onPress={handleDeleteAccount}
+                            loading={isDeleting}
+                            textColor="#EF4444"
+                        >
+                            Delete Account
+                        </Button>
+                    </Dialog.Actions>
+                </Dialog>
+            </Portal>
         </SafeAreaView>
     );
 };
@@ -584,6 +676,31 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 24,
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    chatIconWrap: {
+        position: 'relative',
+    },
+    chatBadge: {
+        position: 'absolute',
+        top: 4,
+        right: 4,
+        minWidth: 18,
+        height: 18,
+        paddingHorizontal: 5,
+        borderRadius: 9,
+        backgroundColor: '#EF4444',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    chatBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: '800',
     },
     headerLogout: {
         margin: 0,
@@ -719,7 +836,6 @@ const styles = StyleSheet.create({
         marginBottom: 32,
     },
     serviceItem: {
-        width: (width - 64) / 2,
         backgroundColor: '#FFFFFF',
         padding: 16,
         borderRadius: 20,
@@ -811,7 +927,6 @@ const styles = StyleSheet.create({
     menuSection: {
         backgroundColor: '#FFFFFF',
         borderRadius: 24,
-        overflow: 'hidden',
         borderWidth: 1,
         borderColor: '#F1F5F9',
         marginBottom: 24,

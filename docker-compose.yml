@@ -1,14 +1,41 @@
-version: '3.8'
-
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: eliteapp_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: eliteapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - eliteapp_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eliteapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: eliteapp_api
     ports:
-      - "5265:5260" # Local port changed to 5265 to avoid conflict with running API
+      - "5260:5260" # Same host port as Kestrel / `dotnet run` — matches DEV_API_PORT in apiClient.ts
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - DOTNET_ENVIRONMENT=Development
+      # Listen on 0.0.0.0 inside the container (localhost-only is unsafe for port mapping).
+      - Kestrel__BindAllInterfaces=true
+      - Cors__AllowedOrigins=http://localhost:19006;http://localhost:8081;http://localhost:3000
+      # Same Docker network as the postgres service below
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=eliteapp;Username=postgres;Password=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
-    # If a local database is needed in the future, it can be added as a separate service below
+
+volumes:
+  eliteapp_pgdata:

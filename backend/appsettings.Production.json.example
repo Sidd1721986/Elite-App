@@ -1,0 +1,39 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Warning",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "your-api.azurewebsites.net;api.yourdomain.com",
+  "ConnectionStrings": {
+    "DefaultConnection": "REPLACE_WITH_AZURE_POSTGRES_OR_SUPABASE_CONNECTION_STRING"
+  },
+  "Jwt": {
+    "Key": "REPLACE_WITH_LONG_RANDOM_SECRET_USE_KEY_VAULT_IN_AZURE"
+  },
+  "Cors": {
+    "AllowedOrigins": "https://your-web-app.example.com;https://expo-web-host.example.com"
+  },
+  "Bootstrap": {
+    "AdminPassword": "OPTIONAL_ONE_TIME_STRONG_PASSWORD_IF_NO_ADMIN_EXISTS_YET_REMOVE_AFTER_BOOTSTRAP"
+  },
+  "Security": {
+    "MinPasswordLength": 8
+  },
+  "PasswordReset": {
+    "Pepper": "REPLACE_WITH_SECRET_FROM_KEY_VAULT",
+    "TokenExpiryHours": 1
+  },
+  "Email": {
+    "FromName": "Elite Services",
+    "FromAddress": "noreply@yourdomain.com",
+    "PasswordResetSubject": "Reset your password",
+    "Smtp": {
+      "Host": "smtp.sendgrid.net",
+      "Port": "587",
+      "User": "apikey",
+      "Password": "REPLACE_SENDGRID_OR_SMTP_SECRET"
+    }
+  }
+}

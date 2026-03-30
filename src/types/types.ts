@@ -43,6 +43,7 @@ export interface AuthContextType {
   getApprovedVendors: () => Promise<User[]>;
   updateUserStatus: (userId: string, approved: boolean) => Promise<boolean>;
   removeVendor: (userId: string) => Promise<boolean>;
+  deleteAccount: () => Promise<boolean | string>;
 }
 
 export enum JobStatus {
@@ -127,13 +128,16 @@ export interface Conversation {
 }
 
 export type RootStackParamList = {
-  Login: undefined;
+  Login: { passwordResetOk?: boolean } | undefined;
+  ForgotPassword: { initialEmail?: string; initialRole?: UserRole } | undefined;
+  ResetPassword: { email: string; role: string; resetToken?: string };
   SignupRoleSelector: undefined;
   CustomerSignup: undefined;
   VendorSignup: undefined;
   AdminDashboard: undefined;
   VendorDashboard: undefined;
   CustomerDashboard: undefined;
+  RoleFallback: undefined;
   JobDetails: { jobId: string };
   AssignVendor: { jobId: string };
   Chat: { otherUserId: string; otherUserName: string };

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug only: allows HTTP to Metro, emulators (10.0.2.2), and LAN IPs during development. Not merged into release. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application android:usesCleartextTraffic="true" tools:targetApi="28" />
+</manifest>

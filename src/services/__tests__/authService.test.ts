@@ -35,7 +35,7 @@ describe('authService', () => {
             expect(result).toBe(true);
         });
 
-        it('should return false if apiClient.post fails', async () => {
+        it('should return error message if apiClient.post fails', async () => {
             (apiClient.post as jest.Mock).mockRejectedValueOnce(new Error('Signup failed'));
 
             const result = await authService.signup(
@@ -48,7 +48,24 @@ describe('authService', () => {
                 'Referral'
             );
 
-            expect(result).toBe(false);
+            expect(result).toBe('Signup failed');
+        });
+
+        it('should return a helpful message on network failure', async () => {
+            (apiClient.post as jest.Mock).mockRejectedValueOnce(new TypeError('Network request failed'));
+
+            const result = await authService.signup(
+                'Test User',
+                'test@example.com',
+                'password123',
+                UserRole.CUSTOMER,
+                '123 Main St',
+                '555-0101',
+                'Referral'
+            );
+
+            expect(typeof result).toBe('string');
+            expect(result).toMatch(/Cannot reach the API/);
         });
     });
 

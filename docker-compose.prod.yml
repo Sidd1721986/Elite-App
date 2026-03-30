@@ -1,0 +1,27 @@
+# Elite API — production-like container (same Dockerfile Azure uses).
+#
+# Setup:
+#   cp .env.prod.example .env.prod
+#   Edit .env.prod with real values (file is gitignored — never commit it).
+#   docker compose -f docker-compose.prod.yml up --build
+#
+# Smoke test (HTTP, local only):
+#   curl -sS http://127.0.0.1:5260/health
+#
+# Mirror these keys in Azure App Service → Configuration (or Key Vault references).
+# App Service must set WEBSITES_PORT=5260 (Kestrel listens on 5260 in Program.cs).
+#
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: eliteapp-api:local-prod
+    container_name: eliteapp_api_prod
+    ports:
+      - "5260:5260"
+    env_file:
+      - .env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+    restart: unless-stopped

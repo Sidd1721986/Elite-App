@@ -79,9 +79,14 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     const scoped = scopeJobsToUser(normalized, user);
                     setJobs(scoped);
                     setIsLoading(false);
+                } else if (isMounted.current) {
+                    // No cache: don't keep isLoading true until InteractionManager + network (can feel like a blank screen)
+                    setIsLoading(false);
                 }
             } catch {
-                // Ignore cache read errors
+                if (isMounted.current) {
+                    setIsLoading(false);
+                }
             }
         }
 

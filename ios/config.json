@@ -1,0 +1,13 @@
+{
+  "root": "/Users/siddharthsengar/Desktop/multi-user-auth-app",
+  "reactNativePath": "/Users/siddharthsengar/Desktop/multi-user-auth-app/node_modules/react-native",
+  "reactNativeVersion": "0.76",
+  "dependencies": {},
+  "commands": [],
+  "healthChecks": [],
+  "platforms": {},
+  "assets": [
+    "./assets/fonts/"
+  ],
+  "project": {}
+}

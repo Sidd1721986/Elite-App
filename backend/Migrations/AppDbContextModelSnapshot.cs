@@ -88,9 +88,11 @@ namespace EliteApp.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CustomerId");
+                    b.HasIndex("CustomerId", "CreatedAt");
 
-                    b.HasIndex("VendorId");
+                    b.HasIndex("Status", "AssignedAt");
+
+                    b.HasIndex("VendorId", "CreatedAt");
 
                     b.ToTable("Jobs");
                 });
@@ -145,11 +147,40 @@ namespace EliteApp.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ReceiverId");
+                    b.HasIndex("ReceiverId", "IsRead", "Timestamp");
 
-                    b.HasIndex("SenderId");
+                    b.HasIndex("SenderId", "ReceiverId", "Timestamp");
 
                     b.ToTable("Messages");
+                });
+
+            modelBuilder.Entity("EliteApp.API.Models.PasswordResetToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Used")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("PasswordResetTokens");
                 });
 
             modelBuilder.Entity("EliteApp.API.Models.User", b =>
@@ -167,6 +198,9 @@ namespace EliteApp.API.Migrations
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsApproved")
                         .HasColumnType("boolean");
@@ -237,6 +271,17 @@ namespace EliteApp.API.Migrations
                     b.Navigation("Receiver");
 
                     b.Navigation("Sender");
+                });
+
+            modelBuilder.Entity("EliteApp.API.Models.PasswordResetToken", b =>
+                {
+                    b.HasOne("EliteApp.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("EliteApp.API.Models.Job", b =>

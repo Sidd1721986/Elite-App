@@ -1,8 +1,56 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import { DEV_API_HOST, getProductionApiBaseUrl } from '../config/appConfig';
 
-// In production, change this to your Azure Web App URL (e.g., https://eliteapp-app-prod.azurewebsites.net/api)
-const PROD_URL = 'https://elite-services-api.azurewebsites.net/api'; 
-const BASE_URL = __DEV__ ? 'http://localhost:5260/api' : PROD_URL;
+const PROD_URL = getProductionApiBaseUrl();
+
+if (!__DEV__ && !/^https:\/\//i.test(PROD_URL)) {
+    throw new Error('Production API URL must use https://. Edit PRODUCTION_API_BASE_URL in src/config/appConfig.ts.');
+}
+
+// Must match the API host port (Kestrel listens on 5260 for `dotnet run` and matches "5260:5260" in Docker). If you map a different host port (e.g. "5265:5260"), set this to that host port.
+const DEV_API_PORT = 5260;
+
+/** Hostname of the machine running Metro (same Mac that should run `dotnet run`). */
+function getPackagerHostname(): string | null {
+    try {
+        // Same helper RN uses for devtools; bundle URL is e.g. http://192.168.1.5:8081/ on a physical device
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const getDevServer = require('react-native/Libraries/Core/Devtools/getDevServer') as () => { url: string };
+        const { url } = getDevServer();
+        return new URL(url).hostname;
+    } catch {
+        return null;
+    }
+}
+
+function devApiBaseUrl(): string {
+    const host = DEV_API_HOST.trim();
+    if (host) {
+        return `http://${host}:${DEV_API_PORT}/api`;
+    }
+
+    const packagerHost = getPackagerHostname();
+    const usePackagerHost =
+        packagerHost &&
+        packagerHost !== 'localhost' &&
+        packagerHost !== '127.0.0.1';
+
+    if (usePackagerHost) {
+        // Physical device (or Metro bound to LAN): API must use the same host as the JS bundle, not loopback.
+        return `http://${packagerHost}:${DEV_API_PORT}/api`;
+    }
+
+    if (Platform.OS === 'android') {
+        // Emulator → host loopback via special alias
+        return `http://10.0.2.2:${DEV_API_PORT}/api`;
+    }
+
+    // iOS simulator: 127.0.0.1 avoids localhost → ::1 mismatches with Kestrel
+    return `http://127.0.0.1:${DEV_API_PORT}/api`;
+}
+
+const BASE_URL = __DEV__ ? devApiBaseUrl() : PROD_URL;
 
 // Response cache with TTL — set to 0 to always fetch fresh data and avoid stale lists
 const cache = new Map<string, { data: any, timestamp: number }>();
@@ -11,13 +59,27 @@ const CACHE_TTL = 0; // Disabled: always hit server for fresh data
 // In-flight request deduplication — prevents duplicate identical GETs within same tick
 const pendingRequests = new Map<string, Promise<any>>();
 
-// Request timeout (10 seconds)
-const REQUEST_TIMEOUT = 10000;
+// Dev: allow slow first request (DB cold start). Prod: keep tight.
+const REQUEST_TIMEOUT = __DEV__ ? 30000 : 15000;
 
 let onUnauthorized: (() => void | Promise<void>) | null = null;
+let inMemoryAuthToken: string | null | undefined;
 
 export function setApiClientOnUnauthorized(callback: () => void | Promise<void>) {
     onUnauthorized = callback;
+}
+
+export function setApiClientAuthToken(token: string | null) {
+    inMemoryAuthToken = token;
+}
+
+async function getAuthToken(): Promise<string | null> {
+    if (typeof inMemoryAuthToken !== 'undefined') {
+        return inMemoryAuthToken;
+    }
+
+    inMemoryAuthToken = await AsyncStorage.getItem('@auth_token');
+    return inMemoryAuthToken;
 }
 
 const fetchWithTimeout = (url: string, options: RequestInit, timeout: number): Promise<Response> => {
@@ -32,6 +94,9 @@ const fetchWithTimeout = (url: string, options: RequestInit, timeout: number): P
 export const apiClient = {
     async request<T>(endpoint: string, options: RequestInit = {}, bypassCache = false): Promise<T> {
         const method = options.method || 'GET';
+        if (__DEV__) {
+            console.log(`[API-CLIENT] BASE_URL: ${BASE_URL}, Endpoint: ${endpoint}`);
+        }
 
         // Cache check for GET requests
         if (method === 'GET' && !bypassCache) {
@@ -47,7 +112,10 @@ export const apiClient = {
             }
         }
 
-        const token = await AsyncStorage.getItem('@auth_token');
+        const token = await getAuthToken();
+        if (__DEV__) {
+            console.log(`[API-CLIENT] ${method} ${endpoint} - Auth: ${token ? 'yes' : 'no'}`);
+        }
 
         const headers = {
             'Content-Type': 'application/json',
@@ -69,6 +137,7 @@ export const apiClient = {
                     }
 
                     if (response.status === 401 && onUnauthorized) {
+                        setApiClientAuthToken(null);
                         try {
                             await Promise.resolve(onUnauthorized());
                         } catch (e) {

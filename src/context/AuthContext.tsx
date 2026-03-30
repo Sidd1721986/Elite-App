@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
-import { authService } from '../services/authService';
+import { authService, toApiRole } from '../services/authService';
 import { apiClient, setApiClientOnUnauthorized } from '../services/apiClient';
 import { User, UserRole, AuthContextType } from '../types/types';
 import { normalizeUser } from '../utils/normalization';
@@ -19,15 +19,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, []);
 
-    // Run session check in background
+    // Run session check in background (timeout avoids infinite “Loading…” if storage hangs)
     useEffect(() => {
         let cancelled = false;
-        checkSession().then(() => {
+        const timer = setTimeout(() => {
             if (!cancelled) setIsLoading(false);
-        }).catch(() => {
-            if (!cancelled) setIsLoading(false);
-        });
-        return () => { cancelled = true; };
+        }, 2500);
+        checkSession()
+            .catch((error) => {
+                if (__DEV__) console.error('AuthContext: Session check failed:', error);
+            })
+            .finally(() => {
+                clearTimeout(timer);
+                if (!cancelled) setIsLoading(false);
+            });
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
     }, [checkSession]);
 
     // On 401, clear auth so user is sent back to login
@@ -51,12 +60,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return 'Login failed';
             }
 
-            // Extra safety: prevent logging in with mismatched role (e.g. Admin selected for a Customer account)
-            let expectedBackendRole = 'Customer';
-            if (role === UserRole.ADMIN) expectedBackendRole = 'Admin';
-            else if (role === UserRole.VENDOR) expectedBackendRole = 'Vendor';
-
-            const actualRole = (normalized.role || '').toString();
+            // Must match account type: Admin / Vendor / Customer (same mapping as API request).
+            const expectedBackendRole = toApiRole(role);
+            const actualRole = (normalized.role || '').toString().trim();
             if (actualRole.toLowerCase() !== expectedBackendRole.toLowerCase()) {
                 // Clear any stored session just in case
                 await authService.logout();
@@ -113,6 +119,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return await authService.removeVendor(userId);
     }, []);
 
+    const deleteAccount = useCallback(async () => {
+        try {
+            const success = await authService.deleteAccount();
+            if (success) {
+                await logout();
+                return true;
+            }
+            return 'Failed to deactivate account. Please try again.';
+        } catch (error: any) {
+            return error.message || 'Error deactivating account';
+        }
+    }, [logout]);
+
     const value = useMemo(() => ({
         user,
         login,
@@ -122,8 +141,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         getPendingVendors,
         getApprovedVendors,
         updateUserStatus,
-        removeVendor
-    }), [user, login, signup, logout, isLoading, getPendingVendors, getApprovedVendors, updateUserStatus, removeVendor]);
+        removeVendor,
+        deleteAccount
+    }), [user, login, signup, logout, isLoading, getPendingVendors, getApprovedVendors, updateUserStatus, removeVendor, deleteAccount]);
 
     return (
         <AuthContext.Provider value={value}>

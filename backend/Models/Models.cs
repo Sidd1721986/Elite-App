@@ -32,6 +32,8 @@ public class User
     // Vendor specific
     public bool IsApproved { get; set; } = false;
     
+    public bool IsActive { get; set; } = true;
+    
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -122,4 +124,23 @@ public class Message
 
     [ForeignKey("ReceiverId")]
     public User? Receiver { get; set; }
+}
+
+public class PasswordResetToken
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    [Required]
+    public Guid UserId { get; set; }
+
+    [ForeignKey("UserId")]
+    public User? User { get; set; }
+
+    [Required]
+    public string Token { get; set; } = string.Empty;
+
+    public DateTime ExpiresAt { get; set; }
+
+    public bool Used { get; set; }
 }

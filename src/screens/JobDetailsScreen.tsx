@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
 import FastImage from 'react-native-fast-image';
 import { Text, Card, Button, Avatar, Divider, List, Chip, Surface, IconButton, ProgressBar, TextInput } from 'react-native-paper';
 import { useJobs } from '../context/JobContext';
@@ -10,8 +10,6 @@ import { RootStackParamList, JobStatus, Urgency, User } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type JobDetailsRouteProp = RouteProp<RootStackParamList, 'JobDetails'>;
-
-const { width } = Dimensions.get('window');
 
 const getStatusStyle = (status: string) => {
     switch (status) {
@@ -31,7 +29,7 @@ const JobDetailsScreen: React.FC = () => {
     const navigation = useNavigation();
     const { getJobById, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob } = useJobs();
     const { user, getApprovedVendors } = useAuth();
-    const { jobId } = route.params;
+    const jobId = route.params?.jobId;
 
     const [approvedVendors, setApprovedVendors] = React.useState<User[]>([]);
     const [notes, setNotes] = React.useState<any[]>([]);
@@ -39,7 +37,7 @@ const JobDetailsScreen: React.FC = () => {
     const [isAssigning, setIsAssigning] = React.useState(false);
     const [isProcessing, setIsProcessing] = React.useState(false);
 
-    const job = getJobById(jobId);
+    const job = jobId ? getJobById(jobId) : undefined;
 
     React.useEffect(() => {
         if (user?.role === 'Admin') {
@@ -48,6 +46,7 @@ const JobDetailsScreen: React.FC = () => {
     }, [user, getApprovedVendors]);
 
     const fetchNotes = React.useCallback(async () => {
+        if (!jobId) return;
         try {
             const fetchedNotes = await jobService.getNotes(jobId);
             setNotes(Array.isArray(fetchedNotes) ? fetchedNotes : []);
@@ -58,8 +57,19 @@ const JobDetailsScreen: React.FC = () => {
     }, [jobId]);
 
     React.useEffect(() => {
-        fetchNotes();
-    }, [fetchNotes]);
+        if (jobId) fetchNotes();
+    }, [fetchNotes, jobId]);
+
+    if (!jobId) {
+        return (
+            <View style={styles.centered}>
+                <Text variant="headlineSmall" style={{ fontWeight: '900' }}>Missing job</Text>
+                <Button mode="contained" onPress={() => navigation.goBack()} style={{ marginTop: 24, borderRadius: 12 }}>
+                    Go Back
+                </Button>
+            </View>
+        );
+    }
 
     if (!job) {
         return (

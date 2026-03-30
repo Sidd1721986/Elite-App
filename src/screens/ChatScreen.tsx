@@ -6,14 +6,15 @@ import {
     StyleSheet,
     KeyboardAvoidingView,
     Platform,
+    AppState,
     TextInput,
     TouchableOpacity,
     ActivityIndicator,
     Alert
 } from 'react-native';
-import { Text, Avatar, IconButton, Surface, useTheme } from 'react-native-paper';
+import { Text, Avatar, IconButton, Surface, useTheme, Button } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { useRoute, useNavigation, RouteProp, useIsFocused } from '@react-navigation/native';
 import { RootStackParamList, Message } from '../types/types';
 import { messageService } from '../services/messageService';
 import { useAuth } from '../context/AuthContext';
@@ -25,7 +26,9 @@ const ChatScreen: React.FC = () => {
     const navigation = useNavigation();
     const { user } = useAuth();
     const theme = useTheme();
-    const { otherUserId, otherUserName } = route.params;
+    const isFocused = useIsFocused();
+    const otherUserId = route.params?.otherUserId;
+    const otherUserName = route.params?.otherUserName ?? 'Chat';
 
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
@@ -63,11 +66,25 @@ const ChatScreen: React.FC = () => {
     }, [otherUserId]);
 
     useEffect(() => {
-        if (!resolvedOtherUserId) return;
+        if (!resolvedOtherUserId || !isFocused) return;
         loadMessages();
-        const interval = setInterval(loadMessages, 10000); // Polling for demo
-        return () => clearInterval(interval);
-    }, [loadMessages, resolvedOtherUserId]);
+        let appState = AppState.currentState;
+        const interval = setInterval(() => {
+            if (appState === 'active') {
+                void loadMessages();
+            }
+        }, 20000);
+        const appStateSub = AppState.addEventListener('change', (next) => {
+            appState = next;
+            if (next === 'active') {
+                void loadMessages();
+            }
+        });
+        return () => {
+            clearInterval(interval);
+            appStateSub.remove();
+        };
+    }, [loadMessages, resolvedOtherUserId, isFocused]);
 
     const handleSendMessage = async () => {
         if (!inputText.trim() || sending || !resolvedOtherUserId) return;
@@ -114,6 +131,17 @@ const ChatScreen: React.FC = () => {
             </View>
         );
     }, [user?.id, user?.email, otherUserName]);
+
+    if (!otherUserId) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+                <View style={styles.centered}>
+                    <Text variant="titleMedium" style={{ marginBottom: 16 }}>Invalid conversation</Text>
+                    <Button mode="contained" onPress={() => navigation.goBack()}>Go back</Button>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

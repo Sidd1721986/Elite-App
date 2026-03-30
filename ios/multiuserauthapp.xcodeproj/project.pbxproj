@@ -8,8 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		19FD5DD817687EB81E5ADB06 /* libPods-multiuserauthapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F221C0D86AE8104459B85637 /* libPods-multiuserauthapp.a */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
+		7A75B5FAB684DF6C118666F2 /* libPods-multiuserauthapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 68D2C1818E4D6ACA3A400BB5 /* libPods-multiuserauthapp.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		BB6F5AB94BAEEF6B4E51C50E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8CA768C4EF91858DEDD70540 /* PrivacyInfo.xcprivacy */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
@@ -19,15 +19,15 @@
 		13B07F961A680F5B00A75B9A /* multiuserauthapp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = multiuserauthapp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = multiuserauthapp/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = multiuserauthapp/Info.plist; sourceTree = "<group>"; };
-		5E68AEA4192B5A00DC82797F /* Pods-multiuserauthapp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-multiuserauthapp.release.xcconfig"; path = "Target Support Files/Pods-multiuserauthapp/Pods-multiuserauthapp.release.xcconfig"; sourceTree = "<group>"; };
+		68D2C1818E4D6ACA3A400BB5 /* libPods-multiuserauthapp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-multiuserauthapp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		8CA768C4EF91858DEDD70540 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = multiuserauthapp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = multiuserauthapp/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		D4AA786EE955F92F535F37B2 /* Pods-multiuserauthapp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-multiuserauthapp.debug.xcconfig"; path = "Target Support Files/Pods-multiuserauthapp/Pods-multiuserauthapp.debug.xcconfig"; sourceTree = "<group>"; };
+		D39D32824B4CDADE3A06C4C9 /* Pods-multiuserauthapp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-multiuserauthapp.release.xcconfig"; path = "Target Support Files/Pods-multiuserauthapp/Pods-multiuserauthapp.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = multiuserauthapp/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* multiuserauthapp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "multiuserauthapp-Bridging-Header.h"; path = "multiuserauthapp/multiuserauthapp-Bridging-Header.h"; sourceTree = "<group>"; };
-		F221C0D86AE8104459B85637 /* libPods-multiuserauthapp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-multiuserauthapp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		F90D4FA88077BC02897200A9 /* Pods-multiuserauthapp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-multiuserauthapp.debug.xcconfig"; path = "Target Support Files/Pods-multiuserauthapp/Pods-multiuserauthapp.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -35,7 +35,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				19FD5DD817687EB81E5ADB06 /* libPods-multiuserauthapp.a in Frameworks */,
+				7A75B5FAB684DF6C118666F2 /* libPods-multiuserauthapp.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -60,19 +60,9 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				F221C0D86AE8104459B85637 /* libPods-multiuserauthapp.a */,
+				68D2C1818E4D6ACA3A400BB5 /* libPods-multiuserauthapp.a */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		5811D79F1DB8242D5E7974CC /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				D4AA786EE955F92F535F37B2 /* Pods-multiuserauthapp.debug.xcconfig */,
-				5E68AEA4192B5A00DC82797F /* Pods-multiuserauthapp.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -89,8 +79,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				5811D79F1DB8242D5E7974CC /* Pods */,
 				F4B357AAED18462797A001A4 /* Resources */,
+				853D938FEC89C5F657187DD1 /* Pods */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -103,6 +93,16 @@
 				13B07F961A680F5B00A75B9A /* multiuserauthapp.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		853D938FEC89C5F657187DD1 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				F90D4FA88077BC02897200A9 /* Pods-multiuserauthapp.debug.xcconfig */,
+				D39D32824B4CDADE3A06C4C9 /* Pods-multiuserauthapp.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
@@ -129,13 +129,13 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "multiuserauthapp" */;
 			buildPhases = (
-				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
+				EEE4FD33C3C04694DEFF2C01 /* [CP] Check Pods Manifest.lock */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
-				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				24972A750A387B29A731145D /* [CP] Embed Pods Frameworks */,
+				BA0370F0464125F038DFDCAB /* [CP] Embed Pods Frameworks */,
+				BADED5B352EFCC114A9989DF /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -207,31 +207,9 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [[ -f \"$PODS_ROOT/../.xcode.env\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env\"\nfi\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n# The project root by default is one level up from the ios directory\nexport PROJECT_ROOT=\"$PROJECT_DIR\"/..\n\nif [[ \"$CONFIGURATION\" = *Debug* ]]; then\n  export SKIP_BUNDLING=1\nfi\nif [[ -z \"$ENTRY_FILE\" ]]; then\n  # Set the entry JS file using the bundler's entry resolution.\n  export ENTRY_FILE=\"$(\"$NODE_BINARY\" -e \"require('expo/scripts/resolveAppEntry')\" \"$PROJECT_ROOT\" ios absolute | tail -n 1)\"\nfi\n\nif [[ -z \"$CLI_PATH\" ]]; then\n  # Use Expo CLI\n  export CLI_PATH=\"$(\"$NODE_BINARY\" --print \"require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })\")\"\nfi\nif [[ -z \"$BUNDLE_COMMAND\" ]]; then\n  # Default Expo CLI command for bundling\n  export BUNDLE_COMMAND=\"export:embed\"\nfi\n\n# Source .xcode.env.updates if it exists to allow\n# SKIP_BUNDLING to be unset if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.updates\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.updates\"\nfi\n# Source local changes to allow overrides\n# if needed\nif [[ -f \"$PODS_ROOT/../.xcode.env.local\" ]]; then\n  source \"$PODS_ROOT/../.xcode.env.local\"\nfi\n\n`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`\n\n";
+			shellScript = "set -e\n\nexport PROJECT_ROOT=\"$PROJECT_DIR/..\"\n\n\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\" \"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n";
 		};
-		08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
-				"${PODS_ROOT}/Manifest.lock",
-			);
-			name = "[CP] Check Pods Manifest.lock";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-multiuserauthapp-checkManifestLockResult.txt",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-		24972A750A387B29A731145D /* [CP] Embed Pods Frameworks */ = {
+		BA0370F0464125F038DFDCAB /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -249,7 +227,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-multiuserauthapp/Pods-multiuserauthapp-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
+		BADED5B352EFCC114A9989DF /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -317,6 +295,28 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-multiuserauthapp/Pods-multiuserauthapp-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		EEE4FD33C3C04694DEFF2C01 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-multiuserauthapp-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -333,9 +333,10 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = D4AA786EE955F92F535F37B2 /* Pods-multiuserauthapp.debug.xcconfig */;
+			baseConfigurationReference = F90D4FA88077BC02897200A9 /* Pods-multiuserauthapp.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_EXPLICIT_MODULES = NO;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = multiuserauthapp/multiuserauthapp.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
@@ -368,9 +369,10 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 5E68AEA4192B5A00DC82797F /* Pods-multiuserauthapp.release.xcconfig */;
+			baseConfigurationReference = D39D32824B4CDADE3A06C4C9 /* Pods-multiuserauthapp.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_EXPLICIT_MODULES = NO;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = multiuserauthapp/multiuserauthapp.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
@@ -399,6 +401,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CC = "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang.sh";
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -425,6 +428,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = NO;
+				CXX = "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang++.sh";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
@@ -443,6 +447,8 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				LD = "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang.sh";
+				LDPLUSPLUS = "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang++.sh";
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
@@ -465,6 +471,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CC = "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang.sh";
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -491,6 +498,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = YES;
+				CXX = "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang++.sh";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
@@ -502,6 +510,8 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				LD = "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang.sh";
+				LDPLUSPLUS = "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang++.sh";
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",

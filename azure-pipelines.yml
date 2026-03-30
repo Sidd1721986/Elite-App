@@ -1,0 +1,249 @@
+# Azure DevOps pipeline: build API Docker image → push to Azure Container Registry → deploy to Azure App Service (Linux, container).
+#
+# Prerequisites (you create these in Azure / Azure DevOps — do not commit secrets):
+#  1) Resource group + Azure Container Registry (ACR)
+#  2) Linux App Service plan + Web App for Containers
+#  3) App Service → Configuration:
+#       - WEBSITES_PORT = 5260  (Kestrel listens on 5260 in Program.cs)
+#       - ASPNETCORE_ENVIRONMENT = Production
+#       - Always On = On (recommended)
+#  4) App Service application settings (use Key Vault references in production). Same names as .env.prod.example:
+#       - ConnectionStrings__DefaultConnection
+#       - Jwt__Key  (min 32 characters; validated at startup in Production)
+#       - PasswordReset__Pepper  (strong secret; not placeholder text)
+#       - Cors__AllowedOrigins  (semicolon-separated HTTPS origins)
+#       - Email__Smtp__* / Email__FromAddress  (optional; without SMTP, password reset may 503)
+#       - Bootstrap__AdminPassword  (optional one-time; only if no admin exists)
+#  5) Azure DevOps service connections:
+#       - Docker Registry → your ACR
+#       - Azure Resource Manager → subscription (for deploy task)
+#
+# Local prod-like container: docker-compose.prod.yml + copy .env.prod.example → .env.prod
+#
+# Create a Variable Group "EliteApp-Production" (or rename below) with:
+#   acrLoginServer   = myregistry.azurecr.io
+#   imageRepository  = eliteapp-api
+#   azureSubscription = name of your ARM service connection
+#   webAppName       = your App Service name
+#
+# Link the variable group to this pipeline in Azure DevOps: Edit pipeline → Variables → Variable groups.
+#
+# --- Mobile store builds (optional; set ENABLE_MOBILE_ANDROID / ENABLE_MOBILE_IOS to true when ready) ---
+# Library → Secure files (exact names must match the variable values below):
+#   - Upload your Android upload keystore (e.g. elite-android-release.jks)
+#   - Apple Distribution .p12 (e.g. ios-distribution.p12)
+#   - App Store provisioning profile .mobileprovision (e.g. Elite_AppStore.mobileprovision)
+#
+# Variable group secrets (mark as secret in DevOps):
+#   ANDROID_KEYSTORE_SECURE_FILE     = filename as stored in Secure files, e.g. elite-android-release.jks
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+#   IOS_DISTRIBUTION_P12_SECURE_FILE = e.g. ios-distribution.p12
+#   IOS_DISTRIBUTION_CERT_PASSWORD   = .p12 password
+#   IOS_PROVISION_PROFILE_SECURE_FILE= e.g. Elite_AppStore.mobileprovision
+#   APPLE_TEAM_ID                    = 10-character Apple Developer Team ID
+#   IOS_PROVISIONING_PROFILE_SPECIFIER = profile *name* as shown in Apple Developer (Xcode target → Signing)
+#
+# Artifacts:
+#   - android-aab: app-release.aab → Google Play Console (Production or internal testing track)
+#   - ios-ipa:     .ipa → Transporter or `xcrun altool` / App Store Connect API
+#
+# Enable mobile jobs by defining in the variable group:
+#   ENABLE_MOBILE_ANDROID = true
+#   ENABLE_MOBILE_IOS     = true
+#
+# Prerequisite: bump versionCode (android/app/build.gradle) and iOS CURRENT_PROJECT_VERSION /
+#   MARKETING_VERSION before each store submission.
+
+trigger:
+  branches:
+    include:
+      - main
+      - master
+
+pr:
+  branches:
+    include:
+      - main
+      - master
+
+variables:
+  - group: EliteApp-Production
+  - name: dockerfilePath
+    value: backend/Dockerfile
+  - name: buildContext
+    value: backend
+stages:
+  - stage: BuildAndPush
+    displayName: Build image and push to ACR
+    jobs:
+      - job: Docker
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: Docker@2
+            displayName: Build and push
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository)
+              dockerfile: $(dockerfilePath)
+              buildContext: $(buildContext)
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(Build.BuildId)
+                latest
+
+  - stage: MobileAndroid
+    displayName: Mobile — Android Play bundle (AAB)
+    dependsOn: []
+    condition: |
+      and(
+        succeeded(),
+        or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')),
+        eq(variables['ENABLE_MOBILE_ANDROID'], 'true')
+      )
+    jobs:
+      - job: AndroidPlayBundle
+        pool:
+          vmImage: ubuntu-latest
+        variables:
+          JAVA_HOME: $(JAVA_HOME_17_X64)
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 20.x
+          - script: npm ci
+            displayName: npm ci
+          - task: DownloadSecureFile@1
+            name: androidKeystore
+            displayName: Download Android keystore
+            inputs:
+              secureFile: $(ANDROID_KEYSTORE_SECURE_FILE)
+          - script: |
+              set -e
+              printf '%s\n' "storeFile=$(androidKeystore.secureFilePath)" > android/keystore.properties
+              printf '%s\n' "storePassword=$(ANDROID_KEYSTORE_PASSWORD)" >> android/keystore.properties
+              printf '%s\n' "keyAlias=$(ANDROID_KEY_ALIAS)" >> android/keystore.properties
+              printf '%s\n' "keyPassword=$(ANDROID_KEY_PASSWORD)" >> android/keystore.properties
+            displayName: Write android/keystore.properties
+            env:
+              ANDROID_KEYSTORE_PASSWORD: $(ANDROID_KEYSTORE_PASSWORD)
+              ANDROID_KEY_ALIAS: $(ANDROID_KEY_ALIAS)
+              ANDROID_KEY_PASSWORD: $(ANDROID_KEY_PASSWORD)
+          - script: chmod +x android/gradlew
+            displayName: chmod gradlew
+          - script: cd android && ./gradlew bundleRelease --no-daemon --stacktrace
+            displayName: bundleRelease
+          - task: PublishBuildArtifacts@1
+            displayName: Publish AAB
+            inputs:
+              pathToPublish: android/app/build/outputs/bundle/release/app-release.aab
+              artifactName: android-aab
+
+  - stage: MobileiOS
+    displayName: Mobile — iOS archive (IPA)
+    dependsOn: []
+    condition: |
+      and(
+        succeeded(),
+        or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')),
+        eq(variables['ENABLE_MOBILE_IOS'], 'true')
+      )
+    jobs:
+      - job: iOSAppStore
+        pool:
+          vmImage: macos-14
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 20.x
+          - script: npm ci
+            displayName: npm ci
+          - script: |
+              set -e
+              gem install cocoapods --no-document --user-install
+              echo "##vso[task.prependpath]$(ruby -e 'puts Gem.user_dir')/bin"
+            displayName: Install CocoaPods (user gem)
+          - script: |
+              set -e
+              cd ios
+              pod install
+            displayName: pod install
+          - task: InstallAppleCertificate@2
+            displayName: Install Distribution certificate
+            inputs:
+              certSecureFile: $(IOS_DISTRIBUTION_P12_SECURE_FILE)
+              certPwd: $(IOS_DISTRIBUTION_CERT_PASSWORD)
+              keychain: temp
+              deleteCert: true
+          - task: InstallAppleProvisioningProfile@1
+            displayName: Install provisioning profile
+            inputs:
+              provisioningProfileLocation: secureFiles
+              provProfileSecureFile: $(IOS_PROVISION_PROFILE_SECURE_FILE)
+          - script: |
+              set -e
+              /bin/cat > /tmp/ExportOptions.plist << EOF
+              <?xml version="1.0" encoding="UTF-8"?>
+              <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+              <plist version="1.0">
+              <dict>
+                <key>method</key>
+                <string>app-store</string>
+                <key>signingStyle</key>
+                <string>manual</string>
+                <key>teamID</key>
+                <string>$(APPLE_TEAM_ID)</string>
+                <key>provisioningProfiles</key>
+                <dict>
+                  <key>com.anonymous.multi-user-auth-app</key>
+                  <string>$(IOS_PROVISIONING_PROFILE_SPECIFIER)</string>
+                </dict>
+              </dict>
+              </plist>
+              EOF
+            displayName: Write ExportOptions.plist
+          - script: |
+              set -e
+              cd ios
+              mkdir -p build
+              xcodebuild -workspace multiuserauthapp.xcworkspace \
+                -scheme multiuserauthapp \
+                -configuration Release \
+                -sdk iphoneos \
+                -archivePath "$(pwd)/build/multiuserauthapp.xcarchive" \
+                -destination "generic/platform=iOS" \
+                archive \
+                CODE_SIGN_STYLE=Manual \
+                DEVELOPMENT_TEAM="$(APPLE_TEAM_ID)" \
+                PROVISIONING_PROFILE_SPECIFIER="$(IOS_PROVISIONING_PROFILE_SPECIFIER)"
+            displayName: xcodebuild archive
+          - script: |
+              set -e
+              xcodebuild -exportArchive \
+                -archivePath "$(Build.SourcesDirectory)/ios/build/multiuserauthapp.xcarchive" \
+                -exportPath "$(Build.SourcesDirectory)/ios/build/export" \
+                -exportOptionsPlist /tmp/ExportOptions.plist
+            displayName: xcodebuild export IPA
+          - task: PublishBuildArtifacts@1
+            displayName: Publish IPA
+            inputs:
+              pathToPublish: ios/build/export
+              artifactName: ios-ipa
+
+  - stage: Deploy
+    displayName: Deploy to Azure App Service
+    dependsOn: BuildAndPush
+    condition: succeeded()
+    jobs:
+      - job: DeployWeb
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: AzureWebAppContainer@1
+            displayName: Deploy container
+            inputs:
+              azureSubscription: $(azureSubscription)
+              appName: $(webAppName)
+              containers: $(acrLoginServer)/$(imageRepository):$(Build.BuildId)

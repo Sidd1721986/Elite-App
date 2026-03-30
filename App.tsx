@@ -1,36 +1,36 @@
 import * as React from 'react';
-import { StatusBar, View, Text, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { PaperProvider, MD3LightTheme } from 'react-native-paper';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import { MD3LightTheme, PaperProvider } from 'react-native-paper';
 import { AuthProvider } from './src/context/AuthContext';
 import { JobProvider } from './src/context/JobContext';
 import AppNavigator from './src/navigation/AppNavigator';
-import { StyleSheet } from 'react-native';
 
+type ErrorBoundaryState = { error: Error | null };
 
-class AppErrorBoundary extends React.Component<
+class RootErrorBoundary extends React.Component<
     { children: React.ReactNode },
-    { hasError: boolean; error: Error | null }
+    ErrorBoundaryState
 > {
-    state = { hasError: false, error: null as Error | null };
+    state: ErrorBoundaryState = { error: null };
 
-    static getDerivedStateFromError(error: Error) {
-        return { hasError: true, error };
+    static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+        return { error };
     }
 
-    componentDidCatch(error: Error, info: React.ErrorInfo) {
-        console.error('App Error:', error, info.componentStack);
+    componentDidCatch(error: Error): void {
+        if (__DEV__) {
+            console.error('Root render error:', error);
+        }
     }
 
     render() {
-        if (this.state.hasError && this.state.error) {
+        if (this.state.error) {
             return (
-                <View style={styles.errorContainer}>
-                    <Text style={styles.errorTitle}>Something went wrong</Text>
-                    <ScrollView style={styles.errorScroll}>
-                        <Text style={styles.errorText}>{this.state.error.message}</Text>
-                    </ScrollView>
+                <View style={errorStyles.box}>
+                    <Text style={errorStyles.title}>Something went wrong</Text>
+                    <Text style={errorStyles.msg}>{this.state.error.message}</Text>
                 </View>
             );
         }
@@ -38,106 +38,35 @@ class AppErrorBoundary extends React.Component<
     }
 }
 
-const theme = {
-    ...MD3LightTheme,
-    colors: {
-        ...MD3LightTheme.colors,
-        primary: '#6366F1', // Premium Indigo
-        secondary: '#F59E0B', // Elite Gold/Amber
-        tertiary: '#10B981', // Success Emerald
-        background: '#F8FAFC', // Slate background
-        surface: '#FFFFFF',
-        error: '#EF4444',
-        outline: '#E2E8F0',
+const errorStyles = StyleSheet.create({
+    box: {
+        flex: 1,
+        justifyContent: 'center',
+        padding: 24,
+        backgroundColor: '#FEF2F2',
     },
-    roundness: 16, // Smoother rounded corners for a modern feel
-};
+    title: { fontSize: 20, fontWeight: '700', color: '#991B1B', marginBottom: 12 },
+    msg: { fontSize: 14, color: '#7F1D1D' },
+});
 
 export default function App() {
-    const [ready, setReady] = React.useState(false);
-    React.useEffect(() => {
-        const t = setTimeout(() => {
-            setReady(true);
-        }, 150);
-        return () => clearTimeout(t);
-    }, []);
-
     return (
-        <View style={styles.root}>
-            {!ready ? (
-                <View style={styles.bootstrap}>
-                    <Text style={styles.bootstrapText}>Elite</Text>
-                    <Text style={styles.bootstrapSub}>Loading...</Text>
-                </View>
-            ) : (
-                <AppErrorBoundary>
-                    <AppContent />
-                </AppErrorBoundary>
-            )}
-        </View>
+        <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#312E81' }}>
+            <StatusBar
+                barStyle="light-content"
+                backgroundColor={Platform.OS === 'android' ? '#312E81' : undefined}
+            />
+            <RootErrorBoundary>
+                <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+                    <PaperProvider theme={MD3LightTheme}>
+                        <AuthProvider>
+                            <JobProvider>
+                                <AppNavigator />
+                            </JobProvider>
+                        </AuthProvider>
+                    </PaperProvider>
+                </SafeAreaProvider>
+            </RootErrorBoundary>
+        </GestureHandlerRootView>
     );
 }
-
-const AppContent = React.memo(function AppContent() {
-    return (
-        <SafeAreaProvider>
-            <GestureHandlerRootView style={styles.container}>
-                <PaperProvider theme={theme}>
-                    <AuthProvider>
-                        <JobProvider>
-                            <AppNavigator />
-                            <StatusBar barStyle="dark-content" />
-                        </JobProvider>
-                    </AuthProvider>
-                </PaperProvider>
-            </GestureHandlerRootView>
-        </SafeAreaProvider>
-    );
-});
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F8FAFC',
-    },
-    errorContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 24,
-        backgroundColor: '#F8FAFC',
-    },
-    errorTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 16,
-        color: '#1E293B',
-    },
-    errorScroll: {
-        maxHeight: 200,
-    },
-    errorText: {
-        fontSize: 14,
-        color: '#64748B',
-    },
-    root: {
-        flex: 1,
-        backgroundColor: '#F8FAFC',
-    },
-    bootstrap: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#E2E8F0',
-    },
-    bootstrapText: {
-        fontSize: 28,
-        fontWeight: '900',
-        color: '#1E293B',
-    },
-    bootstrapSub: {
-        marginTop: 8,
-        fontSize: 16,
-        color: '#64748B',
-    },
-});

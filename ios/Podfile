@@ -1,11 +1,30 @@
-require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
+ENV['PATH'] = "/usr/local/bin:/opt/homebrew/bin:#{ENV['PATH']}"
+require_relative '../node_modules/react-native/scripts/react_native_pods'
 
 platform :ios, '15.1'
 
 prepare_react_native_project!
 
+# Manual Autolinking Bypass for hanging CLI
+def manual_use_native_modules!
+  package = JSON.parse(File.read('../package.json'))
+  dependencies = (package['dependencies'] || {}).merge(package['devDependencies'] || {})
+  
+  dependencies.each do |name, version|
+    next if name == 'react-native'
+    # Find podspec in node_modules
+    podspec_path = Dir.glob("../node_modules/#{name}/*.podspec").first
+    if podspec_path
+      pod_name = File.basename(podspec_path, ".podspec")
+      Pod::UI.puts "[Manual Autolink] Found #{name} (as #{pod_name})".green
+      pod pod_name, :path => "../node_modules/#{name}"
+    end
+  end
+  return { :reactNativePath => '../node_modules/react-native' }
+end
+
 target 'multiuserauthapp' do
-  config = use_native_modules!
+  config = manual_use_native_modules!
 
   use_react_native!(
     :path => config[:reactNativePath],
@@ -17,7 +36,24 @@ target 'multiuserauthapp' do
     react_native_post_install(
       installer,
       config[:reactNativePath],
-      :mac_catalyst_enabled => false
+      :mac_catalyst_enabled => false,
+      :ccache_enabled => true
     )
+    # Disable Explicit Modules (Definitive fix for Xcode 16 / Yoga errors)
+    installer.aggregate_targets.each do |target|
+      target.user_project.targets.each do |p_target|
+        p_target.build_configurations.each do |config|
+          config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
+        end
+      end
+    end
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
+      end
+    end
   end
+
+
+
 end

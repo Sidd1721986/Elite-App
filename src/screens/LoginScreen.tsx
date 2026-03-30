@@ -1,12 +1,14 @@
 import * as React from 'react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text, Card, Snackbar, Menu, Surface } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/authService';
 import { UserRole } from '../types/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { RouteProp, useRoute } from '@react-navigation/native';
 import AppLogo from '../components/AppLogo';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
@@ -17,7 +19,12 @@ interface Props {
 
 const ROLES: UserRole[] = [UserRole.ADMIN, UserRole.VENDOR, UserRole.CUSTOMER];
 
+const emailLooksValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
+    const route = useRoute<RouteProp<RootStackParamList, 'Login'>>();
+    const resetToastShown = useRef(false);
+
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.CUSTOMER);
@@ -25,7 +32,41 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const [loading, setLoading] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [showForgotPassword, setShowForgotPassword] = useState(true);
     const { login } = useAuth();
+
+    useEffect(() => {
+        if (route.params?.passwordResetOk && !resetToastShown.current) {
+            resetToastShown.current = true;
+            setSnackbarMessage('Password updated. Sign in with your new password.');
+            setSnackbarVisible(true);
+        }
+    }, [route.params?.passwordResetOk]);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (selectedRole !== UserRole.VENDOR) {
+            setShowForgotPassword(true);
+            return () => {
+                cancelled = true;
+            };
+        }
+        if (!emailLooksValid(email)) {
+            setShowForgotPassword(false);
+            return () => {
+                cancelled = true;
+            };
+        }
+        const t = setTimeout(() => {
+            void authService.forgotPasswordEligibility(email, UserRole.VENDOR).then((can) => {
+                if (!cancelled) setShowForgotPassword(can);
+            });
+        }, 400);
+        return () => {
+            cancelled = true;
+            clearTimeout(t);
+        };
+    }, [email, selectedRole]);
 
     const handleLogin = useCallback(async () => {
         if (!email || !password) {
@@ -148,6 +189,26 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                     Log In
                                 </Button>
 
+                                {showForgotPassword ? (
+                                    <Button
+                                        mode="text"
+                                        onPress={() =>
+                                            navigation.navigate('ForgotPassword', {
+                                                initialEmail: email,
+                                                initialRole: selectedRole,
+                                            })
+                                        }
+                                        style={styles.forgotButton}
+                                        labelStyle={styles.forgotButtonLabel}
+                                    >
+                                        Forgot password?
+                                    </Button>
+                                ) : selectedRole === UserRole.VENDOR ? (
+                                    <Text variant="labelSmall" style={styles.forgotHint}>
+                                        Forgot password is available after your vendor account is approved.
+                                    </Text>
+                                ) : null}
+
                                 <View style={styles.footerLinks}>
                                     <Button
                                         mode="text"
@@ -253,11 +314,12 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 20,
         elevation: 5,
-        overflow: 'hidden',
     },
     cardInner: {
         paddingHorizontal: 20,
         paddingVertical: 18,
+        borderRadius: 32,
+        overflow: 'hidden',
     },
     input: {
         marginBottom: 16,
@@ -298,6 +360,22 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         letterSpacing: 0.5,
+    },
+    forgotButton: {
+        marginTop: 4,
+        alignSelf: 'center',
+    },
+    forgotButtonLabel: {
+        color: '#6366F1',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    forgotHint: {
+        color: '#94A3B8',
+        textAlign: 'center',
+        marginTop: 8,
+        paddingHorizontal: 12,
+        lineHeight: 18,
     },
     footerLinks: {
         marginTop: 16,

@@ -1,6 +1,7 @@
 using EliteApp.API.Data;
 using EliteApp.API.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,10 +13,12 @@ namespace EliteApp.API.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IWebHostEnvironment _environment;
 
-    public UsersController(AppDbContext context)
+    public UsersController(AppDbContext context, IWebHostEnvironment environment)
     {
         _context = context;
+        _environment = environment;
     }
 
     [HttpGet("pending-vendors")]
@@ -89,10 +92,29 @@ public class UsersController : ControllerBase
         return Ok(new { message = "Vendor removed" });
     }
 
+    [HttpPost("delete-self")]
+    public async Task<IActionResult> DeleteSelf()
+    {
+        var email = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(email)) return Unauthorized();
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null) return NotFound();
+
+        user.IsActive = false; // Soft delete for compliance
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Account deactivated successfully" });
+    }
+
+    /// <summary>Development only — creates weak demo accounts. Disabled outside Development.</summary>
     [HttpPost("seed")]
-    [AllowAnonymous] // WARNING: Development-only route. Remove or protect in production.
+    [AllowAnonymous]
     public async Task<IActionResult> Seed()
     {
+        if (!_environment.IsDevelopment())
+            return NotFound();
+
         if (await _context.Users.AnyAsync())
         {
             return Ok(new { message = "Database already seeded" });
