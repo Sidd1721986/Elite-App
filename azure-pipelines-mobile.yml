@@ -1,0 +1,159 @@
+# Azure DevOps pipeline for Mobile Builds (Android AAB and iOS IPA)
+#
+# Use this when you are ready to build for the stores.
+# PREREQUISITE:
+#  1) Upload your Android keystore and iOS certificates to "Library -> Secure files"
+#  2) Set ENABLE_MOBILE_ANDROID and ENABLE_MOBILE_IOS to true in the "EliteApp-Production" Variable Group.
+#  3) Ensure ANDROID_KEYSTORE_SECURE_FILE, IOS_DISTRIBUTION_P12_SECURE_FILE, etc. are set.
+
+trigger:
+  branches:
+    include:
+      - main
+      - master
+
+pr:
+  branches:
+    include:
+      - main
+      - master
+
+variables:
+  - group: EliteApp-Production
+
+stages:
+  - stage: MobileAndroid
+    displayName: Mobile — Android Play bundle (AAB)
+    condition: |
+      and(
+        succeeded(),
+        or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')),
+        eq(variables['ENABLE_MOBILE_ANDROID'], 'true')
+      )
+    jobs:
+      - job: AndroidPlayBundle
+        pool:
+          vmImage: ubuntu-latest
+        variables:
+          JAVA_HOME: $(JAVA_HOME_17_X64)
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 20.x
+          - script: npm ci
+            displayName: npm ci
+          - task: DownloadSecureFile@1
+            name: androidKeystore
+            displayName: Download Android keystore
+            inputs:
+              secureFile: $(ANDROID_KEYSTORE_SECURE_FILE)
+          - script: |
+              set -e
+              printf '%s\n' "storeFile=$(androidKeystore.secureFilePath)" > android/keystore.properties
+              printf '%s\n' "storePassword=$(ANDROID_KEYSTORE_PASSWORD)" >> android/keystore.properties
+              printf '%s\n' "keyAlias=$(ANDROID_KEY_ALIAS)" >> android/keystore.properties
+              printf '%s\n' "keyPassword=$(ANDROID_KEY_PASSWORD)" >> android/keystore.properties
+            displayName: Write android/keystore.properties
+            env:
+              ANDROID_KEYSTORE_PASSWORD: $(ANDROID_KEYSTORE_PASSWORD)
+              ANDROID_KEY_ALIAS: $(ANDROID_KEY_ALIAS)
+              ANDROID_KEY_PASSWORD: $(ANDROID_KEY_PASSWORD)
+          - script: chmod +x android/gradlew
+            displayName: chmod gradlew
+          - script: cd android && ./gradlew bundleRelease --no-daemon --stacktrace
+            displayName: bundleRelease
+          - task: PublishBuildArtifacts@1
+            displayName: Publish AAB
+            inputs:
+              pathToPublish: android/app/build/outputs/bundle/release/app-release.aab
+              artifactName: android-aab
+
+  - stage: MobileiOS
+    displayName: Mobile — iOS archive (IPA)
+    condition: |
+      and(
+        succeeded(),
+        or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')),
+        eq(variables['ENABLE_MOBILE_IOS'], 'true')
+      )
+    jobs:
+      - job: iOSAppStore
+        pool:
+          vmImage: macos-14
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 20.x
+          - script: npm ci
+            displayName: npm ci
+          - script: |
+              set -e
+              gem install cocoapods --no-document --user-install
+              echo "##vso[task.prependpath]$(ruby -e 'puts Gem.user_dir')/bin"
+            displayName: Install CocoaPods (user gem)
+          - script: |
+              set -e
+              cd ios
+              pod install
+            displayName: pod install
+          - task: InstallAppleCertificate@2
+            displayName: Install Distribution certificate
+            inputs:
+              certSecureFile: $(IOS_DISTRIBUTION_P12_SECURE_FILE)
+              certPwd: $(IOS_DISTRIBUTION_CERT_PASSWORD)
+              keychain: temp
+              deleteCert: true
+          - task: InstallAppleProvisioningProfile@1
+            displayName: Install provisioning profile
+            inputs:
+              provisioningProfileLocation: secureFiles
+              provProfileSecureFile: $(IOS_PROVISION_PROFILE_SECURE_FILE)
+          - script: |
+              set -e
+              /bin/cat > /tmp/ExportOptions.plist << EOF
+              <?xml version="1.0" encoding="UTF-8"?>
+              <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+              <plist version="1.0">
+              <dict>
+                <key>method</key>
+                <string>app-store</string>
+                <key>signingStyle</key>
+                <string>manual</string>
+                <key>teamID</key>
+                <string>$(APPLE_TEAM_ID)</string>
+                <key>provisioningProfiles</key>
+                <dict>
+                  <key>com.anonymous.multi-user-auth-app</key>
+                  <string>$(IOS_PROVISIONING_PROFILE_SPECIFIER)</string>
+                </dict>
+              </dict>
+              </plist>
+              EOF
+            displayName: Write ExportOptions.plist
+          - script: |
+              set -e
+              cd ios
+              mkdir -p build
+              xcodebuild -workspace multiuserauthapp.xcworkspace \
+                -scheme multiuserauthapp \
+                -configuration Release \
+                -sdk iphoneos \
+                -archivePath "$(pwd)/build/multiuserauthapp.xcarchive" \
+                -destination "generic/platform=iOS" \
+                archive \
+                CODE_SIGN_STYLE=Manual \
+                DEVELOPMENT_TEAM="$(APPLE_TEAM_ID)" \
+                PROVISIONING_PROFILE_SPECIFIER="$(IOS_PROVISIONING_PROFILE_SPECIFIER)"
+            displayName: xcodebuild archive
+          - script: |
+              set -e
+              xcodebuild -exportArchive \
+                -archivePath "$(Build.SourcesDirectory)/ios/build/multiuserauthapp.xcarchive" \
+                -exportPath "$(Build.SourcesDirectory)/ios/build/export" \
+                -exportOptionsPlist /tmp/ExportOptions.plist
+            displayName: xcodebuild export IPA
+          - task: PublishBuildArtifacts@1
+            displayName: Publish IPA
+            inputs:
+              pathToPublish: ios/build/export
+              artifactName: ios-ipa

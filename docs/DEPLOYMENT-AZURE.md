@@ -47,22 +47,32 @@ Do **not** commit real connection strings or JWT keys to git. Rotate anything th
 
 ---
 
-## 2. Azure DevOps
+### 2. Azure DevOps Setup
 
-1. Create a **Project** and connect this repo (GitHub or Azure Repos).
-2. **Pipelines → New pipeline** → select the repo → **Existing Azure Pipelines YAML** → `azure-pipelines.yml`.
-3. Create a **Variable group** named `EliteApp-Production` (or change the name in `azure-pipelines.yml`) with:
+This repository uses two separate pipelines to streamline the build and deployment process:
 
-   | Variable | Example / note |
-   |----------|----------------|
-   | `acrLoginServer` | `myregistry.azurecr.io` |
-   | `imageRepository` | `eliteapp-api` |
-   | `webAppName` | your Web App name |
-   | `dockerRegistryServiceConnection` | name of **Docker Registry** service connection (ACR) |
-   | `azureSubscription` | name of **Azure Resource Manager** service connection |
+1.  **Backend Pipeline (`azure-pipelines.yml`)**: Builds and deploys the .NET API to Azure App Service.
+2.  **Mobile Pipeline (`azure-pipelines-mobile.yml`)**: Builds the Android (AAB) and iOS (IPA) binaries.
 
-4. Mark sensitive values as **secret** where applicable.
-5. Run the pipeline. First run may prompt for **environment** approval if you use the `production` environment with checks.
+#### Set up the Backend Pipeline
+1.  **Pipelines → New pipeline** → Select the repo → **Existing Azure Pipelines YAML** → `azure-pipelines.yml`.
+2.  Create a **Variable group** named `EliteApp-Production` (or as configured) with:
+    | Variable | Purpose |
+    |----------|---------|
+    | `acrLoginServer` | `myregistry.azurecr.io` |
+    | `imageRepository` | `eliteapp-api` |
+    | `webAppName` | your Web App name |
+    | `dockerRegistryServiceConnection` | Name of your Docker Registry service connection |
+    | `azureSubscription` | Name of your Azure Resource Manager service connection |
+3.  **Run** the pipeline to deploy your API.
+
+#### Set up the Mobile Pipeline (Optional)
+1.  **Pipelines → New pipeline** → Select the repo → **Existing Azure Pipelines YAML** → `azure-pipelines-mobile.yml`.
+2.  Ensure your `EliteApp-Production` variable group also contains:
+    - `ENABLE_MOBILE_ANDROID` = `true`
+    - `ENABLE_MOBILE_IOS` = `true`
+    - Native signing variables (e.g., `ANDROID_KEYSTORE_PASSWORD`).
+3.  Upload your keystores and certificates to **Library → Secure files**.
 
 ---
 
@@ -118,6 +128,11 @@ This repository includes an **`android/`** Gradle project aligned with React Nat
 
 ## 6. If something fails
 
-- **Container exits**: check App Service **Log stream** and that Postgres is reachable from Azure (`ConnectionStrings__DefaultConnection`).  
-- **502 / wrong port**: confirm `WEBSITES_PORT=5260`.  
-- **Pipeline cannot push to ACR**: fix ACR service connection and RBAC (`AcrPush` on the registry).
+- **Container exits / 503 error**: Check App Service **Log stream**. This is usually caused by missing mandatory Production environment variables in the App Service → Configuration:
+    - `ConnectionStrings__DefaultConnection` (must be set).
+    - `Jwt__Key` (must be >= 32 characters).
+    - `AllowedHosts` (must be your hostname, NOT `*`).
+    - `Cors__AllowedOrigins` (must be set).
+- **502 / wrong port**: Confirm `WEBSITES_PORT=5260`.
+- **Pipeline "variable not found"**: Ensure the variable group `EliteApp-Production` is linked to the pipeline (Edit → Variables → Variable groups).
+- **Pipeline cannot push to ACR**: Fix ACR service connection and RBAC (`AcrPush` on the registry).

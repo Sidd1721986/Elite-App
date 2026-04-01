@@ -74,5 +74,11 @@ EOF
 
 echo "✅ Infrastructure provisioned for $ENV_LOWER!"
 echo "------------------------------------------------"
-echo "Next step: Run './docker-deploy.sh $ENV_LOWER' to push your image."
+echo "🚀 ACTION REQUIRED: Update your Azure DevOps Variable Group 'EliteApp-Production'"
+echo "------------------------------------------------"
+echo "acrLoginServer   : $ACR_NAME.azurecr.io"
+echo "imageRepository  : eliteapp-api"
+echo "webAppName       : $APP_NAME"
+echo ""
+echo "Next step: Run './docker-deploy.sh $ENV_LOWER' if you want to push manually."
 echo "------------------------------------------------"

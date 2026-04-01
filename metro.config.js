@@ -12,17 +12,8 @@ module.exports = mergeConfig(getDefaultConfig(projectRoot), {
   watchFolders: [projectRoot],
   resolver: {
     useWatchman: false,
-    // Newer Metro/metro-config versions don't expose the old
-    // `metro-config/src/defaults/exclusionList` entrypoint.
-    // `resolver.blockList` accepts an array of regex patterns, so we inline it.
-    blockList: [
-      /[/\\]ios[/\\]Pods[/\\].*/,
-      /[/\\]ios[/\\]build[/\\].*/,
-      /[/\\]ios[/\\]DerivedData[/\\].*/,
-      /[/\\]android[/\\]build[/\\].*/,
-      /[/\\]android[/\\]\.gradle[/\\].*/,
-      /[/\\]backend[/\\].*/,
-      /[/\\]\.git[/\\].*/,
-    ],
+    // Modern Metro resolver.blockList expects a single Regex pattern.
+    // We combine exclusions to prevent indexing large native/build directories.
+    blockList: /.*[/\\](ios[/\\]Pods|ios[/\\]build|ios[/\\]DerivedData|android[/\\]build|android[/\\]\.gradle|backend|\.git)[/\\].*/,
   },
 });
