@@ -1,6 +1,5 @@
 const path = require('path');
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
-const exclusionList = require('metro-config/src/defaults/exclusionList');
 
 const projectRoot = __dirname;
 
@@ -13,7 +12,10 @@ module.exports = mergeConfig(getDefaultConfig(projectRoot), {
   watchFolders: [projectRoot],
   resolver: {
     useWatchman: false,
-    blockList: exclusionList([
+    // Newer Metro/metro-config versions don't expose the old
+    // `metro-config/src/defaults/exclusionList` entrypoint.
+    // `resolver.blockList` accepts an array of regex patterns, so we inline it.
+    blockList: [
       /[/\\]ios[/\\]Pods[/\\].*/,
       /[/\\]ios[/\\]build[/\\].*/,
       /[/\\]ios[/\\]DerivedData[/\\].*/,
@@ -21,6 +23,6 @@ module.exports = mergeConfig(getDefaultConfig(projectRoot), {
       /[/\\]android[/\\]\.gradle[/\\].*/,
       /[/\\]backend[/\\].*/,
       /[/\\]\.git[/\\].*/,
-    ]),
+    ],
   },
 });
