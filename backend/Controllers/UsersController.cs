@@ -21,6 +21,18 @@ public class UsersController : ControllerBase
         _environment = environment;
     }
 
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMe()
+    {
+        var email = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(email)) return Unauthorized();
+
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null) return NotFound();
+
+        return Ok(user);
+    }
+
     [HttpGet("pending-vendors")]
     public async Task<IActionResult> GetPendingVendors()
     {
@@ -28,6 +40,7 @@ public class UsersController : ControllerBase
         if (!User.IsInRole("Admin")) return Forbid();
 
         var pendingVendors = await _context.Users
+            .AsNoTracking()
             .Where(u => u.Role == "Vendor" && !u.IsApproved)
             .Select(u => new { u.Id, u.Email, u.Name, u.Role, u.Address, u.Phone, u.IsApproved, u.CreatedAt })
             .ToListAsync();
@@ -71,6 +84,7 @@ public class UsersController : ControllerBase
         if (!User.IsInRole("Admin")) return Forbid();
 
         var approvedVendors = await _context.Users
+            .AsNoTracking()
             .Where(u => u.Role == "Vendor" && u.IsApproved)
             .Select(u => new { u.Id, u.Email, u.Name, u.Role, u.Address, u.Phone, u.IsApproved, u.CreatedAt })
             .ToListAsync();
@@ -90,6 +104,76 @@ public class UsersController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Vendor removed" });
+    }
+
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var email = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(email)) return Unauthorized();
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null) return NotFound();
+
+        if (request.Name != null) user.Name = request.Name;
+        if (request.Address != null) user.Address = request.Address;
+        if (request.Phone != null)
+        {
+            if (user.Phone != request.Phone.Trim())
+            {
+                user.Phone = request.Phone.Trim();
+                user.IsPhoneVerified = false; // Reset verification if phone changes
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok(user);
+    }
+
+    [HttpPost("request-phone-verification")]
+    public async Task<IActionResult> RequestPhoneVerification()
+    {
+        var email = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(email)) return Unauthorized();
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null) return NotFound();
+
+        if (string.IsNullOrEmpty(user.Phone)) return BadRequest(new { message = "No phone number set" });
+
+        // Simple 6-digit code for demo
+        var code = new Random().Next(100000, 999999).ToString();
+        user.PhoneVerificationCode = code;
+        user.PhoneVerificationExpiry = DateTime.UtcNow.AddMinutes(10);
+
+        await _context.SaveChangesAsync();
+
+        // MOCK: Log to console so user can see it
+        Console.WriteLine($"[MOCK SMS] To {user.Phone}: Your verification code is {code}");
+        Serilog.Log.Information("[MOCK SMS] To {Phone}: Your verification code is {Code}", user.Phone, code);
+        
+        return Ok(new { message = "Verification code sent (mocked)" });
+    }
+
+    [HttpPost("verify-phone")]
+    public async Task<IActionResult> VerifyPhone([FromBody] VerifyPhoneRequest request)
+    {
+        var email = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(email)) return Unauthorized();
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null) return NotFound();
+
+        if (user.PhoneVerificationCode == request.Code && user.PhoneVerificationExpiry > DateTime.UtcNow)
+        {
+            user.IsPhoneVerified = true;
+            user.PhoneVerificationCode = null;
+            user.PhoneVerificationExpiry = null;
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Phone verified successfully" });
+        }
+
+        return BadRequest(new { message = "Invalid or expired verification code" });
     }
 
     [HttpPost("delete-self")]
@@ -132,4 +216,16 @@ public class UsersController : ControllerBase
         
         return Ok(new { message = "Seeded default users" });
     }
+}
+
+public class UpdateProfileRequest
+{
+    public string? Name { get; set; }
+    public string? Address { get; set; }
+    public string? Phone { get; set; }
+}
+
+public class VerifyPhoneRequest
+{
+    public string Code { get; set; } = string.Empty;
 }

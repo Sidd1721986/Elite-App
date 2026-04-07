@@ -4,8 +4,10 @@ import { JobProvider, useJobs } from '../JobContext';
 import { jobService } from '../../services/jobService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { InteractionManager } from 'react-native';
+import { authService } from '../../services/authService';
 
 jest.mock('../../services/jobService');
+jest.mock('../../services/authService');
 jest.mock('../../utils/normalization', () => ({
     normalizeJob: (job: any) => job,
 }));
@@ -15,13 +17,18 @@ jest.mock('react-native/Libraries/Interaction/InteractionManager', () => ({
     runAfterInteractions: (callback: () => void) => callback(),
 }));
 
+import { AuthProvider } from '../AuthContext';
+
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <JobProvider>{children}</JobProvider>
+    <AuthProvider>
+        <JobProvider>{children}</JobProvider>
+    </AuthProvider>
 );
 
 describe('JobContext', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        (authService.getCurrentUser as jest.Mock).mockResolvedValue({ id: '1', name: 'Test User', role: 'Admin' });
     });
 
     it('should load jobs from AsyncStorage then from API', async () => {

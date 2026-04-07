@@ -78,13 +78,32 @@ export const authService = {
         }
     },
 
-    // Get current logged in user
+    // Get current logged in user from storage
     async getCurrentUser(): Promise<User | null> {
         try {
             const userJson = await AsyncStorage.getItem('@current_user');
             return userJson ? JSON.parse(userJson) : null;
         } catch (error) {
             console.error('Error getting current user:', error);
+            return null;
+        }
+    },
+
+    // Fetch current profile from backend
+    async getProfile(): Promise<User | null> {
+        try {
+            // We use the login-like flow to get the user object
+            // The backend doesn't have a dedicated GET /profile yet, but we can use the login token to identify. 
+            // Wait, let's look at UsersController again. 
+            // Actually, I can just add a simple GET /profile to UsersController.
+            const user = await apiClient.get<User>('/users/me', true);
+            if (user) {
+                await AsyncStorage.setItem('@current_user', JSON.stringify(user));
+                return user;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error fetching profile:', error);
             return null;
         }
     },
@@ -197,6 +216,43 @@ export const authService = {
             return true;
         } catch (error) {
             console.error('Error deleting account:', error);
+            return false;
+        }
+    },
+
+    // Update user profile
+    async updateProfile(data: Partial<User>): Promise<User | null> {
+        try {
+            const updatedUser = await apiClient.put<User>('/users/profile', data);
+            if (updatedUser) {
+                await AsyncStorage.setItem('@current_user', JSON.stringify(updatedUser));
+                return updatedUser;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            throw error;
+        }
+    },
+
+    // Request phone verification OTP
+    async requestPhoneVerification(): Promise<boolean> {
+        try {
+            await apiClient.post('/users/request-phone-verification', {});
+            return true;
+        } catch (error) {
+            console.error('Error requesting phone verification:', error);
+            return false;
+        }
+    },
+
+    // Verify phone OTP
+    async verifyPhone(code: string): Promise<boolean> {
+        try {
+            await apiClient.post('/users/verify-phone', { code });
+            return true;
+        } catch (error) {
+            console.error('Error verifying phone:', error);
             return false;
         }
     },

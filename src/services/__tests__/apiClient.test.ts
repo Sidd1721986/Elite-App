@@ -36,7 +36,7 @@ describe('apiClient', () => {
             text: async () => 'Not Found',
         });
 
-        await expect(apiClient.get('/error')).rejects.toThrow('HTTP error! status: 404');
+        await expect(apiClient.get('/error')).rejects.toThrow('Not Found');
     });
 
     it('should not use response cache when CACHE_TTL is 0 (always fresh)', async () => {

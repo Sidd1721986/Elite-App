@@ -54,7 +54,7 @@ const BASE_URL = __DEV__ ? devApiBaseUrl() : PROD_URL;
 
 // Response cache with TTL — set to 0 to always fetch fresh data and avoid stale lists
 const cache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_TTL = 0; // Disabled: always hit server for fresh data
+const CACHE_TTL = 300000; // 5 minutes in milliseconds
 
 // In-flight request deduplication — prevents duplicate identical GETs within same tick
 const pendingRequests = new Map<string, Promise<any>>();
@@ -83,12 +83,19 @@ async function getAuthToken(): Promise<string | null> {
 }
 
 const fetchWithTimeout = (url: string, options: RequestInit, timeout: number): Promise<Response> => {
+    let timeoutId: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Request timed out')), timeout);
+    });
+
     return Promise.race([
         fetch(url, options),
-        new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Request timed out')), timeout)
-        ),
-    ]);
+        timeoutPromise,
+    ]).finally(() => {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+    });
 };
 
 export const apiClient = {
@@ -123,7 +130,7 @@ export const apiClient = {
             ...options.headers,
         };
 
-        const requestPromise = (async () => {
+        const requestWithRetry = async (retries = 3, backoff = 1000): Promise<T> => {
             try {
                 const response = await fetchWithTimeout(`${BASE_URL}${endpoint}`, {
                     ...options,
@@ -131,6 +138,14 @@ export const apiClient = {
                 }, REQUEST_TIMEOUT);
 
                 if (!response.ok) {
+                    // Retry on transient errors (503 Service Unavailable, 504 Gateway Timeout)
+                    if (retries > 0 && (response.status === 503 || response.status === 504)) {
+                        const delay = backoff * (4 - retries); // 1s, 2s, 3s
+                        if (__DEV__) console.log(`[API-CLIENT] Transient error ${response.status}. Retrying in ${delay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        return requestWithRetry(retries - 1, backoff);
+                    }
+
                     const errorText = await response.text().catch(() => 'No response body');
                     if (__DEV__ && response.status !== 401) {
                         console.error(`API Error [${response.status}] ${method} ${endpoint}:`, errorText);
@@ -146,8 +161,11 @@ export const apiClient = {
                     }
 
                     let errorMessage = `HTTP error! status: ${response.status}`;
+                    let traceId: string | undefined;
+
                     try {
                         const errorJson = JSON.parse(errorText);
+                        traceId = errorJson.traceId;
 
                         // Handle standard { message: "..." }
                         if (errorJson.message) {
@@ -173,7 +191,9 @@ export const apiClient = {
                         }
                     }
                     if (__DEV__) console.log('API CLIENT THROWING:', errorMessage);
-                    throw new Error(errorMessage);
+                    const error = new Error(errorMessage) as any;
+                    error.traceId = traceId;
+                    throw error;
                 }
 
                 const data = await response.json();
@@ -195,10 +215,23 @@ export const apiClient = {
                 }
 
                 return data;
+            } catch (err: any) {
+                // Retry on network/timeout errors
+                if (retries > 0 && (err.message === 'Request timed out' || err.message === 'Network request failed')) {
+                    const delay = backoff * (4 - retries);
+                    if (__DEV__) console.log(`[API-CLIENT] Network error: ${err.message}. Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return requestWithRetry(retries - 1, backoff);
+                }
+                throw err;
             } finally {
-                pendingRequests.delete(endpoint);
+                if (method === 'GET') {
+                    pendingRequests.delete(endpoint);
+                }
             }
-        })();
+        };
+
+        const requestPromise = requestWithRetry();
 
         // Track in-flight GET requests for deduplication BEFORE returning
         // (set immediately after promise creation to close the race window)

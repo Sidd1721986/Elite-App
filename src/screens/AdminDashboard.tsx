@@ -215,8 +215,16 @@ const AdminDashboard: React.FC = () => {
                             />
                         }
                     >
-                        <Menu.Item leadingIcon="account-circle-outline" onPress={() => setSettingsMenuVisible(false)} title="Profile Settings" />
-                        <Menu.Item leadingIcon="information-outline" onPress={() => setSettingsMenuVisible(false)} title="Account Details" />
+                        <Menu.Item 
+                            leadingIcon="account-circle-outline" 
+                            onPress={() => { setSettingsMenuVisible(false); navigation.navigate('Profile'); }} 
+                            title="Profile Settings" 
+                        />
+                        <Menu.Item 
+                            leadingIcon="information-outline" 
+                            onPress={() => { setSettingsMenuVisible(false); navigation.navigate('AccountDetails'); }} 
+                            title="Account Details" 
+                        />
                         <Divider />
                         <Menu.Item leadingIcon="logout" onPress={handleLogout} title="Logout" />
                         <Menu.Item 

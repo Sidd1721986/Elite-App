@@ -11,12 +11,13 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, Job, JobStatus, Urgency } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChatInboxNotifications } from '../hooks/useChatInboxNotifications';
+import { JobSkeleton, DashboardStatsSkeleton } from '../components/SkeletonLoader';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
 const VendorDashboard: React.FC = () => {
     const { user, logout, deleteAccount } = useAuth();
-    const { jobs, refreshJobs } = useJobs();
+    const { jobs, refreshJobs, isLoading } = useJobs();
     const { messageUnreadTotal, refreshInbox } = useChatInboxNotifications();
     const navigation = useNavigation<NavigationProp>();
     const [refreshing, setRefreshing] = React.useState(false);
@@ -160,8 +161,16 @@ const VendorDashboard: React.FC = () => {
                                 />
                             }
                         >
-                            <Menu.Item leadingIcon="account-circle-outline" onPress={() => setSettingsMenuVisible(false)} title="Profile Settings" />
-                            <Menu.Item leadingIcon="information-outline" onPress={() => setSettingsMenuVisible(false)} title="Account Details" />
+                            <Menu.Item 
+                                leadingIcon="account-circle-outline" 
+                                onPress={() => { setSettingsMenuVisible(false); navigation.navigate('Profile'); }} 
+                                title="Profile Settings" 
+                            />
+                            <Menu.Item 
+                                leadingIcon="information-outline" 
+                                onPress={() => { setSettingsMenuVisible(false); navigation.navigate('AccountDetails'); }} 
+                                title="Account Details" 
+                            />
                             <Divider />
                             <Menu.Item leadingIcon="logout" onPress={handleLogout} title="Logout" />
                             <Menu.Item 
@@ -189,17 +198,21 @@ const VendorDashboard: React.FC = () => {
                     />
                 </View>
 
-                <View style={styles.statsRow}>
-                    {stats.map((s, i) => (
-                        <View key={i} style={styles.statItem}>
-                            <IconButton icon={s.icon} iconColor={s.color} size={20} style={{ margin: 0 }} />
-                            <View>
-                                <Text variant="titleMedium" style={styles.statValue}>{s.value}</Text>
-                                <Text variant="labelSmall" style={styles.statLabel}>{s.label}</Text>
+                {isLoading ? (
+                    <DashboardStatsSkeleton />
+                ) : (
+                    <View style={styles.statsRow}>
+                        {stats.map((s, i) => (
+                            <View key={i} style={styles.statItem}>
+                                <IconButton icon={s.icon} iconColor={s.color} size={20} style={{ margin: 0 }} />
+                                <View>
+                                    <Text variant="titleMedium" style={styles.statValue}>{s.value}</Text>
+                                    <Text variant="labelSmall" style={styles.statLabel}>{s.label}</Text>
+                                </View>
                             </View>
-                        </View>
-                    ))}
-                </View>
+                        ))}
+                    </View>
+                )}
             </Surface>
 
             <View style={styles.balanceCard}>
@@ -218,11 +231,21 @@ const VendorDashboard: React.FC = () => {
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={{ flex: 1 }}>
                 <FlashList
-                    data={activeJobs}
+                    data={isLoading ? [] : activeJobs}
                     keyExtractor={item => item.id}
                     renderItem={renderOrderCard}
                     estimatedItemSize={250}
-                    ListHeaderComponent={renderHeader}
+                    ListHeaderComponent={() => (
+                        <View>
+                            {renderHeader()}
+                            {isLoading && (
+                                <View style={{ marginTop: 8 }}>
+                                    <JobSkeleton />
+                                    <JobSkeleton />
+                                </View>
+                            )}
+                        </View>
+                    )}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }

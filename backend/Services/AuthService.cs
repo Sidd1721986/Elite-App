@@ -7,6 +7,7 @@ using EliteApp.API.Models;
 using EliteApp.API.Services.Email;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
 
 namespace EliteApp.API.Services;
 
@@ -47,7 +48,7 @@ public class AuthService : IAuthService
         if (string.IsNullOrEmpty(password) || password.Length < minLen)
             return (null, $"Password must be at least {minLen} characters.");
 
-        if (await _context.Users.AnyAsync(u => u.Email == user.Email))
+        if (await _context.Users.AsNoTracking().AnyAsync(u => u.Email == user.Email))
         {
             return (null, "Email already exists");
         }
@@ -63,25 +64,15 @@ public class AuthService : IAuthService
         return (user, string.Empty);
     }
 
-    public async Task<(string? Token, User? User, string Error)> LoginAsync(string email, string password, string role)
+    public async Task<(string? Token, User? User, string Error)> LoginAsync(string? email, string? password, string? requestedRole)
     {
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(role))
-            return (null, null, "Invalid credentials");
-
-        var requestedRole = role.Trim();
-        // Login slot must match one of the three account types (no empty / arbitrary role strings).
-        var adminName = UserRole.Admin.ToString();
-        var vendorName = UserRole.Vendor.ToString();
-        var customerName = UserRole.Customer.ToString();
-        if (!string.Equals(requestedRole, adminName, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(requestedRole, vendorName, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(requestedRole, customerName, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(requestedRole))
         {
-            return (null, null, "Invalid credentials");
+            return (null, null, "Email, password, and role are required.");
         }
 
-        var emailNorm = email.Trim().ToLowerInvariant();
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == emailNorm);
+        var emailTrimmed = email.Trim().ToLowerInvariant();
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == emailTrimmed);
 
         try
         {
@@ -97,18 +88,15 @@ public class AuthService : IAuthService
         }
         catch (BCrypt.Net.SaltParseException ex)
         {
-            // Never log password hashes
-            Console.WriteLine($"[CRITICAL] SaltParseException for user {email}: {ex.Message}");
+            Log.Error(ex, "SaltParseException for user {Email}", email);
             return (null, null, "Invalid credentials");
         }
 
-        // Must sign in with the same role as the account (admin ↔ admin, vendor ↔ vendor, customer ↔ customer).
-        if (!string.Equals(user.Role, requestedRole, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(user.Role, requestedRole.Trim(), StringComparison.OrdinalIgnoreCase))
         {
             return (null, null, "Invalid credentials");
         }
 
-        // Vendor approval check
         if (user.Role == UserRole.Vendor.ToString() && !user.IsApproved)
         {
             return (null, null, "Account not approved yet");
@@ -120,18 +108,23 @@ public class AuthService : IAuthService
 
     private string GenerateJwtToken(User user)
     {
-        var jwtKey = _configuration["Jwt:Key"] ?? "supersecretsupersecretsupersecret123!";
+        var jwtKey = _configuration["Jwt:Key"];
+        if (string.IsNullOrWhiteSpace(jwtKey))
+        {
+            jwtKey = "supersecretsupersecretsupersecret123!";
+        }
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Email),
+            new Claim(JwtRegisteredClaimNames.Sub, user.Email ?? "unknown"),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim("id", user.Id.ToString()),
-            new Claim(ClaimTypes.Role, user.Role), // Long URI form
-            new Claim("role", user.Role),          // Short form
-            new Claim(ClaimTypes.Name, user.Name)
+            new Claim(ClaimTypes.Role, user.Role ?? "Customer"), // Long URI form
+            new Claim("role", user.Role ?? "Customer"),          // Short form
+            new Claim(ClaimTypes.Name, user.Name ?? "User")
         };
 
         var token = new JwtSecurityToken(
@@ -189,6 +182,7 @@ public class AuthService : IAuthService
         var expiryHours = Math.Clamp(_configuration.GetValue("PasswordReset:TokenExpiryHours", 1), 1, 72);
         var oldTokens = await _context.PasswordResetTokens
             .Where(t => t.UserId == user.Id && !t.Used)
+            .AsNoTracking()
             .ToListAsync();
         _context.PasswordResetTokens.RemoveRange(oldTokens);
 

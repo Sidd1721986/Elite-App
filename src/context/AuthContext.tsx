@@ -132,6 +132,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [logout]);
 
+    const updateProfile = useCallback(async (data: Partial<User>): Promise<boolean | string> => {
+        try {
+            const updated = await authService.updateProfile(data);
+            if (updated) {
+                setUser(normalizeUser(updated) || null);
+                return true;
+            }
+            return 'Failed to update profile';
+        } catch (error: any) {
+            return error.message || 'Error updating profile';
+        }
+    }, []);
+
+    const requestPhoneVerification = useCallback(async () => {
+        return await authService.requestPhoneVerification();
+    }, []);
+
+    const verifyPhone = useCallback(async (code: string) => {
+        const success = await authService.verifyPhone(code);
+        if (success) {
+            // Refresh the user to get the new IsPhoneVerified state from server
+            const freshUser = await authService.getProfile();
+            setUser(normalizeUser(freshUser) || null);
+        }
+        return success;
+    }, []);
+
     const value = useMemo(() => ({
         user,
         login,
@@ -142,8 +169,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         getApprovedVendors,
         updateUserStatus,
         removeVendor,
-        deleteAccount
-    }), [user, login, signup, logout, isLoading, getPendingVendors, getApprovedVendors, updateUserStatus, removeVendor, deleteAccount]);
+        deleteAccount,
+        updateProfile,
+        requestPhoneVerification,
+        verifyPhone
+    }), [
+        user, login, signup, logout, isLoading, getPendingVendors, 
+        getApprovedVendors, updateUserStatus, removeVendor, deleteAccount, 
+        updateProfile, requestPhoneVerification, verifyPhone
+    ]);
 
     return (
         <AuthContext.Provider value={value}>

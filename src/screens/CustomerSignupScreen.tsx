@@ -32,6 +32,7 @@ const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const { signup } = useAuth();
+    const signupTimeoutRef = React.useRef<any>(null);
 
     const nameRef = React.useRef<any>(null);
     const addressRef = React.useRef<any>(null);
@@ -84,7 +85,7 @@ const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
         if (result === true) {
             setSnackbarMessage('Customer account created successfully!');
             setSnackbarVisible(true);
-            setTimeout(() => {
+            signupTimeoutRef.current = setTimeout(() => {
                 setLoading(false);
                 navigation.navigate('Login');
             }, 2000);
@@ -94,6 +95,14 @@ const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
             setSnackbarVisible(true);
         }
     };
+
+    React.useEffect(() => {
+        return () => {
+            if (signupTimeoutRef.current) {
+                clearTimeout(signupTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const customerRoles = [
         { label: 'Individual Customer', value: UserRole.CUSTOMER },

@@ -70,9 +70,10 @@ stages:
 
   - stage: MobileiOS
     displayName: Mobile — iOS archive (IPA)
+    dependsOn: MobileAndroid
     condition: |
       and(
-        succeeded(),
+        in(dependencies.MobileAndroid.result, 'Succeeded', 'Skipped'),
         or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')),
         eq(variables['ENABLE_MOBILE_IOS'], 'true')
       )

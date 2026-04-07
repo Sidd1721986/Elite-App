@@ -20,13 +20,14 @@ import { RootStackParamList, JobStatus, Urgency, Job } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import JobItem from '../components/JobItem';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { JobSkeleton, DashboardStatsSkeleton } from '../components/SkeletonLoader';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
 const CustomerDashboard: React.FC = () => {
     const { width: windowWidth } = useWindowDimensions();
     const { user, logout, deleteAccount } = useAuth();
-    const { jobs, addJob, updateJob, getJobById, refreshJobs } = useJobs();
+    const { jobs, addJob, updateJob, getJobById, refreshJobs, isLoading } = useJobs();
     const { messageUnreadTotal, refreshInbox } = useChatInboxNotifications();
     const navigation = useNavigation<NavigationProp>();
 
@@ -238,12 +239,12 @@ const CustomerDashboard: React.FC = () => {
                         >
                             <Menu.Item
                                 leadingIcon="account-circle-outline"
-                                onPress={() => { setSettingsMenuVisible(false); setActiveTab('profile'); }}
+                                onPress={() => { setSettingsMenuVisible(false); navigation.navigate('Profile'); }}
                                 title="Profile Settings"
                             />
                             <Menu.Item
                                 leadingIcon="information-outline"
-                                onPress={() => { setSettingsMenuVisible(false); setActiveTab('profile'); }}
+                                onPress={() => { setSettingsMenuVisible(false); navigation.navigate('AccountDetails'); }}
                                 title="Account Details"
                             />
                             <Divider />
@@ -267,18 +268,21 @@ const CustomerDashboard: React.FC = () => {
                     <Text variant="labelMedium" style={styles.headerSubtitle}>Ready to fix something today?</Text>
                 </View>
 
-                <View style={styles.statsRow}>
-                    <View style={styles.statItem}>
-                        <Text variant="titleLarge" style={styles.statValue}>{activeJobs.length}</Text>
-                        <Text variant="labelSmall" style={styles.statLabel}>Active Jobs</Text>
+                {isLoading ? (
+                    <DashboardStatsSkeleton />
+                ) : (
+                    <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                            <Text variant="titleLarge" style={styles.statValue}>{activeJobs.length}</Text>
+                            <Text variant="labelSmall" style={styles.statLabel}>Active Jobs</Text>
+                        </View>
+                        <Divider style={styles.statDivider} />
+                        <View style={styles.statItem}>
+                            <Text variant="titleLarge" style={styles.statValue}>{historyJobs.length}</Text>
+                            <Text variant="labelSmall" style={styles.statLabel}>Completed</Text>
+                        </View>
                     </View>
-                    <Divider style={styles.statDivider} />
-                    <View style={styles.statItem}>
-                        <Text variant="titleLarge" style={styles.statValue}>{historyJobs.length}</Text>
-                        <Text variant="labelSmall" style={styles.statLabel}>Completed</Text>
-                    </View>
-
-                </View>
+                )}
             </Surface>
 
             <SegmentedButtons
@@ -297,45 +301,48 @@ const CustomerDashboard: React.FC = () => {
     const renderActiveTab = () => (
         <View style={{ flex: 1 }}>
             <FlashList
-                data={activeJobs}
+                data={isLoading ? [] : activeJobs}
                 keyExtractor={item => item.id}
                 renderItem={renderJobItem}
                 estimatedItemSize={250}
-            refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-            ListHeaderComponent={() => (
-                <View style={styles.tabHeader}>
-                    <Surface style={styles.bannerSurface} elevation={3}>
-                        <View style={styles.bannerTextContainer}>
-                            <Text variant="titleLarge" style={styles.bannerTitle}>Need a professional?</Text>
-                            <Text variant="bodyMedium" style={styles.bannerText}>Get your job started in seconds.</Text>
-                            <Button
-                                mode="contained"
-                                icon="plus"
-                                style={styles.newJobBtn}
-                                labelStyle={{ fontWeight: '900' }}
-                                onPress={() => {
-                                    clearForm();
-                                    setNewJobModalVisible(true);
-                                }}
-                            >
-                                Request Service
-                            </Button>
-                        </View>
-                        <AppLogo size={80} showSurface={false} />
-                    </Surface>
+                ListHeaderComponent={() => (
+                    <View style={styles.tabHeader}>
+                        <Surface style={styles.bannerSurface} elevation={3}>
+                            <View style={styles.bannerTextContainer}>
+                                <Text variant="titleLarge" style={styles.bannerTitle}>Need a professional?</Text>
+                                <Text variant="bodyMedium" style={styles.bannerText}>Get your job started in seconds.</Text>
+                                <Button
+                                    mode="contained"
+                                    icon="plus"
+                                    style={styles.newJobBtn}
+                                    labelStyle={{ fontWeight: '900' }}
+                                    onPress={() => {
+                                        clearForm();
+                                        setNewJobModalVisible(true);
+                                    }}
+                                >
+                                    Request Service
+                                </Button>
+                            </View>
+                            <AppLogo size={80} showSurface={false} />
+                        </Surface>
 
-                    {activeJobs.length > 0 && (
-                        <View style={styles.sectionHeader}>
-                            <Text variant="titleMedium" style={styles.sectionTitle}>
-                                Ongoing Projects
-                            </Text>
-                            <Button mode="text" compact labelStyle={{ fontSize: 12 }}>View All</Button>
-                        </View>
-                    )}
-                </View>
-            )}
+                        {isLoading ? (
+                            <View style={{ marginTop: 20 }}>
+                                <JobSkeleton />
+                                <JobSkeleton />
+                                <JobSkeleton />
+                            </View>
+                        ) : activeJobs.length > 0 && (
+                            <View style={styles.sectionHeader}>
+                                <Text variant="titleMedium" style={styles.sectionTitle}>
+                                    Ongoing Projects
+                                </Text>
+                                <Button mode="text" compact labelStyle={{ fontSize: 12 }}>View All</Button>
+                            </View>
+                        )}
+                    </View>
+                )}
             ListFooterComponent={() => (
                 historyJobs.length > 0 ? (
                     <View style={styles.historySection}>

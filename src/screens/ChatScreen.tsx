@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { FlashList } from '@shopify/flash-list';
 import {
     View,
@@ -35,6 +35,7 @@ const ChatScreen: React.FC = () => {
     const [sending, setSending] = useState(false);
     const [loading, setLoading] = useState(true);
     const flatListRef = useRef<any>(null);
+    const scrollTimeoutRef = useRef<any>(null);
 
     const [resolvedOtherUserId, setResolvedOtherUserId] = useState(otherUserId === 'admin' ? '' : otherUserId);
 
@@ -95,7 +96,7 @@ const ChatScreen: React.FC = () => {
             setMessages(prev => [...prev, newMessage]);
             setInputText('');
             // Scroll to bottom
-            setTimeout(() => {
+            scrollTimeoutRef.current = setTimeout(() => {
                 flatListRef.current?.scrollToEnd({ animated: true });
             }, 100);
         } catch (error) {
@@ -105,30 +106,44 @@ const ChatScreen: React.FC = () => {
         }
     };
 
-    const renderMessage = useCallback(({ item }: { item: Message }) => {
-        const isMe = item.senderId === user?.id || item.senderId === user?.email; // Fallback check
+    useEffect(() => {
+        return () => {
+            if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+            }
+        };
+    }, []);
+const MessageItem = memo(({ item, isMe, otherUserName }: { item: Message, isMe: boolean, otherUserName: string }) => (
+    <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
+        {!isMe && (
+            <Avatar.Text
+                size={34}
+                label={otherUserName.substring(0, 1).toUpperCase()}
+                style={styles.avatar}
+            />
+        )}
+        <Surface style={[
+            styles.messageBubble,
+            isMe ? styles.myBubble : styles.theirBubble
+        ]} elevation={1}>
+            <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
+                {item.content}
+            </Text>
+            <Text style={[styles.timestamp, isMe ? styles.myTimestamp : styles.theirTimestamp]}>
+                {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+        </Surface>
+    </View>
+));
 
+    const renderMessage = useCallback(({ item }: { item: Message }) => {
+        const isMe = item.senderId === user?.id || item.senderId === user?.email;
         return (
-            <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
-                {!isMe && (
-                    <Avatar.Text
-                        size={32}
-                        label={otherUserName.substring(0, 1)}
-                        style={styles.avatar}
-                    />
-                )}
-                <Surface style={[
-                    styles.messageBubble,
-                    isMe ? styles.myBubble : styles.theirBubble
-                ]} elevation={1}>
-                    <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
-                        {item.content}
-                    </Text>
-                    <Text style={[styles.timestamp, isMe ? styles.myTimestamp : styles.theirTimestamp]}>
-                        {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                </Surface>
-            </View>
+            <MessageItem
+                item={item}
+                isMe={isMe}
+                otherUserName={otherUserName}
+            />
         );
     }, [user?.id, user?.email, otherUserName]);
 

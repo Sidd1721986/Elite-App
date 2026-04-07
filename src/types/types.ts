@@ -22,6 +22,7 @@ export interface User {
   roleOther?: string;
   referralSource: string;
   isApproved?: boolean;
+  isPhoneVerified?: boolean;
 }
 
 export interface AuthContextType {
@@ -44,6 +45,9 @@ export interface AuthContextType {
   updateUserStatus: (userId: string, approved: boolean) => Promise<boolean>;
   removeVendor: (userId: string) => Promise<boolean>;
   deleteAccount: () => Promise<boolean | string>;
+  updateProfile: (data: Partial<User>) => Promise<boolean | string>;
+  requestPhoneVerification: () => Promise<boolean>;
+  verifyPhone: (code: string) => Promise<boolean>;
 }
 
 export enum JobStatus {
@@ -141,4 +145,6 @@ export type RootStackParamList = {
   JobDetails: { jobId: string };
   AssignVendor: { jobId: string };
   Chat: { otherUserId: string; otherUserName: string };
+  Profile: undefined;
+  AccountDetails: undefined;
 };

@@ -9,6 +9,9 @@ import AppNavigator from './src/navigation/AppNavigator';
 
 type ErrorBoundaryState = { error: Error | null };
 
+/* eslint-disable react-native/no-inline-styles */
+import { Button } from 'react-native-paper';
+
 class RootErrorBoundary extends React.Component<
     { children: React.ReactNode },
     ErrorBoundaryState
@@ -23,7 +26,12 @@ class RootErrorBoundary extends React.Component<
         if (__DEV__) {
             console.error('Root render error:', error);
         }
+        // In production, you would log to Sentry/AppInsights here
     }
+
+    handleReset = () => {
+        this.setState({ error: null });
+    };
 
     render() {
         if (this.state.error) {
@@ -31,6 +39,14 @@ class RootErrorBoundary extends React.Component<
                 <View style={errorStyles.box}>
                     <Text style={errorStyles.title}>Something went wrong</Text>
                     <Text style={errorStyles.msg}>{this.state.error.message}</Text>
+                    <Button 
+                        mode="contained" 
+                        onPress={this.handleReset}
+                        style={{ marginTop: 24, borderRadius: 8 }}
+                        buttonColor="#991B1B"
+                    >
+                        Try Again
+                    </Button>
                 </View>
             );
         }

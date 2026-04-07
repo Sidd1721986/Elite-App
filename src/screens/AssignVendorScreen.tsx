@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { useMemo, memo, useCallback } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Text, Card, Button, Avatar, IconButton, Searchbar, Surface, Chip, Snackbar } from 'react-native-paper';
+import { Text, Card, Button, Avatar, IconButton, Searchbar, Surface, Snackbar } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useJobs } from '../context/JobContext';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
@@ -10,6 +10,38 @@ import { RootStackParamList, User } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type AssignVendorRouteProp = RouteProp<RootStackParamList, 'AssignVendor'>;
+
+const VendorItem = memo(({ item, onAssign, isLoading }: { item: User, onAssign: (vendorId: string) => void, isLoading: boolean }) => (
+    <Card style={styles.vendorCard} elevation={1}>
+        <Card.Content style={styles.cardContent}>
+            <View style={styles.vendorInfo}>
+                <Avatar.Text
+                    size={48}
+                    label={item.name?.substring(0, 2).toUpperCase() || 'V'}
+                    style={styles.avatar}
+                />
+                <View style={styles.vendorTextContainer}>
+                    <Text variant="titleMedium" style={styles.vendorName}>{item.name}</Text>
+                    <Text variant="labelSmall" style={styles.vendorEmail}>{item.email}</Text>
+                    <View style={styles.ratingRow}>
+                        <IconButton icon="star" iconColor="#F59E0B" size={14} style={{ margin: 0, padding: 0 }} />
+                        <Text variant="labelSmall" style={styles.ratingText}>4.9 (Verified)</Text>
+                    </View>
+                </View>
+            </View>
+            <Button 
+                mode="contained" 
+                onPress={() => onAssign(item.id!)}
+                loading={isLoading}
+                disabled={isLoading}
+                style={styles.assignBtn}
+                labelStyle={{ fontSize: 12 }}
+            >
+                Assign
+            </Button>
+        </Card.Content>
+    </Card>
+));
 
 const AssignVendorScreen: React.FC = () => {
     const route = useRoute<AssignVendorRouteProp>();
@@ -23,12 +55,44 @@ const AssignVendorScreen: React.FC = () => {
     const [isLoading, setIsLoading] = React.useState(false);
     const [snackbarVisible, setSnackbarVisible] = React.useState(false);
     const [snackbarMessage, setSnackbarMessage] = React.useState('');
+    const navigationTimeoutRef = React.useRef<any>(null);
 
     const job = jobId ? getJobById(jobId) : undefined;
 
     React.useEffect(() => {
         getApprovedVendors().then(setVendors);
     }, [getApprovedVendors]);
+
+    const filteredVendors = useMemo(() => vendors.filter(v =>
+        (v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.email?.toLowerCase().includes(searchQuery.toLowerCase())) && v.id
+    ), [vendors, searchQuery]);
+
+    const handleAssign = useCallback(async (vendorId: string) => {
+        if (!jobId) return;
+        setIsLoading(true);
+        try {
+            await assignVendor(jobId, vendorId);
+            setSnackbarMessage('Work assigned successfully!');
+            setSnackbarVisible(true);
+            navigationTimeoutRef.current = setTimeout(() => {
+                navigation.goBack();
+            }, 1500);
+        } catch (error: any) {
+            setSnackbarMessage(error.message || 'Failed to assign vendor');
+            setSnackbarVisible(true);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [jobId, assignVendor, navigation]);
+
+    React.useEffect(() => {
+        return () => {
+            if (navigationTimeoutRef.current) {
+                clearTimeout(navigationTimeoutRef.current);
+            }
+        };
+    }, []);
 
     if (!jobId) {
         return (
@@ -38,7 +102,7 @@ const AssignVendorScreen: React.FC = () => {
                     <Text variant="titleLarge" style={styles.title}>Assign Vendor</Text>
                     <View style={styles.headerSpacer} />
                 </View>
-                <View style={{ padding: 24 }}>
+                <View style={{ padding: 24, alignItems: 'center' }}>
                     <Text variant="bodyLarge">Missing job information.</Text>
                     <Button mode="contained" onPress={() => navigation.goBack()} style={{ marginTop: 16 }}>
                         Go back
@@ -47,28 +111,6 @@ const AssignVendorScreen: React.FC = () => {
             </SafeAreaView>
         );
     }
-
-    const filteredVendors = useMemo(() => vendors.filter(v =>
-        (v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        v.email?.toLowerCase().includes(searchQuery.toLowerCase())) && v.id
-    ), [vendors, searchQuery]);
-
-    const handleAssign = async (vendorId: string) => {
-        setIsLoading(true);
-        try {
-            await assignVendor(jobId, vendorId);
-            setSnackbarMessage('Work assigned successfully!');
-            setSnackbarVisible(true);
-            setTimeout(() => {
-                navigation.goBack();
-            }, 1500);
-        } catch (error: any) {
-            setSnackbarMessage(error.message || 'Failed to assign vendor');
-            setSnackbarVisible(true);
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -100,32 +142,11 @@ const AssignVendorScreen: React.FC = () => {
                     contentContainerStyle={styles.listContent}
                     estimatedItemSize={100}
                     renderItem={({ item }) => (
-                        <Card style={styles.vendorCard} elevation={0}>
-                            <Card.Content style={styles.cardContent}>
-                                <Avatar.Text
-                                    size={48}
-                                    label={item.name?.substring(0, 2).toUpperCase() || 'VX'}
-                                    style={styles.avatar}
-                                />
-                                <View style={styles.vendorInfo}>
-                                    <Text variant="titleMedium" style={styles.vendorName}>{item.name}</Text>
-                                    <Text variant="bodySmall" style={styles.vendorEmail}>{item.email}</Text>
-                                    <View style={styles.ratingRow}>
-                                        <IconButton icon="star" iconColor="#F59E0B" size={16} style={{ margin: 0 }} />
-                                        <Text variant="labelSmall" style={styles.ratingText}>4.9 (Verified)</Text>
-                                    </View>
-                                </View>
-                                <Button
-                                    mode="contained"
-                                    onPress={() => handleAssign(item.id!)}
-                                    loading={isLoading}
-                                    disabled={isLoading}
-                                    style={styles.assignBtn}
-                                >
-                                    Assign
-                                </Button>
-                            </Card.Content>
-                        </Card>
+                        <VendorItem 
+                            item={item} 
+                            onAssign={handleAssign} 
+                            isLoading={isLoading} 
+                        />
                     )}
                     ListEmptyComponent={() => (
                         <View style={styles.emptyBox}>
@@ -212,32 +233,42 @@ const styles = StyleSheet.create({
     cardContent: {
         flexDirection: 'row',
         alignItems: 'center',
+        paddingVertical: 8,
     },
     avatar: {
         backgroundColor: '#EEF2FF',
     },
     vendorInfo: {
         flex: 1,
-        marginLeft: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    vendorTextContainer: {
+        flex: 1,
+        marginLeft: 12,
     },
     vendorName: {
         fontWeight: 'bold',
         color: '#1E293B',
+        fontSize: 14,
     },
     vendorEmail: {
         color: '#64748B',
+        fontSize: 12,
     },
     ratingRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 4,
+        marginTop: 2,
         marginLeft: -8,
     },
     ratingText: {
         color: '#64748B',
+        fontSize: 11,
     },
     assignBtn: {
         borderRadius: 8,
+        minWidth: 80,
     },
     emptyBox: {
         alignItems: 'center',

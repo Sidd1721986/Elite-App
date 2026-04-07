@@ -29,6 +29,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const { signup } = useAuth();
+    const signupTimeoutRef = React.useRef<any>(null);
 
     const nameRef = React.useRef<any>(null);
     const addressRef = React.useRef<any>(null);
@@ -79,7 +80,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
         if (result === true) {
             setSnackbarMessage('Account created! Please wait for Admin approval.');
             setSnackbarVisible(true);
-            setTimeout(() => {
+            signupTimeoutRef.current = setTimeout(() => {
                 setLoading(false);
                 navigation.navigate('Login');
             }, 3000);
@@ -89,6 +90,14 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
             setSnackbarVisible(true);
         }
     };
+
+    React.useEffect(() => {
+        return () => {
+            if (signupTimeoutRef.current) {
+                clearTimeout(signupTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const isEmailValid = (e: string) => e.includes('@');
     const isPhoneValid = (p: string) => /^\d{10}$/.test(p);

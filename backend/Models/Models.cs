@@ -34,6 +34,10 @@ public class User
     
     public bool IsActive { get; set; } = true;
     
+    public bool IsPhoneVerified { get; set; } = false;
+    public string? PhoneVerificationCode { get; set; }
+    public DateTime? PhoneVerificationExpiry { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

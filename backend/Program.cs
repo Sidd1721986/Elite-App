@@ -4,10 +4,28 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.ResponseCompression;
+using Serilog;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Diagnostics;
+using HealthChecks.NpgSql;
 
 var builder = WebApplication.CreateBuilder(args);
 // BindAllInterfaces: listen on 0.0.0.0 so physical phones (same Wi‑Fi) can reach the API during dev.
 // appsettings.Development.json sets Kestrel:BindAllInterfaces=true; omit or false for localhost-only.
+// Configure Serilog for structured logging
+var serilogConfig = new LoggerConfiguration()
+    .WriteTo.Console()
+    .Enrich.FromLogContext();
+
+var aiKey = builder.Configuration["ApplicationInsights:InstrumentationKey"];
+if (!string.IsNullOrEmpty(aiKey))
+{
+    serilogConfig.WriteTo.ApplicationInsights(aiKey, TelemetryConverter.Traces);
+}
+
+Log.Logger = serilogConfig.CreateLogger();
+builder.Host.UseSerilog();
+
 builder.WebHost.ConfigureKestrel((context, serverOptions) =>
 {
     var bindAll = context.Configuration.GetValue("Kestrel:BindAllInterfaces", false)
@@ -39,6 +57,8 @@ builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
     options.Level = System.IO.Compression.CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(options =>
     options.Level = System.IO.Compression.CompressionLevel.Fastest);
+builder.Services.AddResponseCaching();
+builder.Services.AddMemoryCache();
 
 // Services
 builder.Services.AddSingleton<IEmailSender>(sp =>
@@ -102,8 +122,30 @@ if (!builder.Environment.IsDevelopment())
 }
 
 // Add Entity Framework Core with PostgreSQL
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<EliteApp.API.Data.AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
+
+// Advanced Health Checks
+builder.Services.AddHealthChecks()
+    .AddCheck("Postgres", () => 
+    {
+        try 
+        {
+            using var conn = new Npgsql.NpgsqlConnection(connectionString);
+            conn.Open();
+            return HealthCheckResult.Healthy();
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy(exception: ex);
+        }
+    })
+    .AddCheck("Memory", () => 
+    {
+        var used = Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024;
+        return used < 1024 ? HealthCheckResult.Healthy() : HealthCheckResult.Degraded();
+    });
 
 static string ResolveJwtSigningKey(IConfiguration configuration, IHostEnvironment environment)
 {
@@ -117,7 +159,7 @@ static string ResolveJwtSigningKey(IConfiguration configuration, IHostEnvironmen
         return key;
     }
 
-    return string.IsNullOrEmpty(key)
+    return string.IsNullOrWhiteSpace(key)
         ? "supersecretsupersecretsupersecret123!"
         : key;
 }
@@ -150,12 +192,13 @@ builder.Services.AddAuthentication(options =>
 {
     options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
     {
-        ValidateIssuer = false,
-        ValidateAudience = false,
+        ValidateIssuer = false, // Set to true and provide 'ValidIssuer' in production if known
+        ValidateAudience = false, // Set to true and provide 'ValidAudience' in production if known
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtKey)),
-        RoleClaimType = System.Security.Claims.ClaimTypes.Role
+        RoleClaimType = System.Security.Claims.ClaimTypes.Role,
+        ClockSkew = TimeSpan.FromMinutes(1) // Standard drift allowance
     };
 
     options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
@@ -199,6 +242,24 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
     app.UseForwardedHeaders();
 
+// Global Exception Handler
+app.Use(async (context, next) =>
+{
+    try { await next(); }
+    catch (Exception ex)
+    {
+        var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
+        Log.Error(ex, "Unhandled Exception [TraceId: {TraceId}]", traceId);
+        
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new { 
+            message = "An internal server error occurred. Please contact support with this Trace ID.",
+            traceId = traceId
+        });
+    }
+});
+
 if (app.Environment.IsProduction() &&
     string.IsNullOrWhiteSpace(app.Configuration["Email:Smtp:Host"]))
 {
@@ -212,6 +273,7 @@ if (app.Environment.IsProduction() &&
 // app.UseHttpsRedirection(); // Disable for easier local dev with Android emulator
 
 app.UseResponseCompression();
+app.UseResponseCaching();
 
 if (app.Environment.IsProduction())
     app.UseCors("ProdCors");
@@ -224,9 +286,13 @@ app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
     context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block"); // Extra safety
     context.Response.Headers.Append("Referrer-Policy", "no-referrer");
+    context.Response.Headers.Append("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none';"); // Hardened CSP
+    
     if (app.Environment.IsProduction())
-        context.Response.Headers.Append("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        context.Response.Headers.Append("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+        
     await next();
 });
 
@@ -289,7 +355,21 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-app.MapGet("/health", () => Results.Text("OK", "text/plain"));
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    AllowCachingResponses = false,
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new { name = e.Key, status = e.Value.Status.ToString() }),
+            duration = report.TotalDuration
+        });
+        await context.Response.WriteAsync(result);
+    }
+});
 
 app.MapControllers();
 

@@ -18,6 +18,8 @@ import CustomerDashboard from '../screens/CustomerDashboard';
 import JobDetailsScreen from '../screens/JobDetailsScreen';
 import AssignVendorScreen from '../screens/AssignVendorScreen';
 import ChatScreen from '../screens/ChatScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import AccountDetailsScreen from '../screens/AccountDetailsScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -175,6 +177,8 @@ const AppNavigator: React.FC = () => {
                     <Stack.Screen name="JobDetails" component={JobDetailsScreen} options={{ title: 'Job Details', headerShown: false }} />
                     <Stack.Screen name="AssignVendor" component={AssignVendorScreen} options={{ title: 'Assign Vendor', headerShown: false }} />
                     <Stack.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat', headerShown: false }} />
+                    <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile Settings', headerShown: false }} />
+                    <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} options={{ title: 'Account Details', headerShown: false }} />
                 </Stack.Navigator>
             )}
             </NavigationContainer>
