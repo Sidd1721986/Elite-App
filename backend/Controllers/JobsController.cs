@@ -174,11 +174,19 @@ public class JobsController : ControllerBase
     [HttpPost("{id}/assign")]
     public async Task<IActionResult> AssignVendor(Guid id, [FromBody] AssignVendorRequest request)
     {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var adminId)) return Unauthorized();
+
         bool isAdmin = User.IsInRole("Admin") || User.IsInRole("admin");
         if (!isAdmin) return StatusCode(403, new { message = "Forbidden: Admin access required." });
 
-        var job = await _context.Jobs.Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == id);
+        var job = await _context.Jobs.Include(j => j.Customer).Include(j => j.Vendor).FirstOrDefaultAsync(j => j.Id == id);
         if (job == null) return NotFound(new { message = "Job not found" });
+
+        if (job.Status == "Completed" || job.Status == "Invoiced")
+        {
+            return BadRequest(new { message = $"Cannot change vendor for a job that is already {job.Status.ToLower()}." });
+        }
 
         if (job.Customer == null)
         {
@@ -196,12 +204,42 @@ public class JobsController : ControllerBase
             return BadRequest(new { message = $"Cannot assign vendor: Homeowner contact information is incomplete. Missing: {string.Join(", ", missingFields)}" });
         }
 
+        string noteContent;
+        if (job.VendorId != null && job.VendorId != request.VendorId)
+        {
+            var oldVendorName = job.Vendor?.Name ?? "Unknown Vendor";
+            noteContent = $"Vendor reassigned by admin. Previous vendor: {oldVendorName}.";
+        }
+        else
+        {
+            noteContent = "Vendor assigned to job by admin.";
+        }
+
         job.VendorId = request.VendorId;
         job.Status = "Assigned";
         job.AssignedAt = DateTime.UtcNow;
+        job.AcceptedAt = null; // Reset acceptance for new vendor
+
+        // Add audit note
+        var note = new JobNote
+        {
+            Id = Guid.NewGuid(),
+            JobId = id,
+            AuthorId = adminId,
+            Content = noteContent,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.JobNotes.Add(note);
 
         await _context.SaveChangesAsync();
-        return Ok(job);
+        
+        // Refresh to include new vendor info
+        var updatedJob = await _context.Jobs
+            .Include(j => j.Customer)
+            .Include(j => j.Vendor)
+            .FirstOrDefaultAsync(j => j.Id == id);
+
+        return Ok(updatedJob);
     }
 
     [HttpPost("{id}/accept")]
@@ -257,6 +295,7 @@ public class JobsController : ControllerBase
         if (!CurrentUserCanAccessJob(userId, job)) return NotFound();
 
         var notes = await _context.JobNotes
+            .AsNoTracking()
             .Where(n => n.JobId == id)
             .OrderByDescending(n => n.CreatedAt)
             .ToListAsync();
@@ -335,6 +374,123 @@ public class JobsController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok(job);
     }
+
+    [HttpPost("{id}/request-invoice")]
+    public async Task<IActionResult> RequestInvoice(Guid id)
+    {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var adminId)) return Unauthorized();
+
+        if (!User.IsInRole("Admin") && !User.IsInRole("admin"))
+            return Forbid();
+
+        var job = await _context.Jobs.FindAsync(id);
+        if (job == null) return NotFound();
+
+        job.Status = "InvoiceRequested";
+        job.InvoiceRequestedAt = DateTime.UtcNow;
+
+        // Add audit note
+        var note = new JobNote
+        {
+            Id = Guid.NewGuid(),
+            JobId = id,
+            AuthorId = adminId,
+            Content = "Invoice requested from vendor by admin.",
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.JobNotes.Add(note);
+
+        await _context.SaveChangesAsync();
+        return Ok(job);
+    }
+
+    [HttpPost("{id}/upload-invoice")]
+    public async Task<IActionResult> UploadInvoice(Guid id, [FromBody] UploadInvoiceRequest request)
+    {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var userId)) return Unauthorized();
+
+        var job = await _context.Jobs.FindAsync(id);
+        if (job == null) return NotFound();
+
+        if (job.VendorId != userId) return Forbid();
+
+        if (string.IsNullOrWhiteSpace(request.InvoiceDocumentUrl))
+            return BadRequest(new { message = "Invoice document URL is required." });
+
+        job.Status = "Invoiced";
+        job.IsInvoiced = true;
+        job.InvoiceDocumentUrl = request.InvoiceDocumentUrl;
+        job.InvoicedAt = DateTime.UtcNow;
+
+        // Add audit note
+        var note = new JobNote
+        {
+            Id = Guid.NewGuid(),
+            JobId = id,
+            AuthorId = userId,
+            Content = "Invoice document uploaded by vendor.",
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.JobNotes.Add(note);
+
+        await _context.SaveChangesAsync();
+        return Ok(job);
+    }
+
+    [HttpPost("{id}/photos")]
+    public async Task<IActionResult> AddJobPhotos(Guid id, [FromBody] AddPhotosRequest request)
+    {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var userId)) return Unauthorized();
+
+        var job = await _context.Jobs.FindAsync(id);
+        if (job == null) return NotFound();
+
+        // Check if Caller is assigned Vendor or Admin
+        bool isAdmin = User.IsInRole("Admin") || User.IsInRole("admin");
+        if (job.VendorId != userId && !isAdmin)
+        {
+            return StatusCode(403, new { message = "Forbidden: You are not assigned to this job." });
+        }
+
+        if (request.Photos == null || !request.Photos.Any())
+            return BadRequest(new { message = "No photos provided." });
+
+        // Append to existing photos
+        var existingPhotos = !string.IsNullOrEmpty(job.Photos) 
+            ? job.Photos.Split(',').ToList() 
+            : new List<string>();
+        
+        existingPhotos.AddRange(request.Photos);
+        job.Photos = string.Join(",", existingPhotos);
+
+        // Add audit note
+        var authorName = User.FindFirstValue(ClaimTypes.Name) ?? "Vendor";
+        var note = new JobNote
+        {
+            Id = Guid.NewGuid(),
+            JobId = id,
+            AuthorId = userId,
+            Content = $"{authorName} added additional job photos.",
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.JobNotes.Add(note);
+
+        await _context.SaveChangesAsync();
+        return Ok(job);
+    }
+}
+
+public class AddPhotosRequest
+{
+    public List<string> Photos { get; set; } = new();
+}
+
+public class UploadInvoiceRequest
+{
+    public string InvoiceDocumentUrl { get; set; } = string.Empty;
 }
 
 public class AssignVendorRequest

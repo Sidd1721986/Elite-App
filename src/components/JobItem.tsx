@@ -38,7 +38,7 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify }) => {
             <Card.Content style={styles.content}>
                 <View style={styles.jobHeader}>
                     <View>
-                        <Text variant="labelSmall" style={styles.jobIdLabel}>ID: #{job.id.substring(0, 8).toUpperCase()}</Text>
+                        <Text variant="labelSmall" style={styles.jobIdLabel}>JOB ID: #{job.jobNumber || '...'}</Text>
                         <Text variant="titleMedium" style={styles.jobAddress} numberOfLines={1}>{job.address}</Text>
 
                         {(job.contactPhone || job.contactEmail) && (

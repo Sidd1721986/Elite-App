@@ -16,7 +16,8 @@ public interface IAuthService
     Task<(User? User, string Error)> RegisterAsync(User user, string password);
     Task<(string? Token, User? User, string Error)> LoginAsync(string email, string password, string role);
     Task<bool> CanShowForgotPasswordAsync(string email, string role);
-    Task<ForgotPasswordRequestResult> RequestPasswordResetAsync(string email, string role);
+    Task<ForgotPasswordRequestResult> RequestPasswordResetAsync(string email, string role, string deliveryMethod, string? phone = null);
+    Task<(bool Ok, string Error)> VerifyResetCodeAsync(string email, string token);
     Task<(bool Ok, string Error)> ResetPasswordAsync(string email, string token, string newPassword);
 }
 
@@ -153,7 +154,7 @@ public class AuthService : IAuthService
         return user.IsApproved;
     }
 
-    public async Task<ForgotPasswordRequestResult> RequestPasswordResetAsync(string email, string role)
+    public async Task<ForgotPasswordRequestResult> RequestPasswordResetAsync(string email, string role, string deliveryMethod, string? phone = null)
     {
         const string genericOk =
             "If an account exists for this email and role, password reset instructions have been sent.";
@@ -179,6 +180,16 @@ public class AuthService : IAuthService
         if (user.Role == UserRole.Vendor.ToString() && !user.IsApproved)
             return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
 
+        // If Phone is selected, we should theoretically check if the provided phone matches.
+        // For security, if it doesn't match, we still return "Success" but don't send anything.
+        if (deliveryMethod.Equals("Phone", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(user.Phone) || !string.Equals(user.Phone.Trim(), phone?.Trim()))
+            {
+                return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
+            }
+        }
+
         var expiryHours = Math.Clamp(_configuration.GetValue("PasswordReset:TokenExpiryHours", 1), 1, 72);
         var oldTokens = await _context.PasswordResetTokens
             .Where(t => t.UserId == user.Id && !t.Used)
@@ -186,9 +197,8 @@ public class AuthService : IAuthService
             .ToListAsync();
         _context.PasswordResetTokens.RemoveRange(oldTokens);
 
-        var raw = new byte[32];
-        RandomNumberGenerator.Fill(raw);
-        var plaintextCode = Convert.ToBase64String(raw).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        // Simple 6-digit code instead of long Base64 string
+        var plaintextCode = new Random().Next(100000, 999999).ToString();
         var tokenHash = HashResetCode(plaintextCode);
 
         _context.PasswordResetTokens.Add(new PasswordResetToken
@@ -200,24 +210,56 @@ public class AuthService : IAuthService
         });
         await _context.SaveChangesAsync();
 
-        var subject = _configuration["Email:PasswordResetSubject"] ?? "Reset your Elite password";
-        var plainBody =
-            $"Hello,\n\nUse this code in the app to reset your password (expires in {expiryHours} hour(s)):\n\n{plaintextCode}\n\nIf you did not request this, you can ignore this email.\n";
-        var htmlBody =
-            $"<p>Hello,</p><p>Use this code in the app to reset your password (expires in <strong>{expiryHours}</strong> hour(s)):</p><p style=\"font-size:18px;font-weight:bold;letter-spacing:2px;\">{plaintextCode}</p><p>If you did not request this, you can ignore this email.</p>";
-
-        try
+        if (deliveryMethod.Equals("Phone", StringComparison.OrdinalIgnoreCase))
         {
-            await _emailSender.SendAsync(user.Email, subject, plainBody, htmlBody);
+            // MOCK SMS: Log to console
+            var smsMsg = $"[SMS MOCK] To {user.Phone}: Your Elite password reset code is {plaintextCode}. Valid for {expiryHours} hour(s).";
+            Console.WriteLine(smsMsg);
+            Log.Information(smsMsg);
+            return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, 
+                "A reset code has been sent to your phone (Mocked to terminal).");
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogError(ex, "Password reset email failed for {Email}", user.Email);
-            return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.EmailDeliveryFailed,
-                "We could not send email right now. Please try again later.");
+            var subject = _configuration["Email:PasswordResetSubject"] ?? "Reset your Elite password";
+            var plainBody =
+                $"Hello,\n\nUse this code in the app to reset your password (expires in {expiryHours} hour(s)):\n\n{plaintextCode}\n\nIf you did not request this, you can ignore this email.\n";
+            var htmlBody =
+                $"<p>Hello,</p><p>Use this code in the app to reset your password (expires in <strong>{expiryHours}</strong> hour(s)):</p><p style=\"font-size:24px;font-weight:bold;letter-spacing:4px;color:#6366F1;\">{plaintextCode}</p><p>If you did not request this, you can ignore this email.</p>";
+
+            try
+            {
+                await _emailSender.SendAsync(user.Email, subject, plainBody, htmlBody);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Password reset email failed for {Email}", user.Email);
+                return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.EmailDeliveryFailed,
+                    "We could not send email right now. Please try again later.");
+            }
         }
 
         return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
+    }
+
+    public async Task<(bool Ok, string Error)> VerifyResetCodeAsync(string email, string token)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token))
+            return (false, "Email and reset code are required.");
+
+        var tokenHash = HashResetCode(token.Trim());
+        var entry = await _context.PasswordResetTokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t =>
+                t.Token == tokenHash && !t.Used && t.ExpiresAt > DateTime.UtcNow);
+
+        if (entry?.User == null)
+            return (false, "Invalid or expired reset code.");
+
+        if (!string.Equals(entry.User.Email, email.Trim(), StringComparison.OrdinalIgnoreCase))
+            return (false, "Invalid or expired reset code.");
+
+        return (true, string.Empty);
     }
 
     private string HashResetCode(string plaintext)

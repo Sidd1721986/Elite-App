@@ -14,7 +14,7 @@ export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = ({
         <View style={[styles.inner, { width: size, height: size }]}>
             <Image
                 source={require('../../assets/logo.png')}
-                style={{ width: size * 0.8, height: size * 0.8 }}
+                style={{ width: size, height: size }}
                 resizeMode="contain"
             />
         </View>
@@ -22,8 +22,8 @@ export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = ({
 
     if (showSurface) {
         return (
-            <Surface style={[styles.surface, { width: size + 40, height: size + 40 }]} elevation={2}>
-                <View style={styles.surfaceInner}>{content}</View>
+            <Surface style={[styles.surface, { width: size, height: size }]} elevation={0}>
+                {content}
             </Surface>
         );
     }
@@ -33,10 +33,11 @@ export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = ({
 const styles = StyleSheet.create({
     surface: {
         borderRadius: 24,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'transparent', // Remove white background
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 24,
+        overflow: 'hidden', // Clip the inner content perfectly
     },
     surfaceInner: {
         justifyContent: 'center',
@@ -45,8 +46,8 @@ const styles = StyleSheet.create({
     inner: {
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#6366F1',
-        borderRadius: 16,
+        backgroundColor: 'transparent',
+        borderRadius: 24, // Match surface radius
     },
 });
 

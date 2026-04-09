@@ -3,6 +3,7 @@ using System;
 using EliteApp.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EliteApp.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260407164835_SyncModelChanges")]
+    partial class SyncModelChanges
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -60,23 +63,8 @@ namespace EliteApp.API.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("InvoiceDocumentUrl")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("InvoiceRequestedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("InvoicedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<bool>("IsInvoiced")
                         .HasColumnType("boolean");
-
-                    b.Property<int>("JobNumber")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("JobNumber"));
 
                     b.Property<string>("OtherDetails")
                         .HasColumnType("text");

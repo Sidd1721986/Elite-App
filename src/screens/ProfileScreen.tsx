@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
 import {
     Text,
     TextInput,
@@ -12,13 +12,15 @@ import {
     ActivityIndicator,
     Snackbar,
     Divider,
-    Chip
+    Chip,
+    Menu
 } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { formatAddress, parseAddress, US_STATES } from '../utils/addressUtils';
 
 type NavigationProp = StackNavigationProp<RootStackParamList, 'Profile'>;
 
@@ -27,7 +29,11 @@ const ProfileScreen: React.FC = () => {
     const navigation = useNavigation<NavigationProp>();
 
     const [name, setName] = useState(user?.name || '');
-    const [address, setAddress] = useState(user?.address || '');
+    const [street, setStreet] = useState('');
+    const [city, setCity] = useState('');
+    const [zip, setZip] = useState('');
+    const [state, setState] = useState('');
+    const [showStateMenu, setShowStateMenu] = useState(false);
     const [phone, setPhone] = useState(user?.phone || '');
     const [isSaving, setIsSaving] = useState(false);
     const [isRequestingOTP, setIsRequestingOTP] = useState(false);
@@ -40,7 +46,11 @@ const ProfileScreen: React.FC = () => {
     useEffect(() => {
         if (user) {
             setName(user.name);
-            setAddress(user.address);
+            const parts = parseAddress(user.address);
+            setStreet(parts.street);
+            setCity(parts.city);
+            setZip(parts.zip);
+            setState(parts.state);
             setPhone(user.phone);
         }
     }, [user]);
@@ -54,6 +64,7 @@ const ProfileScreen: React.FC = () => {
 
         setIsSaving(true);
         try {
+            const address = formatAddress({ street, city, zip, state });
             const result = await updateProfile({ name, address, phone });
             if (result === true) {
                 setSnackbarMessage('Profile updated successfully');
@@ -169,13 +180,66 @@ const ProfileScreen: React.FC = () => {
                         />
 
                         <TextInput
-                            label="Service Address"
-                            value={address}
-                            onChangeText={setAddress}
+                            label="Street Address"
+                            value={street}
+                            onChangeText={setStreet}
                             mode="outlined"
                             style={styles.input}
                             left={<TextInput.Icon icon="map-marker-outline" />}
                         />
+
+                        <View style={styles.addressRow}>
+                            <TextInput
+                                label="City"
+                                value={city}
+                                onChangeText={setCity}
+                                mode="outlined"
+                                style={[styles.input, { flex: 2 }]}
+                            />
+                            <TextInput
+                                label="Zip"
+                                value={zip}
+                                onChangeText={setZip}
+                                mode="outlined"
+                                style={[styles.input, { flex: 1.2 }]}
+                                keyboardType="numeric"
+                            />
+                            <Menu
+                                visible={showStateMenu}
+                                onDismiss={() => setShowStateMenu(false)}
+                                anchor={
+                                    <TouchableOpacity 
+                                        onPress={() => setShowStateMenu(true)}
+                                        activeOpacity={1}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <View pointerEvents="none">
+                                            <TextInput
+                                                label="State"
+                                                value={state}
+                                                mode="outlined"
+                                                style={styles.input}
+                                                right={<TextInput.Icon icon="chevron-down" />}
+                                                editable={false}
+                                            />
+                                        </View>
+                                    </TouchableOpacity>
+                                }
+                            >
+                                <ScrollView style={{ maxHeight: 250 }}>
+                                    {US_STATES.map((s) => (
+                                        <Menu.Item
+                                            key={s}
+                                            onPress={() => {
+                                                setState(s);
+                                                setShowStateMenu(false);
+                                            }}
+                                            title={s}
+                                        />
+                                    ))}
+                                </ScrollView>
+                            </Menu>
+                        </View>
 
                         <View style={styles.phoneContainer}>
                             <TextInput
@@ -319,6 +383,10 @@ const styles = StyleSheet.create({
     },
     disabledInput: {
         backgroundColor: '#F1F5F9',
+    },
+    addressRow: {
+        flexDirection: 'row',
+        gap: 8,
     },
     phoneContainer: {
         flexDirection: 'row',

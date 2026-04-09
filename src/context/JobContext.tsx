@@ -44,6 +44,9 @@ interface JobContextType {
     reachOut: (jobId: string) => Promise<void>;
     setAppointment: (jobId: string) => Promise<void>;
     completeJob: (jobId: string, photos?: string[]) => Promise<void>;
+    requestInvoice: (jobId: string) => Promise<void>;
+    uploadInvoice: (jobId: string, url: string) => Promise<void>;
+    addJobPhotos: (jobId: string, photos: string[]) => Promise<void>;
     getJobById: (jobId: string) => Job | undefined;
     isLoading: boolean;
     refreshJobs: () => Promise<void>;
@@ -242,6 +245,42 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, []);
 
+    const requestInvoice = useCallback(async (jobId: string) => {
+        try {
+            const updatedJob = await jobService.requestInvoice(jobId);
+            const normalized = normalizeJob(updatedJob);
+            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to request invoice');
+            throw err;
+        }
+    }, []);
+
+    const uploadInvoice = useCallback(async (jobId: string, url: string) => {
+        try {
+            const updatedJob = await jobService.uploadInvoice(jobId, url);
+            const normalized = normalizeJob(updatedJob);
+            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to upload invoice');
+            throw err;
+        }
+    }, []);
+
+    const addJobPhotos = useCallback(async (jobId: string, photos: string[]) => {
+        try {
+            const updatedJob = await jobService.addJobPhotos(jobId, photos);
+            const normalized = normalizeJob(updatedJob);
+            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to add job photos');
+            throw err;
+        }
+    }, []);
+
     // Memoize job lookup with a Map for O(1) access
     const jobsMap = useMemo(() => {
         const map = new Map<string, Job>();
@@ -263,11 +302,14 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reachOut,
         setAppointment,
         completeJob,
+        requestInvoice,
+        uploadInvoice,
+        addJobPhotos,
         getJobById,
         isLoading,
         refreshJobs,
         error
-    }), [jobs, addJob, updateJob, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, getJobById, isLoading, refreshJobs, error]);
+    }), [jobs, addJob, updateJob, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, addJobPhotos, getJobById, isLoading, refreshJobs, error]);
 
     return (
         <JobContext.Provider value={value}>

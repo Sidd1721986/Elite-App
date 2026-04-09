@@ -180,11 +180,15 @@ export const authService = {
     async requestForgotPassword(
         email: string,
         role: UserRole,
+        deliveryMethod: 'Email' | 'Phone' = 'Email',
+        phone?: string,
     ): Promise<{ ok: boolean; message: string }> {
         try {
             const r = await apiClient.post<{ message?: string }>('/auth/forgot-password', {
                 email: email.trim(),
                 role: toApiRole(role),
+                deliveryMethod,
+                phone: phone?.trim(),
             });
             return { ok: true, message: r.message || '' };
         } catch (error: any) {
@@ -206,6 +210,18 @@ export const authService = {
             return { ok: true };
         } catch (error: any) {
             return { ok: false, message: error?.message || 'Reset failed' };
+        }
+    },
+
+    async verifyResetCode(email: string, token: string): Promise<{ ok: boolean; message?: string }> {
+        try {
+            await apiClient.post('/auth/verify-reset-code', {
+                email: email.trim(),
+                token: token.trim(),
+            });
+            return { ok: true };
+        } catch (error: any) {
+            return { ok: false, message: error?.message || 'Verification failed' };
         }
     },
 

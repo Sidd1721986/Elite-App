@@ -105,7 +105,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 >
                     <View style={styles.content}>
                         <View style={styles.headerSection}>
-                            <AppLogo size={60} />
+                            <AppLogo size={100} />
                             <Text variant="headlineMedium" style={styles.brandTitle} numberOfLines={1}>
                                 <Text style={styles.brandElite}>Elite</Text>
                                 <Text style={styles.brandHome}> Home Services</Text>

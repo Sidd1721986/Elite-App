@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useCallback, useMemo } from 'react';
 import { View, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Text, Card, Button, Avatar, Divider, Surface, Chip, IconButton, List, Menu, Portal, Dialog, Snackbar } from 'react-native-paper';
+import { Text, Card, Button, Avatar, Divider, Surface, Chip, IconButton, List, Menu, Portal, Dialog, Snackbar, Searchbar } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import AppLogo from '../components/AppLogo';
 import { useJobs } from '../context/JobContext';
@@ -15,6 +15,8 @@ import { JobSkeleton, DashboardStatsSkeleton } from '../components/SkeletonLoade
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
+const VendorList = FlashList as any;
+
 const VendorDashboard: React.FC = () => {
     const { user, logout, deleteAccount } = useAuth();
     const { jobs, refreshJobs, isLoading } = useJobs();
@@ -26,6 +28,7 @@ const VendorDashboard: React.FC = () => {
     const [isDeleting, setIsDeleting] = React.useState(false);
     const [snackbarVisible, setSnackbarVisible] = React.useState(false);
     const [snackbarMessage, setSnackbarMessage] = React.useState('');
+    const [searchQuery, setSearchQuery] = React.useState('');
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -60,9 +63,27 @@ const VendorDashboard: React.FC = () => {
         }
     }, [deleteAccount]);
 
+    const filteredJobs = useMemo(() => {
+        if (!searchQuery.trim()) return jobs;
+        const query = searchQuery.toLowerCase().trim();
+        return jobs.filter(j => 
+            j.address?.toLowerCase().includes(query) ||
+            j.description?.toLowerCase().includes(query) ||
+            j.jobNumber?.toString().includes(query) ||
+            `#${j.jobNumber}`.includes(query)
+        );
+    }, [jobs, searchQuery]);
+
     const activeJobs = useMemo(() =>
-        jobs.filter(j => j.status === JobStatus.ASSIGNED || j.status === JobStatus.ACCEPTED || j.status === JobStatus.REACHED_OUT || j.status === JobStatus.APPT_SET || j.status === JobStatus.SALE),
-        [jobs]
+        filteredJobs.filter(j => 
+            j.status === JobStatus.ASSIGNED || 
+            j.status === JobStatus.ACCEPTED || 
+            j.status === JobStatus.REACHED_OUT || 
+            j.status === JobStatus.APPT_SET || 
+            j.status === JobStatus.SALE ||
+            j.status === JobStatus.INVOICE_REQUESTED
+        ),
+        [filteredJobs]
     );
 
     const pendingCount = useMemo(() => jobs.filter(j => j.status === JobStatus.ASSIGNED).length, [jobs]);
@@ -81,7 +102,7 @@ const VendorDashboard: React.FC = () => {
         >
             <Card.Content>
                 <View style={styles.orderTop}>
-                    <Text variant="labelSmall" style={styles.orderId}>#JOB-{(job.id || '').substring(0, 8).toUpperCase()}</Text>
+                    <Text variant="labelSmall" style={styles.orderId}>JOB ID: #{job.jobNumber || '...'}</Text>
                     {job.urgency === Urgency.IMMEDIATE && (
                         <Chip compact style={styles.urgentChip} textStyle={styles.urgentText}>IMMEDIATE</Chip>
                     )}
@@ -103,16 +124,27 @@ const VendorDashboard: React.FC = () => {
                 <View style={styles.orderBottom}>
                     <View style={styles.customerRow}>
                         <Avatar.Text size={24} label={(job.address || '??').substring(0, 2).toUpperCase()} style={styles.miniAvatar} />
-                        <Text variant="labelSmall" style={styles.customerType}>{job.status === JobStatus.ASSIGNED ? 'NEW ASSIGNMENT' : 'ACTIVE PROJECT'}</Text>
+                        <Text variant="labelSmall" style={[
+                            styles.customerType, 
+                            job.status === JobStatus.INVOICE_REQUESTED && { color: '#F97316', fontWeight: 'bold' }
+                        ]}>
+                            {job.status === JobStatus.ASSIGNED ? 'NEW ASSIGNMENT' : 
+                             job.status === JobStatus.INVOICE_REQUESTED ? 'INVOICE REQUESTED' : 'ACTIVE PROJECT'}
+                        </Text>
                     </View>
                     <Button
                         mode="contained"
                         compact
-                        style={[styles.quoteBtn, job.status === JobStatus.ASSIGNED && { backgroundColor: '#F59E0B' }]}
+                        style={[
+                            styles.quoteBtn, 
+                            job.status === JobStatus.ASSIGNED && { backgroundColor: '#F59E0B' },
+                            job.status === JobStatus.INVOICE_REQUESTED && { backgroundColor: '#F97316' }
+                        ]}
                         labelStyle={{ fontSize: 10, fontWeight: 'bold' }}
                         onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
                     >
-                        {job.status === JobStatus.ASSIGNED ? 'ACCEPT JOB' : 'VIEW DETAILS'}
+                        {job.status === JobStatus.ASSIGNED ? 'ACCEPT JOB' : 
+                         job.status === JobStatus.INVOICE_REQUESTED ? 'SUBMIT INVOICE' : 'VIEW DETAILS'}
                     </Button>
                 </View>
             </Card.Content>
@@ -198,6 +230,17 @@ const VendorDashboard: React.FC = () => {
                     />
                 </View>
 
+                <Searchbar
+                    placeholder="Search by Job # or Address"
+                    onChangeText={setSearchQuery}
+                    value={searchQuery}
+                    style={styles.searchBar}
+                    inputStyle={styles.searchInput}
+                    iconColor="#6366F1"
+                    placeholderTextColor="#94A3B8"
+                    elevation={0}
+                />
+
                 {isLoading ? (
                     <DashboardStatsSkeleton />
                 ) : (
@@ -230,9 +273,9 @@ const VendorDashboard: React.FC = () => {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={{ flex: 1 }}>
-                <FlashList
+                <VendorList
                     data={isLoading ? [] : activeJobs}
-                    keyExtractor={item => item.id}
+                    keyExtractor={(item: Job) => item.id}
                     renderItem={renderOrderCard}
                     estimatedItemSize={250}
                     ListHeaderComponent={() => (
@@ -360,6 +403,18 @@ const styles = StyleSheet.create({
     },
     mainAvatar: {
         backgroundColor: '#6366F1',
+    },
+    searchBar: {
+        backgroundColor: '#F1F5F9',
+        borderRadius: 16,
+        marginBottom: 24,
+        height: 48,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    searchInput: {
+        fontSize: 14,
+        minHeight: 0,
     },
     statsRow: {
         flexDirection: 'row',

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useMemo, memo, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Text, Card, Button, Avatar, IconButton, Searchbar, Surface, Snackbar } from 'react-native-paper';
+import { Text, Card, Button, Avatar, IconButton, Searchbar, Surface, Snackbar, Chip } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useJobs } from '../context/JobContext';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
@@ -11,8 +11,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 type AssignVendorRouteProp = RouteProp<RootStackParamList, 'AssignVendor'>;
 
-const VendorItem = memo(({ item, onAssign, isLoading }: { item: User, onAssign: (vendorId: string) => void, isLoading: boolean }) => (
-    <Card style={styles.vendorCard} elevation={1}>
+const AnyFlashList = FlashList as any;
+
+const VendorItem = memo(({ item, onAssign, isLoading, isAssigned }: { item: User, onAssign: (vendorId: string) => void, isLoading: boolean, isAssigned: boolean }) => (
+    <Card style={[styles.vendorCard, isAssigned && { opacity: 0.8, backgroundColor: '#F8FAFC' }]} elevation={1}>
         <Card.Content style={styles.cardContent}>
             <View style={styles.vendorInfo}>
                 <Avatar.Text
@@ -29,16 +31,18 @@ const VendorItem = memo(({ item, onAssign, isLoading }: { item: User, onAssign: 
                     </View>
                 </View>
             </View>
-            <Button 
-                mode="contained" 
-                onPress={() => onAssign(item.id!)}
-                loading={isLoading}
-                disabled={isLoading}
-                style={styles.assignBtn}
-                labelStyle={{ fontSize: 12 }}
-            >
-                Assign
-            </Button>
+            {!isAssigned && (
+                <Button 
+                    mode="contained" 
+                    onPress={() => onAssign(item.id!)}
+                    loading={isLoading}
+                    disabled={isLoading}
+                    style={styles.assignBtn}
+                    labelStyle={{ fontSize: 12 }}
+                >
+                    Assign
+                </Button>
+            )}
         </Card.Content>
     </Card>
 ));
@@ -116,7 +120,7 @@ const AssignVendorScreen: React.FC = () => {
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <IconButton icon="chevron-left" size={24} onPress={() => navigation.goBack()} />
-                <Text variant="titleLarge" style={styles.title}>Assign Vendor</Text>
+                <Text variant="titleLarge" style={styles.title}>{job?.vendorId ? 'Reassign Vendor' : 'Assign Vendor'}</Text>
                 <View style={styles.headerSpacer} />
             </View>
 
@@ -124,6 +128,12 @@ const AssignVendorScreen: React.FC = () => {
                 <Surface style={styles.jobChip} elevation={1}>
                     <Text variant="labelSmall" style={styles.jobLabel}>TARGET JOB</Text>
                     <Text variant="titleMedium" style={styles.jobAddress} numberOfLines={1}>{job?.address || 'Loading...'}</Text>
+                    {job?.vendor && (
+                        <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center' }}>
+                            <Text variant="labelSmall" style={{ color: '#64748B' }}>CURRENTLY: </Text>
+                            <Chip compact style={{ backgroundColor: '#F1F5F9' }} textStyle={{ color: '#475569', fontSize: 10 }}>{job.vendor.name}</Chip>
+                        </View>
+                    )}
                 </Surface>
             </View>
 
@@ -136,17 +146,25 @@ const AssignVendorScreen: React.FC = () => {
             />
 
             <View style={{ flex: 1 }}>
-                <FlashList
+                <AnyFlashList
                     data={filteredVendors}
-                    keyExtractor={(item) => item.id!}
+                    keyExtractor={(item: any) => item.id!}
                     contentContainerStyle={styles.listContent}
                     estimatedItemSize={100}
-                    renderItem={({ item }) => (
-                        <VendorItem 
-                            item={item} 
-                            onAssign={handleAssign} 
-                            isLoading={isLoading} 
-                        />
+                    renderItem={({ item }: any) => (
+                        <View>
+                            <VendorItem 
+                                item={item} 
+                                onAssign={handleAssign} 
+                                isLoading={isLoading} 
+                                isAssigned={job?.vendorId === item.id}
+                            />
+                            {job?.vendorId === item.id && (
+                                <View style={styles.currentBadgeOverlay}>
+                                    <Chip icon="check-circle" style={styles.currentChip} textStyle={styles.currentChipText}>CURRENT ASSIGNMENT</Chip>
+                                </View>
+                            )}
+                        </View>
                     )}
                     ListEmptyComponent={() => (
                         <View style={styles.emptyBox}>
@@ -281,6 +299,20 @@ const styles = StyleSheet.create({
     snackbar: {
         borderRadius: 12,
         backgroundColor: '#1E293B',
+    },
+    currentBadgeOverlay: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+    },
+    currentChip: {
+        backgroundColor: '#EEF2FF',
+        height: 24,
+    },
+    currentChipText: {
+        color: '#6366F1',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
 });
 

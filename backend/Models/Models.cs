@@ -46,6 +46,9 @@ public class Job
     [Key]
     public Guid Id { get; set; }
 
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    public int JobNumber { get; set; }
+
     public Guid CustomerId { get; set; }
     
     [ForeignKey("CustomerId")]
@@ -80,6 +83,9 @@ public class Job
     public DateTime? WorkStartDate { get; set; }
     public string? CompletedPhotos { get; set; } // Comma separated URLs
     public bool IsInvoiced { get; set; } = false;
+    public string? InvoiceDocumentUrl { get; set; }
+    public DateTime? InvoiceRequestedAt { get; set; }
+    public DateTime? InvoicedAt { get; set; }
 
     public List<JobNote> Notes { get; set; } = new();
 

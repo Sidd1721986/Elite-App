@@ -1,4 +1,4 @@
-package com.anonymous.multiuserauthapp
+package com.eliteservices.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

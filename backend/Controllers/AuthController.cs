@@ -86,7 +86,9 @@ public class AuthController : ControllerBase
     {
         var result = await _authService.RequestPasswordResetAsync(
             body.Email ?? string.Empty,
-            body.Role ?? string.Empty);
+            body.Role ?? string.Empty,
+            body.DeliveryMethod ?? "Email",
+            body.Phone);
 
         if (result.Status == ForgotPasswordRequestStatus.InvalidInput)
             return BadRequest(new { message = result.Message });
@@ -111,6 +113,21 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = error });
 
         return Ok(new { message = "Password updated. You can sign in." });
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("password-reset")]
+    [HttpPost("verify-reset-code")]
+    public async Task<IActionResult> VerifyResetCode([FromBody] VerifyResetCodeRequest body)
+    {
+        var (ok, error) = await _authService.VerifyResetCodeAsync(
+            body.Email ?? string.Empty,
+            body.Token ?? string.Empty);
+
+        if (!ok)
+            return BadRequest(new { message = error });
+
+        return Ok(new { message = "Code verified." });
     }
 }
 
@@ -141,6 +158,8 @@ public class ForgotPasswordRequest
 {
     public string Email { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
+    public string DeliveryMethod { get; set; } = "Email"; // "Email" or "Phone"
+    public string? Phone { get; set; }
 }
 
 public class ResetPasswordWithTokenRequest
@@ -148,4 +167,10 @@ public class ResetPasswordWithTokenRequest
     public string Email { get; set; } = string.Empty;
     public string Token { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
+}
+
+public class VerifyResetCodeRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string Token { get; set; } = string.Empty;
 }

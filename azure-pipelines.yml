@@ -80,7 +80,27 @@ stages:
   - stage: BuildAndPush
     displayName: Build image and push to ACR
     jobs:
+      - job: UnitTests
+        displayName: Run .NET Unit Tests
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UseDotNet@2
+            inputs:
+              packageType: 'sdk'
+              version: '10.x'
+          - script: dotnet test backend/EliteApp.API.csproj --configuration Release --logger "trx;LogFileName=testresults.trx"
+            displayName: 'Execute tests'
+            continueOnError: true # Safe until actual test projects are added
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: 'VSTest'
+              testResultsFiles: '**/testresults.trx'
+
       - job: Docker
+        dependsOn: UnitTests
+        displayName: Build and push image
         pool:
           vmImage: ubuntu-latest
         steps:

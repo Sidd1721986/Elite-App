@@ -21,11 +21,12 @@
     "clean:ios": "cd ios && rm -rf build DerivedData && cd ..",
     "clean:ios:all": "cd ios && rm -rf build DerivedData Pods Podfile.lock && cd ..",
     "lint": "eslint .",
+    "test": "jest",
     "postinstall": "cd ios && pod install && cd ..",
     "clean:deps": "node scripts/remove-node-modules.cjs && rm -f package-lock.json && npm install"
   },
   "engines": {
-    "node": ">=20.0.0 <21.0.0",
+    "node": ">=20.0.0",
     "npm": ">=10.0.0"
   },
   "dependencies": {
@@ -39,6 +40,7 @@
     "react-native-fast-image": "^8.6.3",
     "react-native-gesture-handler": "~2.21.0",
     "react-native-image-picker": "^8.2.1",
+    "react-native-document-picker": "^9.3.0",
     "react-native-paper": "^5.14.5",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-screens": "~4.10.0",
@@ -49,7 +51,6 @@
     "@babel/preset-env": "^7.29.2",
     "@babel/preset-react": "^7.28.5",
     "@babel/preset-typescript": "^7.28.5",
-    "@callstack/repack": "^5.2.5",
     "@react-native-community/cli": "15.1.3",
     "@react-native-community/cli-platform-android": "15.1.3",
     "@react-native-community/cli-platform-ios": "15.1.3",
@@ -61,15 +62,12 @@
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^30.0.0",
     "@types/react": "18.3.1",
-    "babel-loader": "^9.2.1",
     "graceful-fs": "^4.2.11",
     "jest": "^30.2.0",
     "react-test-renderer": "18.3.1",
     "semver": "^7.7.4",
-    "terser-webpack-plugin": "^5.4.0",
     "ts-jest": "^29.4.6",
-    "typescript": "~5.7.2",
-    "webpack": "^5.105.4"
+    "typescript": "~5.7.2"
   },
   "private": true
 }

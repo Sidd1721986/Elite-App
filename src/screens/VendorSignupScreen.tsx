@@ -1,13 +1,15 @@
 import * as React from 'react';
 import { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TextInput, Button, Text, Card, Snackbar, Divider } from 'react-native-paper';
+import { TextInput, Button, Text, Card, Snackbar, Divider, Menu } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
 import AppLogo from '../components/AppLogo';
+import { formatAddress, US_STATES } from '../utils/addressUtils';
+
 
 type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, 'VendorSignup'>;
 
@@ -18,11 +20,14 @@ interface Props {
 const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [address, setAddress] = useState('');
+    const [street, setStreet] = useState('');
+    const [city, setCity] = useState('');
+    const [zip, setZip] = useState('');
+    const [state, setState] = useState('');
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [referralSource, setReferralSource] = useState('');
+    const [showStateMenu, setShowStateMenu] = useState(false);
 
     const [loading, setLoading] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
@@ -32,7 +37,10 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
     const signupTimeoutRef = React.useRef<any>(null);
 
     const nameRef = React.useRef<any>(null);
-    const addressRef = React.useRef<any>(null);
+    const streetRef = React.useRef<any>(null);
+    const cityRef = React.useRef<any>(null);
+    const zipRef = React.useRef<any>(null);
+    const stateRef = React.useRef<any>(null);
     const emailRef = React.useRef<any>(null);
     const phoneRef = React.useRef<any>(null);
     const passwordRef = React.useRef<any>(null);
@@ -41,7 +49,9 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
 
     const handleSignup = async () => {
         setSubmitted(true);
-        if (!name || !email || !address || !phone || !password || !confirmPassword || !referralSource) {
+        const address = formatAddress({ street, city, zip, state });
+        
+        if (!name || !email || !street || !city || !zip || !state || !phone || !password || !confirmPassword || !referralSource) {
             setSnackbarMessage('Please fill in all required fields');
             setSnackbarVisible(true);
             return;
@@ -142,16 +152,80 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
                                     />
 
                                     <TextInput
-                                        ref={addressRef}
-                                        label={submitted && !address ? "Business Address *" : "Business Address"}
-                                        value={address}
-                                        onChangeText={setAddress}
+                                        ref={streetRef}
+                                        label={submitted && !street ? "Business Street Address *" : "Business Street Address"}
+                                        value={street}
+                                        onChangeText={setStreet}
                                         mode="outlined"
                                         style={styles.input}
                                         returnKeyType="next"
-                                        onSubmitEditing={() => emailRef.current?.focus()}
-                                        error={submitted && !address}
+                                        onSubmitEditing={() => cityRef.current?.focus()}
+                                        error={submitted && !street}
                                     />
+
+                                    <View style={styles.formRow}>
+                                        <TextInput
+                                            ref={cityRef}
+                                            label={submitted && !city ? "City *" : "City"}
+                                            value={city}
+                                            onChangeText={setCity}
+                                            mode="outlined"
+                                            style={[styles.input, { flex: 2, marginRight: 8 }]}
+                                            returnKeyType="next"
+                                            onSubmitEditing={() => zipRef.current?.focus()}
+                                            error={submitted && !city}
+                                        />
+                                        <TextInput
+                                            ref={zipRef}
+                                            label={submitted && !zip ? "Zip *" : "Zip"}
+                                            value={zip}
+                                            onChangeText={setZip}
+                                            mode="outlined"
+                                            style={[styles.input, { flex: 1.2, marginRight: 8 }]}
+                                            keyboardType="numeric"
+                                            returnKeyType="next"
+                                            onSubmitEditing={() => stateRef.current?.focus()}
+                                            error={submitted && !zip}
+                                        />
+                                        <Menu
+                                            visible={showStateMenu}
+                                            onDismiss={() => setShowStateMenu(false)}
+                                            anchor={
+                                                <TouchableOpacity 
+                                                    onPress={() => setShowStateMenu(true)}
+                                                    activeOpacity={1}
+                                                    style={{ flex: 1.2 }}
+                                                >
+                                                    <View pointerEvents="none">
+                                                        <TextInput
+                                                            ref={stateRef}
+                                                            label={submitted && !state ? "State *" : "State"}
+                                                            value={state}
+                                                            mode="outlined"
+                                                            style={styles.input}
+                                                            right={<TextInput.Icon icon="chevron-down" />}
+                                                            error={submitted && !state}
+                                                            editable={false}
+                                                        />
+                                                    </View>
+                                                </TouchableOpacity>
+                                            }
+                                        >
+                                            <ScrollView style={{ maxHeight: 250 }}>
+                                                {US_STATES.map((s) => (
+                                                    <Menu.Item
+                                                        key={s}
+                                                        onPress={() => {
+                                                            setState(s);
+                                                            setShowStateMenu(false);
+                                                            emailRef.current?.focus();
+                                                        }}
+                                                        title={s}
+                                                    />
+                                                ))}
+                                            </ScrollView>
+                                        </Menu>
+                                    </View>
 
                                     <TextInput
                                         ref={emailRef}
@@ -307,6 +381,10 @@ const styles = StyleSheet.create({
     input: {
         marginBottom: 16,
         backgroundColor: '#FFFFFF',
+    },
+    formRow: {
+        flexDirection: 'row',
+        marginBottom: 8,
     },
     divider: {
         marginVertical: 16,

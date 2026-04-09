@@ -70,26 +70,14 @@ const ResetPasswordScreen: React.FC = () => {
                     showsVerticalScrollIndicator={false}
                 >
                     <Text variant="headlineSmall" style={styles.title}>
-                        New password
+                        Choose new password
                     </Text>
                     <Text variant="bodyMedium" style={styles.subtitle}>
-                        Paste the reset code from your email, then choose a new password for{' '}
-                        <Text style={styles.emailEm}>{email}</Text>
+                        Identity verified for <Text style={styles.emailEm}>{email}</Text>. Please choose your new password below.
                     </Text>
 
                     <Card style={styles.card} elevation={0}>
                         <Card.Content style={styles.cardInner}>
-                            <TextInput
-                                label="Reset code"
-                                value={token}
-                                onChangeText={setToken}
-                                autoCapitalize="none"
-                                mode="outlined"
-                                style={styles.input}
-                                outlineColor="#E2E8F0"
-                                activeOutlineColor="#6366F1"
-                                left={<TextInput.Icon icon="key-variant" color="#94A3B8" />}
-                            />
                             <TextInput
                                 label="New password"
                                 value={password}

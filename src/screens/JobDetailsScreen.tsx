@@ -1,10 +1,12 @@
 import * as React from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { View, ScrollView, StyleSheet, Linking } from 'react-native';
 import FastImage from 'react-native-fast-image';
 import { Text, Card, Button, Avatar, Divider, List, Chip, Surface, IconButton, ProgressBar, TextInput } from 'react-native-paper';
 import { useJobs } from '../context/JobContext';
 import { useAuth } from '../context/AuthContext';
 import { jobService } from '../services/jobService';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
+import DocumentPicker, { types } from 'react-native-document-picker';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { RootStackParamList, JobStatus, Urgency, User } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +22,8 @@ const getStatusStyle = (status: string) => {
         case 'ApptSet': return { color: '#EC4899', bg: '#FDF2F8', icon: 'calendar-check-outline' };
         case JobStatus.SALE: return { color: '#10B981', bg: '#ECFDF5', icon: 'currency-usd' };
         case JobStatus.COMPLETED: return { color: '#059669', bg: '#ECFDF5', icon: 'flag-checkered' };
+        case JobStatus.INVOICE_REQUESTED: return { color: '#F97316', bg: '#FFF7ED', icon: 'file-document-edit-outline' };
+        case JobStatus.INVOICED: return { color: '#0F172A', bg: '#F1F5F9', icon: 'file-check-outline' };
         default: return { color: '#64748B', bg: '#F1F5F9', icon: 'help-circle-outline' };
     }
 };
@@ -27,15 +31,20 @@ const getStatusStyle = (status: string) => {
 const JobDetailsScreen: React.FC = () => {
     const route = useRoute<JobDetailsRouteProp>();
     const navigation = useNavigation();
-    const { getJobById, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob } = useJobs();
+    const { getJobById, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, addJobPhotos } = useJobs();
     const { user, getApprovedVendors } = useAuth();
     const jobId = route.params?.jobId;
 
     const [approvedVendors, setApprovedVendors] = React.useState<User[]>([]);
     const [notes, setNotes] = React.useState<any[]>([]);
     const [noteContent, setNoteContent] = React.useState('');
+    const [invoiceUrl, setInvoiceUrl] = React.useState('');
+    const [newPhotoUrl, setNewPhotoUrl] = React.useState('');
+    const [showPhotoInput, setShowPhotoInput] = React.useState(false);
     const [isAssigning, setIsAssigning] = React.useState(false);
     const [isProcessing, setIsProcessing] = React.useState(false);
+    const [isUploading, setIsUploading] = React.useState(false);
+    const [uploadProgress, setUploadProgress] = React.useState(0);
 
     const job = jobId ? getJobById(jobId) : undefined;
 
@@ -96,6 +105,76 @@ const JobDetailsScreen: React.FC = () => {
         }
     };
 
+    const handleUploadFile = async (type: 'camera' | 'library') => {
+        const options = {
+            mediaType: 'photo' as const,
+            quality: 0.8 as const,
+        };
+
+        const result = type === 'camera' 
+            ? await launchCamera(options)
+            : await launchImageLibrary(options);
+
+        if (result.assets && result.assets[0]) {
+            const asset = result.assets[0];
+            setIsUploading(true);
+            setUploadProgress(0.5); // Mock progress for UI feel
+            
+            try {
+                // Construct file object for FormData
+                const fileToUpload = {
+                    uri: asset.uri,
+                    type: asset.type || 'image/jpeg',
+                    name: asset.fileName || 'upload.jpg',
+                };
+                
+                const uploadResult = await jobService.uploadFile(fileToUpload);
+                if (uploadResult && uploadResult.url) {
+                    setUploadProgress(1);
+                    await uploadInvoice(job.id, uploadResult.url);
+                }
+            } catch (error) {
+                console.error('Upload failed:', error);
+            } finally {
+                setIsUploading(false);
+                setUploadProgress(0);
+            }
+        }
+    };
+
+    const handlePickDocument = async () => {
+        try {
+            const result = await DocumentPicker.pickSingle({
+                type: [types.pdf, types.images, types.doc, types.docx],
+                copyTo: 'cachesDirectory',
+            });
+
+            setIsUploading(true);
+            setUploadProgress(0.5);
+
+            const fileToUpload = {
+                uri: result.fileCopyUri || result.uri,
+                type: result.type || 'application/pdf',
+                name: result.name || 'document.pdf',
+            };
+
+            const uploadResult = await jobService.uploadFile(fileToUpload);
+            if (uploadResult && uploadResult.url) {
+                setUploadProgress(1);
+                await uploadInvoice(job.id, uploadResult.url);
+            }
+        } catch (err) {
+            if (DocumentPicker.isCancel(err)) {
+                // User cancelled
+            } else {
+                console.error('Document pick error:', err);
+            }
+        } finally {
+            setIsUploading(false);
+            setUploadProgress(0);
+        }
+    };
+
     const statusStyle = getStatusStyle(job.status);
 
     return (
@@ -121,7 +200,7 @@ const JobDetailsScreen: React.FC = () => {
 
                     <View style={styles.heroSection}>
                         <View style={styles.heroInfo}>
-                            <Text variant="labelSmall" style={styles.idLabel}>ORDER #{(job.id || '').substring(0, 8).toUpperCase()}</Text>
+                            <Text variant="labelSmall" style={styles.idLabel}>ORDER #{job.jobNumber || '...'}</Text>
                             <Text variant="headlineSmall" style={styles.addressTitle}>{job.address}</Text>
                         </View>
                         <Chip
@@ -151,23 +230,126 @@ const JobDetailsScreen: React.FC = () => {
                     </View>
                 </Surface>
 
+                {/* Invoicing Section for Vendor */}
+                {user?.role === 'Vendor' && job.status === JobStatus.INVOICE_REQUESTED && (
+                    <View style={{ paddingHorizontal: 24, marginBottom: 32 }}>
+                        <Text variant="titleMedium" style={styles.sectionTitle}>Submit Invoice Document</Text>
+                        <Surface style={styles.invoiceUploadBox} elevation={0}>
+                            {isUploading ? (
+                                <View style={{ padding: 20, alignItems: 'center' }}>
+                                    <ProgressBar progress={uploadProgress} color="#6366F1" style={{ width: '100%', height: 8, borderRadius: 4 }} />
+                                    <Text variant="labelMedium" style={{ marginTop: 12, color: '#64748B' }}>Uploading invoice document...</Text>
+                                </View>
+                            ) : (
+                                <View>
+                                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                                        <Button 
+                                            mode="contained" 
+                                            style={{ flex: 1, borderRadius: 12, backgroundColor: '#6366F1' }}
+                                            icon="camera"
+                                            onPress={() => handleUploadFile('camera')}
+                                        >
+                                            Take Photo
+                                        </Button>
+                                        <Button 
+                                            mode="contained" 
+                                            style={{ flex: 1, borderRadius: 12, backgroundColor: '#0F172A' }}
+                                            icon="file-image-outline"
+                                            onPress={() => handleUploadFile('library')}
+                                        >
+                                            Gallery
+                                        </Button>
+                                    </View>
+                                    <View style={{ marginTop: 12 }}>
+                                        <Button 
+                                            mode="outlined" 
+                                            style={{ borderRadius: 12, borderColor: '#CBD5E1' }}
+                                            icon="file-document-outline"
+                                            onPress={handlePickDocument}
+                                        >
+                                            Browse Files (PDF/Docs)
+                                        </Button>
+                                    </View>
+                                    <Divider style={{ marginVertical: 16 }} />
+                                    <TextInput
+                                        placeholder="Or paste external link..."
+                                        value={invoiceUrl}
+                                        onChangeText={setInvoiceUrl}
+                                        mode="outlined"
+                                        dense
+                                        style={styles.noteInput}
+                                        outlineColor="#E2E8F0"
+                                        activeOutlineColor="#6366F1"
+                                    />
+                                    {invoiceUrl.trim().length > 0 && (
+                                        <Button 
+                                            mode="text" 
+                                            onPress={async () => {
+                                                setIsProcessing(true);
+                                                try {
+                                                    await uploadInvoice(job.id, invoiceUrl);
+                                                    setInvoiceUrl('');
+                                                } catch (e) { console.error(e); }
+                                                finally { setIsProcessing(false); }
+                                            }}
+                                        >
+                                            Submit manual link
+                                        </Button>
+                                    )}
+                                </View>
+                            )}
+                        </Surface>
+                    </View>
+                )}
+
+                {/* View Invoice Section */}
+                {job.invoiceDocumentUrl && (
+                    <View style={{ paddingHorizontal: 24, marginBottom: 32 }}>
+                        <Text variant="titleMedium" style={styles.sectionTitle}>Financial Documents</Text>
+                        <Surface style={styles.contactCard} elevation={0}>
+                            <View style={styles.contactRow}>
+                                <Avatar.Icon size={48} icon="file-pdf-box" style={{ backgroundColor: '#FEF2F2' }} color="#EF4444" />
+                                <View style={styles.contactInfo}>
+                                    <Text variant="titleMedium" style={styles.contactName}>Job Invoice</Text>
+                                    <Text variant="labelSmall" style={styles.contactType}>Document uploaded by vendor</Text>
+                                </View>
+                                <Button 
+                                    mode="outlined" 
+                                    icon="open-in-new"
+                                    onPress={() => job.invoiceDocumentUrl && Linking.openURL(job.invoiceDocumentUrl)}
+                                    style={{ borderRadius: 12 }}
+                                >
+                                    View
+                                </Button>
+                            </View>
+                        </Surface>
+                    </View>
+                )}
+
                 <View style={styles.contentBody}>
-                    {user?.role === 'Admin' && job.status === JobStatus.SUBMITTED && (
+                    {user?.role === 'Admin' && job.status !== JobStatus.COMPLETED && job.status !== JobStatus.INVOICED && (
                         <View style={styles.section}>
-                            <Text variant="titleMedium" style={styles.sectionTitle}>Assign to Vendor</Text>
+                            <Text variant="titleMedium" style={styles.sectionTitle}>
+                                {job.vendorId ? 'Change Assigned Vendor' : 'Assign to Vendor'}
+                            </Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -24, paddingHorizontal: 24 }}>
                                 {approvedVendors.map(vendor => (
-                                    <Surface key={vendor.id} style={styles.vendorPickerCard} elevation={1}>
+                                    <Surface key={vendor.id} style={[styles.vendorPickerCard, job.vendorId === vendor.id && { borderColor: '#6366F1', borderWidth: 2 }]} elevation={1}>
                                         <Avatar.Text size={40} label={vendor.name?.[0] || 'V'} style={{ backgroundColor: '#EEF2FF' }} color="#6366F1" />
-                                        <Text variant="labelLarge" style={{ marginTop: 8, fontWeight: 'bold' }}>{vendor.name || 'Vendor'}</Text>
-                                        <Button
-                                            mode="contained"
-                                            compact
-                                            onPress={() => assignVendor(job.id, vendor.id!)}
-                                            style={{ marginTop: 8, borderRadius: 8 }}
-                                        >
-                                            Assign
-                                        </Button>
+                                        <Text variant="labelLarge" style={{ marginTop: 8, fontWeight: 'bold' }} numberOfLines={1}>{vendor.name || 'Vendor'}</Text>
+                                        {job.vendorId === vendor.id ? (
+                                            <Chip icon="check-circle" style={{ marginTop: 8, backgroundColor: '#EEF2FF' }} textStyle={{ color: '#6366F1', fontSize: 10 }}>Current</Chip>
+                                        ) : (
+                                            <Button
+                                                mode="contained"
+                                                compact
+                                                onPress={() => assignVendor(job.id, vendor.id!)}
+                                                style={{ marginTop: 8, borderRadius: 8 }}
+                                                labelStyle={{ fontSize: 11 }}
+                                            >
+                                                {job.vendorId ? 'Switch' : 'Assign'}
+                                            </Button>
+                                        )}
                                     </Surface>
                                 ))}
                             </ScrollView>
@@ -191,14 +373,56 @@ const JobDetailsScreen: React.FC = () => {
                         </Card>
                     </View>
 
-                    {/* Job Photos Section */}
                     <View style={styles.section}>
-                        <Text variant="titleMedium" style={styles.sectionTitle}>Request Photos</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <Text variant="titleMedium" style={[styles.sectionTitle, { marginBottom: 0 }]}>Request Photos</Text>
+                            {user?.role === 'Vendor' && (
+                                <Button 
+                                    mode="text" 
+                                    compact 
+                                    icon={showPhotoInput ? "close" : "plus-circle-outline"}
+                                    onPress={() => setShowPhotoInput(!showPhotoInput)}
+                                    textColor="#6366F1"
+                                >
+                                    {showPhotoInput ? "Cancel" : "Add Photo"}
+                                </Button>
+                            )}
+                        </View>
                         <Surface style={styles.photosBox} elevation={0}>
+                            {showPhotoInput && (
+                                <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 12 }}>
+                                    <TextInput
+                                        placeholder="Paste image URL here..."
+                                        value={newPhotoUrl}
+                                        onChangeText={setNewPhotoUrl}
+                                        mode="outlined"
+                                        style={{ backgroundColor: '#FFF', fontSize: 13 }}
+                                        dense
+                                        outlineColor="#E2E8F0"
+                                        activeOutlineColor="#6366F1"
+                                        right={
+                                            <TextInput.Icon 
+                                                icon="send" 
+                                                onPress={async () => {
+                                                    if (!newPhotoUrl.trim()) return;
+                                                    setIsProcessing(true);
+                                                    try {
+                                                        await addJobPhotos(job.id, [newPhotoUrl]);
+                                                        setNewPhotoUrl('');
+                                                        setShowPhotoInput(false);
+                                                    } catch (e) { console.error(e); }
+                                                    finally { setIsProcessing(false); }
+                                                }}
+                                                disabled={!newPhotoUrl.trim() || isProcessing}
+                                            />
+                                        }
+                                    />
+                                </View>
+                            )}
                             {job.photos && job.photos.length > 0 ? (
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
                                     {job.photos.map((uri, index) => uri ? (
-                                        <View key={index} style={styles.photoWrapper}>
+                                        <View key={uri} style={styles.photoWrapper}>
                                             <FastImage 
                                                 source={{ uri, priority: FastImage.priority.normal }} 
                                                 style={styles.photoThumbnail} 
@@ -223,7 +447,7 @@ const JobDetailsScreen: React.FC = () => {
                             <Surface style={[styles.photosBox, { borderColor: '#10B98120', backgroundColor: '#F0FDF430' }]} elevation={0}>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
                                     {job.completedPhotos.map((uri, index) => uri ? (
-                                        <View key={index} style={styles.photoWrapper}>
+                                        <View key={uri} style={styles.photoWrapper}>
                                             <FastImage 
                                                 source={{ uri, priority: FastImage.priority.normal }} 
                                                 style={[styles.photoThumbnail, { borderColor: '#10B981' }]} 
@@ -484,7 +708,37 @@ const JobDetailsScreen: React.FC = () => {
                         Finalize & Complete
                     </Button>
                 )}
-                {job.status === JobStatus.COMPLETED && (
+                {user?.role === 'Admin' && job.status === JobStatus.COMPLETED && (
+                    <Button
+                        mode="contained"
+                        style={styles.mainActionBtn}
+                        contentStyle={{ height: 56 }}
+                        buttonColor="#6366F1"
+                        icon="file-document-outline"
+                        onPress={async () => {
+                            setIsProcessing(true);
+                            try {
+                                await requestInvoice(job.id);
+                            } catch (e) { console.error(e); }
+                            finally { setIsProcessing(false); }
+                        }}
+                        loading={isProcessing}
+                    >
+                        Request Vendor Invoice
+                    </Button>
+                )}
+                {job.status === JobStatus.INVOICE_REQUESTED && user?.role === 'Admin' && (
+                    <Button
+                        mode="contained"
+                        style={styles.mainActionBtn}
+                        contentStyle={{ height: 56 }}
+                        buttonColor="#F97316"
+                        disabled
+                    >
+                        Pending Vendor Response
+                    </Button>
+                )}
+                {job.status === JobStatus.INVOICED && (
                     <Button
                         mode="contained"
                         style={styles.mainActionBtn}
@@ -492,7 +746,7 @@ const JobDetailsScreen: React.FC = () => {
                         buttonColor="#000"
                         onPress={() => { }}
                     >
-                        Order Archived
+                        Order Archived & Invoiced
                     </Button>
                 )}
             </View>
@@ -637,6 +891,13 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderTopWidth: 1,
         borderTopColor: '#F1F5F9',
+    },
+    invoiceUploadBox: {
+        backgroundColor: '#FFFFFF',
+        padding: 20,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
     },
     noteInput: {
         backgroundColor: '#FFFFFF',

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Platform, RefreshControl, ScrollView, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, Platform, RefreshControl, ScrollView, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import FastImage from 'react-native-fast-image';
 import {
@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import JobItem from '../components/JobItem';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { JobSkeleton, DashboardStatsSkeleton } from '../components/SkeletonLoader';
+import { formatAddress, parseAddress } from '../utils/addressUtils';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -49,7 +50,10 @@ const CustomerDashboard: React.FC = () => {
     }, [refreshJobs, refreshInbox]);
 
     // Form States for New Job
-    const [address, setAddress] = useState(user?.address || '');
+    const [street, setStreet] = useState('');
+    const [city, setCity] = useState('');
+    const [zip, setZip] = useState('');
+    const [state, setState] = useState('');
     const [description, setDescription] = useState('');
     const [urgency, setUrgency] = useState<Urgency>(Urgency.NO_RUSH);
     const [otherDetails, setOtherDetails] = useState('');
@@ -57,6 +61,7 @@ const CustomerDashboard: React.FC = () => {
     const [contactEmail, setContactEmail] = useState(user?.email || '');
     const [photos, setPhotos] = useState<string[]>([]);
     const [showUrgencyMenu, setShowUrgencyMenu] = useState(false);
+    const [showStateMenu, setShowStateMenu] = useState(false);
 
     const handleLogout = useCallback(async () => {
         setSettingsMenuVisible(false);
@@ -100,13 +105,21 @@ const CustomerDashboard: React.FC = () => {
         setUrgency(Urgency.NO_RUSH);
         setPhotos([]);
         setEditingJobId(null);
-        setAddress(user?.address || '');
+        
+        const parts = parseAddress(user?.address);
+        setStreet(parts.street);
+        setCity(parts.city);
+        setZip(parts.zip);
+        setState(parts.state);
+        
         setContactPhone(user?.phone || '');
         setContactEmail(user?.email || '');
-    }, [user?.address, user?.phone, user?.email]);
+    }, [user]);
 
     const handleSubmitJob = useCallback(async () => {
-        if (!address.trim() || !description.trim() || !contactPhone.trim() || !contactEmail.trim()) {
+        const address = formatAddress({ street, city, zip, state });
+        
+        if (!street.trim() || !city.trim() || !zip.trim() || !state.trim() || !description.trim() || !contactPhone.trim() || !contactEmail.trim()) {
             setSnackbarMessage('Please fill in all mandatory fields (Address, Description, Phone, and Email)');
             setSnackbarVisible(true);
             return;
@@ -156,7 +169,7 @@ const CustomerDashboard: React.FC = () => {
             setSnackbarMessage(errorMessage);
             setSnackbarVisible(true);
         }
-    }, [address, description, addJob, updateJob, user, urgency, otherDetails, photos, editingJobId, clearForm, contactPhone, contactEmail]);
+    }, [street, city, zip, state, description, addJob, updateJob, user, urgency, otherDetails, photos, editingJobId, clearForm, contactPhone, contactEmail]);
 
     const handleViewDetails = useCallback((jobId: string) => {
         navigation.navigate('JobDetails', { jobId });
@@ -166,7 +179,11 @@ const CustomerDashboard: React.FC = () => {
         const jobToEdit = getJobById(jobId);
         if (jobToEdit) {
             setEditingJobId(jobId);
-            setAddress(jobToEdit.address);
+            const parts = parseAddress(jobToEdit.address);
+            setStreet(parts.street);
+            setCity(parts.city);
+            setZip(parts.zip);
+            setState(parts.state);
             setDescription(jobToEdit.description);
             setUrgency(jobToEdit.urgency);
             setOtherDetails(jobToEdit.otherDetails || '');
@@ -492,13 +509,66 @@ const CustomerDashboard: React.FC = () => {
                     </Text>
                     <ScrollView showsVerticalScrollIndicator={false}>
                         <TextInput
-                            label="Service Address *"
-                            value={address}
-                            onChangeText={setAddress}
+                            label="Service Street Address *"
+                            value={street}
+                            onChangeText={setStreet}
                             mode="outlined"
                             style={styles.modalInput}
                             left={<TextInput.Icon icon="map-marker-outline" />}
                         />
+
+                        <View style={styles.addressRow}>
+                            <TextInput
+                                label="City *"
+                                value={city}
+                                onChangeText={setCity}
+                                mode="outlined"
+                                style={[styles.modalInput, { flex: 2 }]}
+                            />
+                            <TextInput
+                                label="Zip *"
+                                value={zip}
+                                onChangeText={setZip}
+                                mode="outlined"
+                                style={[styles.modalInput, { flex: 1.2 }]}
+                                keyboardType="numeric"
+                            />
+                            <Menu
+                                visible={showStateMenu}
+                                onDismiss={() => setShowStateMenu(false)}
+                                anchor={
+                                    <TouchableOpacity 
+                                        onPress={() => setShowStateMenu(true)}
+                                        activeOpacity={1}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <View pointerEvents="none">
+                                            <TextInput
+                                                label="State *"
+                                                value={state}
+                                                mode="outlined"
+                                                style={styles.modalInput}
+                                                right={<TextInput.Icon icon="chevron-down" />}
+                                                editable={false}
+                                            />
+                                        </View>
+                                    </TouchableOpacity>
+                                }
+                            >
+                                <ScrollView style={{ maxHeight: 250 }}>
+                                    {US_STATES.map((s) => (
+                                        <Menu.Item
+                                            key={s}
+                                            onPress={() => {
+                                                setState(s);
+                                                setShowStateMenu(false);
+                                            }}
+                                            title={s}
+                                        />
+                                    ))}
+                                </ScrollView>
+                            </Menu>
+                        </View>
 
                         <TextInput
                             label="Description of Work *"
@@ -956,8 +1026,13 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     modalInput: {
-        marginBottom: 16,
+        marginBottom: 12,
         backgroundColor: '#FFFFFF',
+    },
+    addressRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 4,
     },
     formRow: {
         marginBottom: 24,

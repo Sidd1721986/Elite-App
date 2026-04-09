@@ -22,8 +22,25 @@ variables:
   - group: EliteApp-Production
 
 stages:
+  - stage: LintAndTest
+    displayName: Quality — Lint and Test
+    jobs:
+      - job: JSChecks
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 20.x
+          - script: npm ci
+            displayName: npm ci
+          - script: npm run lint
+            displayName: eslint
+          - script: npm test -- --passWithNoTests
+            displayName: jest
   - stage: MobileAndroid
     displayName: Mobile — Android Play bundle (AAB)
+    dependsOn: LintAndTest
     condition: |
       and(
         succeeded(),
@@ -70,7 +87,9 @@ stages:
 
   - stage: MobileiOS
     displayName: Mobile — iOS archive (IPA)
-    dependsOn: MobileAndroid
+    dependsOn: 
+      - MobileAndroid
+      - LintAndTest
     condition: |
       and(
         in(dependencies.MobileAndroid.result, 'Succeeded', 'Skipped'),
@@ -124,7 +143,7 @@ stages:
                 <string>$(APPLE_TEAM_ID)</string>
                 <key>provisioningProfiles</key>
                 <dict>
-                  <key>com.anonymous.multi-user-auth-app</key>
+                  <key>com.eliteservices.app</key>
                   <string>$(IOS_PROVISIONING_PROFILE_SPECIFIER)</string>
                 </dict>
               </dict>

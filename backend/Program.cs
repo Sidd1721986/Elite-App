@@ -272,6 +272,7 @@ if (app.Environment.IsProduction() &&
 
 // app.UseHttpsRedirection(); // Disable for easier local dev with Android emulator
 
+app.UseStaticFiles();
 app.UseResponseCompression();
 app.UseResponseCaching();
 

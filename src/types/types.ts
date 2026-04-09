@@ -60,6 +60,7 @@ export enum JobStatus {
   FOLLOW_UP = 'Follow Up',
   EXPIRED = 'Expired',
   COMPLETED = 'Completed',
+  INVOICE_REQUESTED = 'InvoiceRequested',
   INVOICED = 'Invoiced'
 }
 
@@ -86,6 +87,7 @@ export interface JobNote {
 
 export interface Job {
   id: string;
+  jobNumber: number;
   customerId: string;
   customer?: User;
   vendorId?: string;
@@ -106,6 +108,9 @@ export interface Job {
   workStartDate?: string;
   completedPhotos: string[];
   isInvoiced?: boolean;
+  invoiceDocumentUrl?: string;
+  invoiceRequestedAt?: string;
+  invoicedAt?: string;
   scheduledDate?: string;
   createdAt: string;
   notes?: JobNote[];

@@ -4,7 +4,8 @@ public enum ForgotPasswordRequestStatus
 {
     InvalidInput,
     Processed,
-    EmailDeliveryFailed
+    EmailDeliveryFailed,
+    SmsDeliveryFailed
 }
 
 public sealed record ForgotPasswordRequestResult(ForgotPasswordRequestStatus Status, string Message);

@@ -1,4 +1,4 @@
-package com.anonymous.multiuserauthapp
+package com.eliteservices.app
 
 import android.app.Application
 import com.facebook.react.PackageList

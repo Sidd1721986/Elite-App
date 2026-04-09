@@ -48,5 +48,27 @@ export const jobService = {
 
     async completeJob(jobId: string, completedPhotos?: string[]): Promise<Job> {
         return apiClient.post<Job>(`/jobs/${jobId}/complete`, { completedPhotos });
+    },
+
+    async requestInvoice(jobId: string): Promise<Job> {
+        return apiClient.post<Job>(`/jobs/${jobId}/request-invoice`, {});
+    },
+
+    async uploadInvoice(jobId: string, invoiceDocumentUrl: string): Promise<Job> {
+        return apiClient.post<Job>(`/jobs/${jobId}/upload-invoice`, { invoiceDocumentUrl });
+    },
+    async addJobPhotos(jobId: string, photos: string[]): Promise<Job> {
+        return apiClient.post<Job>(`/jobs/${jobId}/photos`, { photos });
+    },
+    async uploadFile(file: any): Promise<{ url: string }> {
+        const formData = new FormData();
+        formData.append('file', file);
+        return apiClient.request<{ url: string }>('/files/upload', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
     }
 };
