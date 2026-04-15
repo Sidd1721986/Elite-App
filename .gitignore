@@ -64,6 +64,9 @@ metro_cache/
 *.png
 *.log
 
+# Production appsettings
+backend/appsettings.Production.json
+
 # debug files
 minimal.js
 debug_index.js

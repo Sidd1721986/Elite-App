@@ -10,29 +10,6 @@ const STORAGE_KEY = '@jobs_cache';
 import { normalizeUser, normalizeJob } from '../utils/normalization';
 import { useAuth } from './AuthContext';
 
-// Ensure each user only sees their own jobs (except Admins who see all)
-const scopeJobsToUser = (jobs: Job[], user: User | null): Job[] => {
-    if (!user) return jobs;
-
-    const role = (user.role || '').toString();
-    if (role.toLowerCase() === 'admin') {
-        return jobs;
-    }
-
-    // Vendors: jobs assigned to this vendor
-    if (role.toLowerCase() === 'vendor') {
-        return jobs.filter(job => {
-            const vendorId = (job.vendorId || job.vendor?.id || '').toString();
-            return vendorId && user.id && vendorId === user.id.toString();
-        });
-    }
-
-    // Customers (and other non-admin roles): jobs created by this customer
-    return jobs.filter(job => {
-        const customerId = (job.customerId || job.customer?.id || '').toString();
-        return customerId && user.id && customerId === user.id.toString();
-    });
-};
 
 interface JobContextType {
     jobs: Job[];
@@ -47,6 +24,7 @@ interface JobContextType {
     requestInvoice: (jobId: string) => Promise<void>;
     uploadInvoice: (jobId: string, url: string) => Promise<void>;
     addJobPhotos: (jobId: string, photos: string[]) => Promise<void>;
+    removeJobPhoto: (jobId: string, photoUrl: string) => Promise<void>;
     getJobById: (jobId: string) => Job | undefined;
     isLoading: boolean;
     refreshJobs: () => Promise<void>;
@@ -79,8 +57,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (cachedJobs && isMounted.current) {
                     const parsed = JSON.parse(cachedJobs);
                     const normalized = Array.isArray(parsed) ? parsed.map(normalizeJob) : [];
-                    const scoped = scopeJobsToUser(normalized, user);
-                    setJobs(scoped);
+                    setJobs(normalized);
                     setIsLoading(false);
                 } else if (isMounted.current) {
                     // No cache: don't keep isLoading true until InteractionManager + network (can feel like a blank screen)
@@ -100,10 +77,8 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (isMounted.current) {
                     const jobsArray = Array.isArray(remoteJobs) ? remoteJobs : (remoteJobs && typeof remoteJobs === 'object' ? [remoteJobs] : []);
                     const normalized = jobsArray.map(normalizeJob);
-                    const scoped = scopeJobsToUser(normalized, user);
-                    setJobs(scoped);
+                    setJobs(normalized);
                     setError(null);
-                    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(scoped)).catch(() => { });
                 }
             } catch (err) {
                 if (isMounted.current) {
@@ -130,11 +105,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
             const newJob = await jobService.createJob(jobData);
             const normalized = normalizeJob(newJob);
-            setJobs(prevJobs => {
-                const updated = [normalized, ...prevJobs];
-                AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated)).catch(() => { });
-                return updated;
-            });
+            setJobs(prevJobs => [normalized, ...prevJobs]);
             setError(null);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to add job');
@@ -155,13 +126,9 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
             const updatedJob = await jobService.updateJob(jobId, updates);
             const normalized = normalizeJob(updatedJob);
-            setJobs(prevJobs => {
-                const updated = prevJobs.map(job =>
-                    job.id === jobId ? normalized : job
-                );
-                AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated)).catch(() => { });
-                return updated;
-            });
+            setJobs(prevJobs => prevJobs.map(job =>
+                job.id === jobId ? normalized : job
+            ));
             setError(null);
         } catch (err: any) {
             const msg = err?.message || 'Failed to update job';
@@ -281,7 +248,18 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, []);
 
-    // Memoize job lookup with a Map for O(1) access
+    const removeJobPhoto = useCallback(async (jobId: string, photoUrl: string) => {
+        try {
+            await jobService.removeJobPhoto(jobId, photoUrl);
+            const updatedJob = await jobService.getJobById(jobId);
+            const normalized = normalizeJob(updatedJob);
+            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to remove job photo');
+            throw err;
+        }
+    }, [refreshJobs]);
     const jobsMap = useMemo(() => {
         const map = new Map<string, Job>();
         jobs.forEach(job => map.set(job.id, job));
@@ -291,6 +269,24 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const getJobById = useCallback((jobId: string) => {
         return jobsMap.get(jobId);
     }, [jobsMap]);
+
+    // Debounced AsyncStorage persistence logic
+    // This ensures that frequent updates (like photo uploads) don't lock the UI with repeated JSON serialization
+    const lastSavedString = useRef<string>('');
+    useEffect(() => {
+        if (!user || jobs.length === 0) return;
+
+        const timer = setTimeout(() => {
+            const jobsString = JSON.stringify(jobs);
+            // Only write if content actually changed to avoid redundant disk I/O
+            if (jobsString !== lastSavedString.current) {
+                AsyncStorage.setItem(STORAGE_KEY, jobsString).catch(() => { });
+                lastSavedString.current = jobsString;
+            }
+        }, 800); // 800ms debounce
+
+        return () => clearTimeout(timer);
+    }, [jobs, user]);
 
     const value = useMemo(() => ({
         jobs,
@@ -305,6 +301,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         requestInvoice,
         uploadInvoice,
         addJobPhotos,
+        removeJobPhoto,
         getJobById,
         isLoading,
         refreshJobs,

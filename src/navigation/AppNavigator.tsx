@@ -6,10 +6,10 @@ import { User, UserRole, RootStackParamList } from '../types/types';
 import { ActivityIndicator, View, StyleSheet, Text, Pressable } from 'react-native';
 import { DevSettings } from 'react-native';
 
+import LandingScreen from '../screens/LandingScreen';
 import LoginScreen from '../screens/LoginScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
-import SignupRoleSelectorScreen from '../screens/SignupRoleSelectorScreen';
 import CustomerSignupScreen from '../screens/CustomerSignupScreen';
 import VendorSignupScreen from '../screens/VendorSignupScreen';
 import AdminDashboard from '../screens/AdminDashboard';
@@ -20,6 +20,9 @@ import AssignVendorScreen from '../screens/AssignVendorScreen';
 import ChatScreen from '../screens/ChatScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AccountDetailsScreen from '../screens/AccountDetailsScreen';
+import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
+import TermsOfServiceScreen from '../screens/TermsOfServiceScreen';
+import ContactSupportScreen from '../screens/ContactSupportScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -132,21 +135,19 @@ const AppNavigator: React.FC = () => {
             <NavigationContainer
                 theme={navTheme}
                 onReady={() => {
-                    if (__DEV__) {
-                        console.log('[Navigation] ready');
-                    }
+                    // Navigation is ready
                 }}
             >
             {!user ? (
                 <Stack.Navigator
                     detachInactiveScreens={false}
                     screenOptions={authScreenOptions}
-                    initialRouteName="Login"
+                    initialRouteName="Landing"
                 >
+                    <Stack.Screen name="Landing" component={LandingScreen} />
                     <Stack.Screen name="Login" component={LoginScreen} />
                     <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
                     <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-                    <Stack.Screen name="SignupRoleSelector" component={SignupRoleSelectorScreen} />
                     <Stack.Screen name="CustomerSignup" component={CustomerSignupScreen} />
                     <Stack.Screen name="VendorSignup" component={VendorSignupScreen} />
                 </Stack.Navigator>
@@ -179,6 +180,9 @@ const AppNavigator: React.FC = () => {
                     <Stack.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat', headerShown: false }} />
                     <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile Settings', headerShown: false }} />
                     <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} options={{ title: 'Account Details', headerShown: false }} />
+                    <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: 'Privacy Policy', headerShown: false }} />
+                    <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ title: 'Terms of Service', headerShown: false }} />
+                    <Stack.Screen name="ContactSupport" component={ContactSupportScreen} options={{ title: 'Help & Support', headerShown: false }} />
                 </Stack.Navigator>
             )}
             </NavigationContainer>

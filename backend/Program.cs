@@ -307,6 +307,10 @@ using (var scope = app.Services.CreateScope())
     var env = services.GetRequiredService<IHostEnvironment>();
     var configuration = services.GetRequiredService<IConfiguration>();
 
+    // WARNING: context.Database.Migrate() runs on every application startup.
+    // In a multi-replica production environment (like Azure Container Apps with scale > 1),
+    // this can cause race conditions or deployment failures if multiple replicas try to migrate at once.
+    // RECOMMENDED: For high-scale production, run migrations as a separate CI/CD step or a one-time job.
     context.Database.Migrate();
 
     const string adminEmail = "admin@elite.com";

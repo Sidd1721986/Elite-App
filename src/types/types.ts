@@ -23,6 +23,7 @@ export interface User {
   referralSource: string;
   isApproved?: boolean;
   isPhoneVerified?: boolean;
+  createdAt?: string;
 }
 
 export interface AuthContextType {
@@ -137,10 +138,10 @@ export interface Conversation {
 }
 
 export type RootStackParamList = {
-  Login: { passwordResetOk?: boolean } | undefined;
+  Landing: undefined;
+  Login: { passwordResetOk?: boolean; initialRole?: UserRole } | undefined;
   ForgotPassword: { initialEmail?: string; initialRole?: UserRole } | undefined;
   ResetPassword: { email: string; role: string; resetToken?: string };
-  SignupRoleSelector: undefined;
   CustomerSignup: undefined;
   VendorSignup: undefined;
   AdminDashboard: undefined;
@@ -152,4 +153,7 @@ export type RootStackParamList = {
   Chat: { otherUserId: string; otherUserName: string };
   Profile: undefined;
   AccountDetails: undefined;
+  PrivacyPolicy: undefined;
+  TermsOfService: undefined;
+  ContactSupport: undefined;
 };

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { View, ScrollView, StyleSheet, Linking } from 'react-native';
 import FastImage from 'react-native-fast-image';
-import { Text, Card, Button, Avatar, Divider, List, Chip, Surface, IconButton, ProgressBar, TextInput } from 'react-native-paper';
+import { Text, Card, Button, Avatar, Divider, List, Chip, Surface, IconButton, ProgressBar, TextInput, Menu, Portal } from 'react-native-paper';
 import { useJobs } from '../context/JobContext';
 import { useAuth } from '../context/AuthContext';
 import { jobService } from '../services/jobService';
@@ -41,8 +41,9 @@ const JobDetailsScreen: React.FC = () => {
     const [invoiceUrl, setInvoiceUrl] = React.useState('');
     const [newPhotoUrl, setNewPhotoUrl] = React.useState('');
     const [showPhotoInput, setShowPhotoInput] = React.useState(false);
-    const [isAssigning, setIsAssigning] = React.useState(false);
-    const [isProcessing, setIsProcessing] = React.useState(false);
+    const [isAsssignedVendorsLoading, setIsAssignedVendorsLoading] = React.useState(false);
+    const [showAddPhotoMenu, setShowAddPhotoMenu] = React.useState(false);
+    const [isDeletingPhoto, setIsDeletingPhoto] = React.useState<string | null>(null);
     const [isUploading, setIsUploading] = React.useState(false);
     const [uploadProgress, setUploadProgress] = React.useState(0);
 
@@ -105,7 +106,8 @@ const JobDetailsScreen: React.FC = () => {
         }
     };
 
-    const handleUploadFile = async (type: 'camera' | 'library') => {
+    const handlePhotoUpload = async (type: 'camera' | 'library') => {
+        setShowAddPhotoMenu(false);
         const options = {
             mediaType: 'photo' as const,
             quality: 0.8 as const,
@@ -118,10 +120,9 @@ const JobDetailsScreen: React.FC = () => {
         if (result.assets && result.assets[0]) {
             const asset = result.assets[0];
             setIsUploading(true);
-            setUploadProgress(0.5); // Mock progress for UI feel
+            setUploadProgress(0.3);
             
             try {
-                // Construct file object for FormData
                 const fileToUpload = {
                     uri: asset.uri,
                     type: asset.type || 'image/jpeg',
@@ -130,15 +131,27 @@ const JobDetailsScreen: React.FC = () => {
                 
                 const uploadResult = await jobService.uploadFile(fileToUpload);
                 if (uploadResult && uploadResult.url) {
+                    setUploadProgress(0.8);
+                    await addJobPhotos(job.id, [uploadResult.url]);
                     setUploadProgress(1);
-                    await uploadInvoice(job.id, uploadResult.url);
                 }
             } catch (error) {
-                console.error('Upload failed:', error);
+                console.error('Photo upload failed:', error);
             } finally {
                 setIsUploading(false);
                 setUploadProgress(0);
             }
+        }
+    };
+
+    const handleDeletePhoto = async (photoUrl: string) => {
+        setIsDeletingPhoto(photoUrl);
+        try {
+            await removeJobPhoto(job.id, photoUrl);
+        } catch (error) {
+            console.error('Error deleting photo:', error);
+        } finally {
+            setIsDeletingPhoto(null);
         }
     };
 
@@ -376,20 +389,37 @@ const JobDetailsScreen: React.FC = () => {
                     <View style={styles.section}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                             <Text variant="titleMedium" style={[styles.sectionTitle, { marginBottom: 0 }]}>Request Photos</Text>
-                            {user?.role === 'Vendor' && (
-                                <Button 
-                                    mode="text" 
-                                    compact 
-                                    icon={showPhotoInput ? "close" : "plus-circle-outline"}
-                                    onPress={() => setShowPhotoInput(!showPhotoInput)}
-                                    textColor="#6366F1"
+                            {(user?.role === 'Vendor' || user?.role === 'Customer') && (
+                                <Menu
+                                    visible={showAddPhotoMenu}
+                                    onDismiss={() => setShowAddPhotoMenu(false)}
+                                    anchor={
+                                        <Button 
+                                            mode="text" 
+                                            compact 
+                                            icon="plus-circle-outline"
+                                            onPress={() => setShowAddPhotoMenu(true)}
+                                            textColor="#6366F1"
+                                            loading={isUploading}
+                                        >
+                                            Add Photo
+                                        </Button>
+                                    }
                                 >
-                                    {showPhotoInput ? "Cancel" : "Add Photo"}
-                                </Button>
+                                    <Menu.Item leadingIcon="camera" onPress={() => handlePhotoUpload('camera')} title="Take Photo" />
+                                    <Menu.Item leadingIcon="image" onPress={() => handlePhotoUpload('library')} title="Gallery" />
+                                    <Menu.Item leadingIcon="link" onPress={() => setShowPhotoInput(true)} title="Paste Link" />
+                                </Menu>
                             )}
                         </View>
                         <Surface style={styles.photosBox} elevation={0}>
-                            {showPhotoInput && (
+                            {isUploading && (
+                                <View style={{ padding: 12 }}>
+                                    <ProgressBar progress={uploadProgress} color="#6366F1" style={{ height: 4, borderRadius: 2 }} />
+                                    <Text variant="labelSmall" style={{ marginTop: 4, textAlign: 'center', color: '#64748B' }}>Sharing photo...</Text>
+                                </View>
+                            )}
+                            {showPhotoInput && !isUploading && (
                                 <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 12 }}>
                                     <TextInput
                                         placeholder="Paste image URL here..."
@@ -416,6 +446,7 @@ const JobDetailsScreen: React.FC = () => {
                                                 disabled={!newPhotoUrl.trim() || isProcessing}
                                             />
                                         }
+                                        left={<TextInput.Icon icon="close" onPress={() => setShowPhotoInput(false)} />}
                                     />
                                 </View>
                             )}
@@ -428,14 +459,25 @@ const JobDetailsScreen: React.FC = () => {
                                                 style={styles.photoThumbnail} 
                                                 resizeMode={FastImage.resizeMode.cover}
                                             />
+                                            <IconButton
+                                                icon="close-circle"
+                                                size={20}
+                                                iconColor="#EF4444"
+                                                style={styles.deletePhotoBtn}
+                                                onPress={() => handleDeletePhoto(uri)}
+                                                loading={isDeletingPhoto === uri}
+                                                disabled={!!isDeletingPhoto}
+                                            />
                                         </View>
                                     ) : null)}
                                 </ScrollView>
                             ) : (
-                                <View style={styles.emptyPhotoContent}>
-                                    <IconButton icon="image-off-outline" size={32} iconColor="#CBD5E1" />
-                                    <Text variant="bodySmall" style={{ color: '#94A3B8' }}>No photos provided for this request.</Text>
-                                </View>
+                                !isUploading && (
+                                    <View style={styles.emptyPhotoContent}>
+                                        <IconButton icon="image-off-outline" size={32} iconColor="#CBD5E1" />
+                                        <Text variant="bodySmall" style={{ color: '#94A3B8' }}>No photos provided for this request.</Text>
+                                    </View>
+                                )
                             )}
                         </Surface>
                     </View>
@@ -917,6 +959,15 @@ const styles = StyleSheet.create({
     },
     photoWrapper: {
         marginRight: 12,
+        position: 'relative',
+    },
+    deletePhotoBtn: {
+        position: 'absolute',
+        top: -8,
+        right: -8,
+        backgroundColor: '#FFFFFF',
+        margin: 0,
+        zIndex: 10,
     },
     photoThumbnail: {
         width: 120,

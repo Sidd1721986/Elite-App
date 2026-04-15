@@ -27,6 +27,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [referralSource, setReferralSource] = useState('');
     const [showStateMenu, setShowStateMenu] = useState(false);
 
     const [loading, setLoading] = useState(false);
@@ -307,10 +308,10 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
 
                                     <Button
                                         mode="text"
-                                        onPress={() => navigation.navigate('SignupRoleSelector')}
+                                        onPress={() => navigation.navigate('Login', { initialRole: UserRole.VENDOR })}
                                         style={styles.backButton}
                                     >
-                                        Back to Role Selection
+                                        Already have an account? Log In
                                     </Button>
                                 </Card.Content>
                             </Card>

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, Linking } from 'react-native';
 import {
     Text,
     TextInput,
@@ -150,7 +150,13 @@ const ProfileScreen: React.FC = () => {
                     <View style={styles.avatarContainer}>
                         <Avatar.Text
                             size={80}
-                            label={(user.name || '??').substring(0, 2).toUpperCase()}
+                            label={(() => {
+                                const n = name.trim();
+                                if (!n) return '??';
+                                const parts = n.split(/\s+/);
+                                if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                                return n.substring(0, 2).toUpperCase();
+                            })()}
                             style={styles.avatar}
                         />
                         <View style={styles.roleBadge}>
@@ -287,8 +293,28 @@ const ProfileScreen: React.FC = () => {
                     <Text variant="titleMedium" style={styles.sectionTitle}>Account Details</Text>
                     <List.Item
                         title="Member Since"
-                        description={new Date(user.id ? parseInt(user.id.substring(0, 8), 16) * 1000 : Date.now()).toLocaleDateString()}
+                        description={user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
                         left={props => <List.Icon {...props} icon="calendar-outline" />}
+                    />
+                </View>
+
+                <Divider style={styles.divider} />
+
+                <View style={styles.accountSection}>
+                    <Text variant="titleMedium" style={styles.sectionTitle}>Legal & Support</Text>
+                    <List.Item
+                        title="Privacy Policy"
+                        description="View our privacy practices"
+                        onPress={() => navigation.navigate('PrivacyPolicy')}
+                        left={props => <List.Icon {...props} icon="shield-account-outline" />}
+                        right={props => <List.Icon {...props} icon="chevron-right" />}
+                    />
+                    <List.Item
+                        title="Contact Support"
+                        description="Need help? Contact us"
+                        onPress={() => navigation.navigate('ContactSupport')}
+                        left={props => <List.Icon {...props} icon="help-circle-outline" />}
+                        right={props => <List.Icon {...props} icon="chevron-right" />}
                     />
                 </View>
             </ScrollView>
@@ -420,6 +446,10 @@ const styles = StyleSheet.create({
         color: '#64748B',
         fontWeight: '700',
         paddingHorizontal: 12,
+    },
+    divider: {
+        marginVertical: 12,
+        backgroundColor: '#E2E8F0',
     }
 });
 

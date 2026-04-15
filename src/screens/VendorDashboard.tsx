@@ -18,14 +18,12 @@ type NavigationProp = StackNavigationProp<RootStackParamList>;
 const VendorList = FlashList as any;
 
 const VendorDashboard: React.FC = () => {
-    const { user, logout, deleteAccount } = useAuth();
+    const { user, logout } = useAuth();
     const { jobs, refreshJobs, isLoading } = useJobs();
     const { messageUnreadTotal, refreshInbox } = useChatInboxNotifications();
     const navigation = useNavigation<NavigationProp>();
     const [refreshing, setRefreshing] = React.useState(false);
     const [settingsMenuVisible, setSettingsMenuVisible] = React.useState(false);
-    const [deleteDialogVisible, setDeleteDialogVisible] = React.useState(false);
-    const [isDeleting, setIsDeleting] = React.useState(false);
     const [snackbarVisible, setSnackbarVisible] = React.useState(false);
     const [snackbarMessage, setSnackbarMessage] = React.useState('');
     const [searchQuery, setSearchQuery] = React.useState('');
@@ -45,24 +43,6 @@ const VendorDashboard: React.FC = () => {
         await logout();
     }, [logout]);
 
-    const handleDeleteAccount = useCallback(async () => {
-        setSettingsMenuVisible(false);
-        setDeleteDialogVisible(false);
-        setIsDeleting(true);
-        try {
-            const result = await deleteAccount();
-            if (result !== true) {
-                setSnackbarMessage(typeof result === 'string' ? result : 'Failed to delete account');
-                setSnackbarVisible(true);
-            }
-        } catch (error) {
-            setSnackbarMessage('An unexpected error occurred');
-            setSnackbarVisible(true);
-        } finally {
-            setIsDeleting(false);
-        }
-    }, [deleteAccount]);
-
     const filteredJobs = useMemo(() => {
         if (!searchQuery.trim()) return jobs;
         const query = searchQuery.toLowerCase().trim();
@@ -76,23 +56,32 @@ const VendorDashboard: React.FC = () => {
 
     const activeJobs = useMemo(() =>
         filteredJobs.filter(j => 
-            j.status === JobStatus.ASSIGNED || 
             j.status === JobStatus.ACCEPTED || 
             j.status === JobStatus.REACHED_OUT || 
             j.status === JobStatus.APPT_SET || 
             j.status === JobStatus.SALE ||
+            j.status === JobStatus.FOLLOW_UP ||
+            j.status === JobStatus.COMPLETED ||
             j.status === JobStatus.INVOICE_REQUESTED
         ),
         [filteredJobs]
     );
 
-    const pendingCount = useMemo(() => jobs.filter(j => j.status === JobStatus.ASSIGNED).length, [jobs]);
+    const pendingCount = useMemo(() => 
+        jobs.filter(j => j.status === JobStatus.ASSIGNED).length, 
+        [jobs]
+    );
+
+    const completedCount = useMemo(() => 
+        jobs.filter(j => j.status === JobStatus.INVOICED).length,
+        [jobs]
+    );
 
     const stats = useMemo(() => [
         { label: 'Active', value: activeJobs.length.toString(), icon: 'hammer-wrench', color: '#6366F1' },
         { label: 'Pending', value: pendingCount.toString(), icon: 'clock-outline', color: '#F59E0B' },
-        { label: 'Ranking', value: '#3', icon: 'trophy-outline', color: '#10B981' },
-    ], [activeJobs.length, pendingCount]);
+        { label: 'Completed', value: completedCount.toString(), icon: 'check-decagram', color: '#10B981' },
+    ], [activeJobs.length, pendingCount, completedCount]);
 
     const renderOrderCard = useCallback(({ item: job }: { item: Job }) => (
         <Card
@@ -123,9 +112,19 @@ const VendorDashboard: React.FC = () => {
 
                 <View style={styles.orderBottom}>
                     <View style={styles.customerRow}>
-                        <Avatar.Text size={24} label={(job.address || '??').substring(0, 2).toUpperCase()} style={styles.miniAvatar} />
+                        <Avatar.Icon 
+                            size={24} 
+                            icon={job.status === JobStatus.ASSIGNED ? 'clock-alert-outline' : 'account-outline'} 
+                            style={[
+                                styles.miniAvatar,
+                                job.status === JobStatus.ASSIGNED && { backgroundColor: '#FFFBEB' },
+                                job.status === JobStatus.INVOICE_REQUESTED && { backgroundColor: '#FFF7ED' }
+                            ]} 
+                            color={job.status === JobStatus.ASSIGNED ? '#F59E0B' : job.status === JobStatus.INVOICE_REQUESTED ? '#F97316' : '#94A3B8'}
+                        />
                         <Text variant="labelSmall" style={[
                             styles.customerType, 
+                            job.status === JobStatus.ASSIGNED && { color: '#F59E0B', fontWeight: 'bold' },
                             job.status === JobStatus.INVOICE_REQUESTED && { color: '#F97316', fontWeight: 'bold' }
                         ]}>
                             {job.status === JobStatus.ASSIGNED ? 'NEW ASSIGNMENT' : 
@@ -205,12 +204,6 @@ const VendorDashboard: React.FC = () => {
                             />
                             <Divider />
                             <Menu.Item leadingIcon="logout" onPress={handleLogout} title="Logout" />
-                            <Menu.Item 
-                                leadingIcon="delete-outline" 
-                                onPress={() => { setSettingsMenuVisible(false); setDeleteDialogVisible(true); }} 
-                                title="Delete Account" 
-                                titleStyle={{ color: '#EF4444' }} 
-                            />
                         </Menu>
                     </View>
                 </View>
@@ -257,16 +250,6 @@ const VendorDashboard: React.FC = () => {
                     </View>
                 )}
             </Surface>
-
-            <View style={styles.balanceCard}>
-                <Surface style={styles.balanceInner} elevation={2}>
-                    <View>
-                        <Text variant="labelSmall" style={styles.balanceLabel}>AVAILABLE BALANCE</Text>
-                        <Text variant="headlineMedium" style={styles.balanceValue}>$1,240.50</Text>
-                    </View>
-                    <Button mode="contained" buttonColor="#000" style={styles.payoutBtn}>Payout</Button>
-                </Surface>
-            </View>
         </View>
     ), [user, handleLogout, stats, settingsMenuVisible, navigation, messageUnreadTotal]);
 
@@ -303,21 +286,6 @@ const VendorDashboard: React.FC = () => {
                 contentContainerStyle={styles.listContent}
                 />
             </View>
-            <Portal>
-                <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
-                    <Dialog.Icon icon="alert-circle" color="#EF4444" />
-                    <Dialog.Title style={{ textAlign: 'center' }}>Delete Account?</Dialog.Title>
-                    <Dialog.Content>
-                        <Text variant="bodyMedium" style={{ textAlign: 'center', color: '#64748B' }}>
-                            Your profile will be deactivated. This action initiates a deletion request for your data.
-                        </Text>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setDeleteDialogVisible(false)} textColor="#64748B">Cancel</Button>
-                        <Button onPress={handleDeleteAccount} loading={isDeleting} textColor="#EF4444">Delete Account</Button>
-                    </Dialog.Actions>
-                </Dialog>
-            </Portal>
 
             <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={3000}>
                 {snackbarMessage}
@@ -436,29 +404,6 @@ const styles = StyleSheet.create({
         fontSize: 9,
         letterSpacing: 0.5,
     },
-    balanceCard: {
-        marginTop: -24,
-        paddingHorizontal: 24,
-    },
-    balanceInner: {
-        backgroundColor: '#6366F1',
-        borderRadius: 24,
-        padding: 20,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    balanceLabel: {
-        color: '#E0E7FF',
-        letterSpacing: 1,
-    },
-    balanceValue: {
-        color: '#FFFFFF',
-        fontWeight: '900',
-    },
-    payoutBtn: {
-        borderRadius: 12,
-    },
     headerList: {
         marginBottom: 24,
     },
@@ -486,12 +431,14 @@ const styles = StyleSheet.create({
     },
     urgentChip: {
         backgroundColor: '#FEF2F2',
-        height: 22,
+        borderRadius: 8,
     },
     urgentText: {
         color: '#EF4444',
-        fontSize: 9,
-        fontWeight: 'bold',
+        fontSize: 10,
+        fontWeight: '900',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
     },
     orderAddress: {
         fontWeight: '900',

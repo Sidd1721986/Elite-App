@@ -145,71 +145,38 @@ const ForgotPasswordScreen: React.FC = () => {
                                 </View>
                             )}
 
-                            <TextInput
-                                label="Email"
-                                value={email}
-                                onChangeText={setEmail}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                                mode="outlined"
-                                disabled={isCodeSent}
-                                style={styles.input}
-                                outlineColor="#E2E8F0"
-                                activeOutlineColor="#6366F1"
-                                left={<TextInput.Icon icon="email-outline" color="#94A3B8" />}
-                            />
-
-                            {!isCodeSent && deliveryMethod === 'Phone' && (
+                            {deliveryMethod === 'Email' ? (
                                 <TextInput
-                                    label="Phone Number"
-                                    value={phone}
-                                    onChangeText={setPhone}
-                                    keyboardType="phone-pad"
+                                    label="Email"
+                                    value={email}
+                                    onChangeText={setEmail}
+                                    keyboardType="email-address"
+                                    autoCapitalize="none"
                                     mode="outlined"
+                                    disabled={isCodeSent}
                                     style={styles.input}
                                     outlineColor="#E2E8F0"
                                     activeOutlineColor="#6366F1"
-                                    left={<TextInput.Icon icon="phone-outline" color="#94A3B8" />}
-                                    placeholder="+1234567890"
+                                    left={<TextInput.Icon icon="email-outline" color="#94A3B8" />}
                                 />
+                            ) : (
+                                !isCodeSent && (
+                                    <TextInput
+                                        label="Phone Number"
+                                        value={phone}
+                                        onChangeText={setPhone}
+                                        keyboardType="phone-pad"
+                                        mode="outlined"
+                                        style={styles.input}
+                                        outlineColor="#E2E8F0"
+                                        activeOutlineColor="#6366F1"
+                                        left={<TextInput.Icon icon="phone-outline" color="#94A3B8" />}
+                                        placeholder="+1234567890"
+                                    />
+                                )
                             )}
 
-                            {!isCodeSent && (
-                                <View style={styles.roleBlock}>
-                                    <Text variant="labelLarge" style={styles.roleLabel}>
-                                        Account type
-                                    </Text>
-                                    <Menu
-                                        visible={showRoleMenu}
-                                        onDismiss={() => setShowRoleMenu(false)}
-                                        anchor={
-                                            <Button
-                                                mode="outlined"
-                                                onPress={() => setShowRoleMenu(true)}
-                                                style={styles.roleButton}
-                                                labelStyle={styles.roleButtonLabel}
-                                                icon="chevron-down"
-                                                contentStyle={{ flexDirection: 'row-reverse' }}
-                                            >
-                                                {selectedRole}
-                                            </Button>
-                                        }
-                                        contentStyle={styles.menuContent}
-                                    >
-                                        {ROLES.map((role) => (
-                                            <Menu.Item
-                                                key={role}
-                                                onPress={() => {
-                                                    setSelectedRole(role);
-                                                    setShowRoleMenu(false);
-                                                }}
-                                                title={role}
-                                                titleStyle={{ fontSize: 14 }}
-                                            />
-                                        ))}
-                                    </Menu>
-                                </View>
-                            )}
+                                { /* Role selection removed - automatically handled via route parameters */ }
 
                             {!isCodeSent ? (
                                 <Button
@@ -314,19 +281,6 @@ const styles = StyleSheet.create({
     },
     cardInner: { paddingVertical: 8 },
     input: { marginBottom: 16, backgroundColor: 'rgba(255,255,255,0.6)' },
-    roleBlock: { marginBottom: 8 },
-    roleLabel: { color: '#64748B', marginBottom: 8, marginLeft: 4 },
-    roleButton: {
-        borderRadius: 12,
-        borderColor: '#E2E8F0',
-        height: 50,
-        justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.5)',
-    },
-    roleButtonLabel: { color: '#1E293B', fontSize: 15 },
-    menuContent: { backgroundColor: '#FFF', borderRadius: 16 },
-    primaryBtn: { marginTop: 20, borderRadius: 12, backgroundColor: '#6366F1' },
-    primaryBtnContent: { height: 52 },
     snackbar: { backgroundColor: '#1E293B', borderRadius: 12 },
     methodToggle: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
     methodBtn: { flex: 0.48, borderRadius: 12 },

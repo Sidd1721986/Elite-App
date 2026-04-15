@@ -14,7 +14,7 @@ type AssignVendorRouteProp = RouteProp<RootStackParamList, 'AssignVendor'>;
 const AnyFlashList = FlashList as any;
 
 const VendorItem = memo(({ item, onAssign, isLoading, isAssigned }: { item: User, onAssign: (vendorId: string) => void, isLoading: boolean, isAssigned: boolean }) => (
-    <Card style={[styles.vendorCard, isAssigned && { opacity: 0.8, backgroundColor: '#F8FAFC' }]} elevation={1}>
+    <Card style={[styles.vendorCard, isAssigned && { opacity: 0.9, backgroundColor: '#FFFFFF', borderColor: '#6366F1', borderWidth: 1.5 }]} elevation={2}>
         <Card.Content style={styles.cardContent}>
             <View style={styles.vendorInfo}>
                 <Avatar.Text
@@ -23,7 +23,19 @@ const VendorItem = memo(({ item, onAssign, isLoading, isAssigned }: { item: User
                     style={styles.avatar}
                 />
                 <View style={styles.vendorTextContainer}>
-                    <Text variant="titleMedium" style={styles.vendorName}>{item.name}</Text>
+                    <View style={styles.vendorHeaderRow}>
+                        <Text variant="titleMedium" style={styles.vendorName} numberOfLines={1}>{item.name}</Text>
+                        {isAssigned && (
+                            <Chip 
+                                icon="check-circle" 
+                                style={styles.currentChip} 
+                                textStyle={styles.currentChipText}
+                                compact
+                            >
+                                CURRENT
+                            </Chip>
+                        )}
+                    </View>
                     <Text variant="labelSmall" style={styles.vendorEmail}>{item.email}</Text>
                     <View style={styles.ratingRow}>
                         <IconButton icon="star" iconColor="#F59E0B" size={14} style={{ margin: 0, padding: 0 }} />
@@ -152,19 +164,12 @@ const AssignVendorScreen: React.FC = () => {
                     contentContainerStyle={styles.listContent}
                     estimatedItemSize={100}
                     renderItem={({ item }: any) => (
-                        <View>
-                            <VendorItem 
-                                item={item} 
-                                onAssign={handleAssign} 
-                                isLoading={isLoading} 
-                                isAssigned={job?.vendorId === item.id}
-                            />
-                            {job?.vendorId === item.id && (
-                                <View style={styles.currentBadgeOverlay}>
-                                    <Chip icon="check-circle" style={styles.currentChip} textStyle={styles.currentChipText}>CURRENT ASSIGNMENT</Chip>
-                                </View>
-                            )}
-                        </View>
+                        <VendorItem 
+                            item={item} 
+                            onAssign={handleAssign} 
+                            isLoading={isLoading} 
+                            isAssigned={job?.vendorId === item.id}
+                        />
                     )}
                     ListEmptyComponent={() => (
                         <View style={styles.emptyBox}>
@@ -269,6 +274,13 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#1E293B',
         fontSize: 14,
+        flex: 1,
+    },
+    vendorHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 8,
     },
     vendorEmail: {
         color: '#64748B',
@@ -300,14 +312,8 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         backgroundColor: '#1E293B',
     },
-    currentBadgeOverlay: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-    },
     currentChip: {
         backgroundColor: '#EEF2FF',
-        height: 24,
     },
     currentChipText: {
         color: '#6366F1',

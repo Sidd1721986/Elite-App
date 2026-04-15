@@ -93,7 +93,7 @@ const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
         );
 
         if (result === true) {
-            setSnackbarMessage('Customer account created successfully!');
+            setSnackbarMessage('User account created successfully!');
             setSnackbarVisible(true);
             signupTimeoutRef.current = setTimeout(() => {
                 setLoading(false);
@@ -115,7 +115,7 @@ const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
     }, []);
 
     const customerRoles = [
-        { label: 'Individual Customer', value: UserRole.CUSTOMER },
+        { label: 'Individual User', value: UserRole.CUSTOMER },
         { label: 'Realtor', value: UserRole.REALTOR },
         { label: 'Property manager', value: UserRole.PROPERTY_MANAGER },
         { label: 'Business', value: UserRole.BUSINESS },
@@ -145,7 +145,7 @@ const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
                                 <AppLogo size={56} showSurface={false} />
                             </View>
                             <Text variant="displaySmall" style={styles.title}>
-                                Customer Signup
+                                User Signup
                             </Text>
                             <Text variant="bodyLarge" style={styles.subtitle}>
                                 Create your account to request services
@@ -364,15 +364,15 @@ const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
                                         disabled={loading}
                                         style={styles.signupButton}
                                     >
-                                        Create Customer Account
+                                        Create User Account
                                     </Button>
 
                                     <Button
                                         mode="text"
-                                        onPress={() => navigation.navigate('SignupRoleSelector')}
+                                        onPress={() => navigation.navigate('Login', { initialRole: UserRole.CUSTOMER })}
                                         style={styles.backButton}
                                     >
-                                        Back to Role Selection
+                                        Already have an account? Log In
                                     </Button>
                                 </Card.Content>
                             </Card>

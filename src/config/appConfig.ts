@@ -15,7 +15,7 @@ export const DEV_API_HOST = '';
  * Optional: add `react-native-config` and read `PROD_API_BASE_URL` from a root `.env` if you prefer
  * env files over editing this constant.
  */
-const PRODUCTION_API_BASE_URL = 'https://elite-services-api.azurewebsites.net/api';
+const PRODUCTION_API_BASE_URL = 'https://eliteapp-api-test.calmpond-a079cf6a.eastus2.azurecontainerapps.io/api';
 
 function trimTrailingSlashes(url: string): string {
     return url.replace(/\/+$/, '');
@@ -24,3 +24,19 @@ function trimTrailingSlashes(url: string): string {
 export function getProductionApiBaseUrl(): string {
     return trimTrailingSlashes(PRODUCTION_API_BASE_URL);
 }
+
+/**
+ * Returns the production base URL (not the /api path) for legal and support pages.
+ * These are required by App Store Connect and Google Play Console.
+ */
+export function getProductionBaseUrl(): string {
+    const apiBase = getProductionApiBaseUrl();
+    // Assuming the legal routes are at the root, remove the last segment if it is '/api'
+    if (apiBase.toLowerCase().endsWith('/api')) {
+        return apiBase.substring(0, apiBase.length - 4);
+    }
+    return apiBase;
+}
+
+export const PRIVACY_POLICY_URL = `${getProductionBaseUrl()}/privacy`;
+export const SUPPORT_URL = `${getProductionBaseUrl()}/support`;

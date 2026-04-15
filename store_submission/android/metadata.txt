@@ -1,0 +1,27 @@
+# Google Play Store Metadata: Elite Home Services
+
+## 🏷️ Basic Information
+- **App Name**: Elite Home Services
+- **Short Description (max 80 chars)**:
+Professional home services at your fingertips. Book, track, and manage with ease.
+
+## 📝 Full Description (max 4000 chars)
+Elite Home Services is the all-in-one platform for professional home management. Whether you're a homeowner looking for reliable service or a pro managing your business, Elite gives you the tools to succeed.
+
+🔹 **FOR USERS:**
+- **Instant Booking**: Schedule professional cleaning, plumbing, electrical, and more in seconds.
+- **Track Your Jobs**: Real-time updates on your service status and professional's arrival.
+- **Secure Payments**: Pay safely and keep a history of all your home maintenance.
+- **Profile Management**: Save your preferences and addresses for lightning-fast booking.
+
+🔹 **FOR PROFESSIONALS & ADMINS:**
+- **Smart Dashboard**: Manage workloads, assign vendors, and track revenue from a single view.
+- **Real-time Notifications**: Never miss a job request or status update.
+- **Vendor Management**: Efficiently assign and monitor third-party service providers.
+- **Detailed Reporting**: Access job histories and customer analytics instantly.
+
+Experience the "Elite" standard of home care. Download now and simplify your home life today!
+
+## 🔗 Live URLs
+- **Privacy Policy**: https://eliteapp-api-prod.azurewebsites.net/api/legal/privacy
+- **Support URL**: https://eliteapp-api-prod.azurewebsites.net/api/legal/support

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Card, Chip, ProgressBar, IconButton, Button, Surface } from 'react-native-paper';
+import FastImage from 'react-native-fast-image';
 import { Job, JobStatus } from '../types/types';
 
 interface JobItemProps {
@@ -37,7 +38,7 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify }) => {
         <Card style={styles.jobCard} elevation={0}>
             <Card.Content style={styles.content}>
                 <View style={styles.jobHeader}>
-                    <View>
+                    <View style={styles.headerLeft}>
                         <Text variant="labelSmall" style={styles.jobIdLabel}>JOB ID: #{job.jobNumber || '...'}</Text>
                         <Text variant="titleMedium" style={styles.jobAddress} numberOfLines={1}>{job.address}</Text>
 
@@ -61,6 +62,7 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify }) => {
                     <Chip
                         style={[styles.statusChip, { backgroundColor: bgColor }]}
                         textStyle={[styles.statusText, { color: color }]}
+                        compact
                     >
                         {job.status}
                     </Chip>
@@ -81,6 +83,31 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify }) => {
                         style={styles.progressBar}
                     />
                 </View>
+
+                {job.photos && job.photos.length > 0 && (
+                    <View style={styles.photoPreviewContainer}>
+                        <View style={styles.photoHeader}>
+                            <IconButton icon="image-multiple-outline" size={16} style={{ margin: 0 }} iconColor="#64748B" />
+                            <Text variant="labelSmall" style={styles.photoCountText}>{job.photos.length} Project Photos</Text>
+                        </View>
+                        <View style={styles.photoList}>
+                            {job.photos.slice(0, 5).map((uri, idx) => (
+                                <View key={uri + idx} style={styles.photoThumbnailWrapper}>
+                                    <FastImage
+                                        source={{ uri, priority: FastImage.priority.normal }}
+                                        style={styles.photoThumbnail}
+                                        resizeMode={FastImage.resizeMode.cover}
+                                    />
+                                    {idx === 4 && job.photos.length > 5 && (
+                                        <View style={styles.morePhotosOverlay}>
+                                            <Text style={styles.morePhotosText}>+{job.photos.length - 5}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
 
                 {job.scheduledDate && (
                     <Surface style={styles.scheduleInfo} elevation={0}>
@@ -136,6 +163,10 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: 12,
+        gap: 8,
+    },
+    headerLeft: {
+        flex: 1,
     },
     jobIdLabel: {
         color: '#94A3B8',
@@ -146,16 +177,20 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#1E293B',
         marginTop: 2,
-        maxWidth: '75%',
+        flex: 1,
     },
     statusChip: {
-        height: 28,
+        height: undefined,
+        minHeight: 24,
         borderRadius: 8,
+        paddingVertical: 0,
+        alignSelf: 'flex-start',
     },
     statusText: {
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: '900',
         textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     jobDesc: {
         color: '#64748B',
@@ -241,6 +276,47 @@ const styles = StyleSheet.create({
     },
     btnContent: {
         height: 44,
+    },
+    photoPreviewContainer: {
+        marginBottom: 16,
+        padding: 12,
+        backgroundColor: '#F8FAFC',
+        borderRadius: 16,
+    },
+    photoHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    photoCountText: {
+        color: '#64748B',
+        fontWeight: 'bold',
+    },
+    photoList: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    photoThumbnailWrapper: {
+        width: 44,
+        height: 44,
+        borderRadius: 8,
+        overflow: 'hidden',
+        position: 'relative',
+    },
+    photoThumbnail: {
+        width: '100%',
+        height: '100%',
+    },
+    morePhotosOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(30, 41, 59, 0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    morePhotosText: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
 });
 

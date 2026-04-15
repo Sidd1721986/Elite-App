@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SecureStorage } from './secureStorage';
 import { Platform } from 'react-native';
 import { DEV_API_HOST, getProductionApiBaseUrl } from '../config/appConfig';
 
@@ -78,7 +79,7 @@ async function getAuthToken(): Promise<string | null> {
         return inMemoryAuthToken;
     }
 
-    inMemoryAuthToken = await AsyncStorage.getItem('@auth_token');
+    inMemoryAuthToken = await SecureStorage.getItem('auth_token');
     return inMemoryAuthToken;
 }
 
@@ -101,9 +102,6 @@ const fetchWithTimeout = (url: string, options: RequestInit, timeout: number): P
 export const apiClient = {
     async request<T>(endpoint: string, options: RequestInit = {}, bypassCache = false): Promise<T> {
         const method = options.method || 'GET';
-        if (__DEV__) {
-            console.log(`[API-CLIENT] BASE_URL: ${BASE_URL}, Endpoint: ${endpoint}`);
-        }
 
         // Cache check for GET requests
         if (method === 'GET' && !bypassCache) {
@@ -120,9 +118,6 @@ export const apiClient = {
         }
 
         const token = await getAuthToken();
-        if (__DEV__) {
-            console.log(`[API-CLIENT] ${method} ${endpoint} - Auth: ${token ? 'yes' : 'no'}`);
-        }
 
         const headers = {
             'Content-Type': 'application/json',

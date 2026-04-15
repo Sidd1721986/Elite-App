@@ -40,13 +40,19 @@ az acr create --resource-group $RG_NAME --name $ACR_NAME --sku Basic
 
 # 3. Create Azure Database for PostgreSQL
 echo "🗄️ Creating PostgreSQL Flexible Server: $DB_SERVER_NAME"
+if [ -z "$AZURE_DB_PASSWORD" ]; then
+    echo "⚠️  AZURE_DB_PASSWORD environment variable is not set."
+    read -rs -p "Enter a SECURE password for the DB Admin (eliteadmin): " AZURE_DB_PASSWORD
+    echo ""
+fi
+
 az postgres flexible-server create \
     --resource-group $RG_NAME \
     --name $DB_SERVER_NAME \
     --location $LOCATION \
     --database-name $DB_NAME \
     --admin-user eliteadmin \
-    --admin-password "P@ssw0rd123!" \
+    --admin-password "$AZURE_DB_PASSWORD" \
     --sku-name Standard_B1ms \
     --tier Burstable \
     --yes

@@ -65,7 +65,8 @@ public class AuthController : ControllerBase
                 u.Role,
                 u.Address,
                 u.Phone,
-                u.IsApproved
+                u.IsApproved,
+                u.CreatedAt
             }
         });
     }

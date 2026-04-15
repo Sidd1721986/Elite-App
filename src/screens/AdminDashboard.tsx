@@ -33,13 +33,11 @@ const AdminDashboard: React.FC = () => {
     const [refreshing, setRefreshing] = React.useState(false);
     const [snackbarVisible, setSnackbarVisible] = React.useState(false);
     const [snackbarMessage, setSnackbarMessage] = React.useState('');
-    const { user, logout, deleteAccount, getPendingVendors, getApprovedVendors, updateUserStatus, removeVendor } = useAuth();
+    const { user, logout, getPendingVendors, getApprovedVendors, updateUserStatus, removeVendor } = useAuth();
     const { jobs, refreshJobs } = useJobs();
     const navigation = useNavigation<NavigationProp>();
 
     const [settingsMenuVisible, setSettingsMenuVisible] = React.useState(false);
-    const [deleteDialogVisible, setDeleteDialogVisible] = React.useState(false);
-    const [isDeleting, setIsDeleting] = React.useState(false);
     const [conversations, setConversations] = React.useState<Conversation[]>([]);
     const [searchQuery, setSearchQuery] = React.useState('');
 
@@ -187,23 +185,6 @@ const AdminDashboard: React.FC = () => {
         await logout();
     }, [logout]);
 
-    const handleDeleteAccount = useCallback(async () => {
-        setSettingsMenuVisible(false);
-        setDeleteDialogVisible(false);
-        setIsDeleting(true);
-        try {
-            const result = await deleteAccount();
-            if (result !== true) {
-                setSnackbarMessage(typeof result === 'string' ? result : 'Failed to delete account');
-                setSnackbarVisible(true);
-            }
-        } catch (error) {
-            setSnackbarMessage('An unexpected error occurred');
-            setSnackbarVisible(true);
-        } finally {
-            setIsDeleting(false);
-        }
-    }, [deleteAccount]);
 
     // Stat counts must match the lists in each section + scroll targets (sectionKey).
     const messageUnreadTotal = useMemo(
@@ -253,12 +234,6 @@ const AdminDashboard: React.FC = () => {
                         />
                         <Divider />
                         <Menu.Item leadingIcon="logout" onPress={handleLogout} title="Logout" />
-                        <Menu.Item 
-                            leadingIcon="delete-outline" 
-                            onPress={() => { setSettingsMenuVisible(false); setDeleteDialogVisible(true); }} 
-                            title="Delete Account" 
-                            titleStyle={{ color: '#EF4444' }} 
-                        />
                     </Menu>
                     </View>
                 </View>
@@ -421,7 +396,7 @@ const AdminDashboard: React.FC = () => {
                                         </View>
                                         <View style={styles.messagesPanelTitles}>
                                             <Text variant="titleMedium" style={styles.messagesPanelTitle}>Inbox</Text>
-                                            <Text variant="labelSmall" style={styles.messagesPanelSubtitle}>Messages from vendors and customers</Text>
+                                            <Text variant="labelSmall" style={styles.messagesPanelSubtitle}>Messages from vendors and users</Text>
                                         </View>
                                     </View>
                                 </View>
@@ -607,20 +582,6 @@ const AdminDashboard: React.FC = () => {
             />
 
             <Portal>
-                <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
-                    <Dialog.Icon icon="alert-circle" color="#EF4444" />
-                    <Dialog.Title style={{ textAlign: 'center' }}>Delete Account?</Dialog.Title>
-                    <Dialog.Content>
-                        <Text variant="bodyMedium" style={{ textAlign: 'center', color: '#64748B' }}>
-                            Your profile will be deactivated. This action initiates a deletion request for your data.
-                        </Text>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setDeleteDialogVisible(false)} textColor="#64748B">Cancel</Button>
-                        <Button onPress={handleDeleteAccount} loading={isDeleting} textColor="#EF4444">Delete Account</Button>
-                    </Dialog.Actions>
-                </Dialog>
-
                 <Snackbar
                     visible={snackbarVisible}
                     onDismiss={() => setSnackbarVisible(false)}

@@ -19,15 +19,15 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, JobStatus, Urgency, Job } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import JobItem from '../components/JobItem';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { JobSkeleton, DashboardStatsSkeleton } from '../components/SkeletonLoader';
-import { formatAddress, parseAddress } from '../utils/addressUtils';
+import { formatAddress, parseAddress, US_STATES } from '../utils/addressUtils';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
 const CustomerDashboard: React.FC = () => {
     const { width: windowWidth } = useWindowDimensions();
-    const { user, logout, deleteAccount } = useAuth();
+    const { user, logout } = useAuth();
     const { jobs, addJob, updateJob, getJobById, refreshJobs, isLoading } = useJobs();
     const { messageUnreadTotal, refreshInbox } = useChatInboxNotifications();
     const navigation = useNavigation<NavigationProp>();
@@ -40,8 +40,6 @@ const CustomerDashboard: React.FC = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [editingJobId, setEditingJobId] = useState<string | null>(null);
     const [settingsMenuVisible, setSettingsMenuVisible] = useState(false);
-    const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -62,34 +60,34 @@ const CustomerDashboard: React.FC = () => {
     const [photos, setPhotos] = useState<string[]>([]);
     const [showUrgencyMenu, setShowUrgencyMenu] = useState(false);
     const [showStateMenu, setShowStateMenu] = useState(false);
+    const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
     const handleLogout = useCallback(async () => {
         setSettingsMenuVisible(false);
         await logout();
     }, [logout]);
 
-    const handleDeleteAccount = useCallback(async () => {
-        setSettingsMenuVisible(false);
-        setDeleteDialogVisible(false);
-        setIsDeleting(true);
-        try {
-            const result = await deleteAccount();
-            if (result !== true) {
-                setSnackbarMessage(typeof result === 'string' ? result : 'Failed to delete account');
-                setSnackbarVisible(true);
-            }
-        } catch (error) {
-            setSnackbarMessage('An unexpected error occurred');
-            setSnackbarVisible(true);
-        } finally {
-            setIsDeleting(false);
-        }
-    }, [deleteAccount]);
 
     const handlePickImage = useCallback(async () => {
+        setShowPhotoMenu(false);
         const result = await launchImageLibrary({
             mediaType: 'photo',
             selectionLimit: 5,
+            includeBase64: false,
+        });
+
+        if (result.assets) {
+            const uris = result.assets.map(asset => asset.uri).filter(Boolean) as string[];
+            setPhotos(prev => [...prev, ...uris]);
+        }
+    }, []);
+
+    const handleTakePhoto = useCallback(async () => {
+        setShowPhotoMenu(false);
+        const result = await launchCamera({
+            mediaType: 'photo',
+            saveToPhotos: true,
+            quality: 0.8,
             includeBase64: false,
         });
 
@@ -270,12 +268,6 @@ const CustomerDashboard: React.FC = () => {
                                 onPress={handleLogout}
                                 title="Logout"
                             />
-                            <Menu.Item
-                                leadingIcon="delete-outline"
-                                onPress={() => { setSettingsMenuVisible(false); setDeleteDialogVisible(true); }}
-                                title="Delete Account"
-                                titleStyle={{ color: '#EF4444' }}
-                            />
                         </Menu>
                     </View>
                 </View>
@@ -307,7 +299,6 @@ const CustomerDashboard: React.FC = () => {
                 onValueChange={setActiveTab}
                 buttons={[
                     { value: 'active', label: 'Dashboard', icon: 'view-dashboard-outline' },
-                    { value: 'explore', label: 'Explore', icon: 'compass-outline' },
                     { value: 'profile', label: 'Account', icon: 'account-outline' },
                 ]}
                 style={styles.segmentedButtons}
@@ -388,63 +379,13 @@ const CustomerDashboard: React.FC = () => {
         </View>
     );
 
-    const renderExploreTab = () => (
-        <ScrollView
-            contentContainerStyle={styles.tabContent}
-            showsVerticalScrollIndicator={false}
-        >
-            <Text variant="headlineSmall" style={styles.tabTitle}>Exclusive Services</Text>
-
-            <View style={styles.serviceGrid}>
-                {[
-                    { title: 'Plumbing', icon: 'water-outline', color: '#3B82F6' },
-                    { title: 'Electrical', icon: 'lightning-bolt-outline', color: '#F59E0B' },
-                    { title: 'HVAC', icon: 'air-conditioner', color: '#10B981' },
-                    { title: 'Remodeling', icon: 'home-edit-outline', color: '#6366F1' },
-                ].map((s, i) => (
-                    <Surface
-                        key={i}
-                        style={[styles.serviceItem, { width: Math.max(0, (windowWidth - 64) / 2) }]}
-                        elevation={1}
-                    >
-                        <IconButton icon={s.icon} iconColor={s.color} mode="contained" containerColor={`${s.color}10`} />
-                        <Text variant="labelLarge" style={styles.serviceText}>{s.title}</Text>
-                    </Surface>
-                ))}
-            </View>
-
-            <View style={styles.upsellBanner}>
-                <Surface style={styles.upsellInner} elevation={0}>
-                    <View style={styles.upsellText}>
-                        <Text variant="titleMedium" style={styles.upsellTitle}>Elite Concierge</Text>
-                        <Text variant="bodySmall" style={styles.upsellDesc}>Priority 24/7 support and guaranteed same-day response.</Text>
-                    </View>
-                    <Button mode="contained" buttonColor="#000" style={styles.upsellBtn}>Upgrade</Button>
-                </Surface>
-            </View>
-
-            <Text variant="titleMedium" style={styles.sectionTitle}>Trusted Partners</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-                {[1, 2, 3, 4].map(v => (
-                    <Surface key={v} style={styles.vendorCard} elevation={1}>
-                        <Avatar.Text size={48} label={`V${v}`} style={{ backgroundColor: '#EEF2FF' }} labelStyle={{ color: '#6366F1' }} />
-                        <Text variant="labelLarge" style={styles.vendorName}>QuickFix Pro {v}</Text>
-                        <View style={styles.ratingRow}>
-                            <IconButton icon="star" iconColor="#F59E0B" size={14} style={{ margin: 0 }} />
-                            <Text variant="labelSmall">4.9</Text>
-                        </View>
-                    </Surface>
-                ))}
-            </ScrollView>
-        </ScrollView>
-    );
 
     const renderProfileTab = () => (
         <ScrollView contentContainerStyle={styles.tabContent}>
             <Surface style={styles.profileHeader} elevation={2}>
                 <Avatar.Text
                     size={80}
-                    label={user?.name?.substring(0, 2).toUpperCase() || 'E'}
+                    label={user?.name ? user.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'E'}
                     style={{ backgroundColor: '#6366F1' }}
                 />
                 <Text variant="headlineSmall" style={styles.profileName}>{user?.name || 'Valued Member'}</Text>
@@ -459,6 +400,7 @@ const CustomerDashboard: React.FC = () => {
             <View style={styles.menuSection}>
                 <List.Item
                     title="Edit Profile"
+                    onPress={() => navigation.navigate('Profile')}
                     left={props => <List.Icon {...props} icon="account-edit-outline" />}
                     right={props => <List.Icon {...props} icon="chevron-right" />}
                 />
@@ -466,19 +408,22 @@ const CustomerDashboard: React.FC = () => {
                 <List.Item
                     title="Primary Address"
                     description={user?.address || 'Set your primary address'}
+                    onPress={() => navigation.navigate('Profile')}
                     left={props => <List.Icon {...props} icon="map-marker-outline" />}
                     right={props => <List.Icon {...props} icon="chevron-right" />}
                 />
                 <Divider />
                 <List.Item
-                    title="Payment Methods"
-                    left={props => <List.Icon {...props} icon="credit-card-outline" />}
+                    title="Security & Privacy"
+                    onPress={() => navigation.navigate('PrivacyPolicy')}
+                    left={props => <List.Icon {...props} icon="shield-lock-outline" />}
                     right={props => <List.Icon {...props} icon="chevron-right" />}
                 />
                 <Divider />
                 <List.Item
-                    title="Security & Privacy"
-                    left={props => <List.Icon {...props} icon="shield-lock-outline" />}
+                    title="Help & Support"
+                    onPress={() => navigation.navigate('ContactSupport')}
+                    left={props => <List.Icon {...props} icon="help-circle-outline" />}
                     right={props => <List.Icon {...props} icon="chevron-right" />}
                 />
             </View>
@@ -491,7 +436,6 @@ const CustomerDashboard: React.FC = () => {
 
             <View style={{ flex: 1 }}>
                 {activeTab === 'active' && renderActiveTab()}
-                {activeTab === 'explore' && renderExploreTab()}
                 {activeTab === 'profile' && renderProfileTab()}
             </View>
 
@@ -640,14 +584,31 @@ const CustomerDashboard: React.FC = () => {
                         <View style={styles.photoSection}>
                             <View style={styles.photoHeader}>
                                 <Text variant="labelLarge" style={styles.formLabel}>Work Photos</Text>
-                                <Button
-                                    mode="text"
-                                    compact
-                                    icon="camera-plus"
-                                    onPress={handlePickImage}
+                                <Menu
+                                    visible={showPhotoMenu}
+                                    onDismiss={() => setShowPhotoMenu(false)}
+                                    anchor={
+                                        <Button
+                                            mode="text"
+                                            compact
+                                            icon="camera-plus"
+                                            onPress={() => setShowPhotoMenu(true)}
+                                        >
+                                            Add Pictures
+                                        </Button>
+                                    }
                                 >
-                                    Add Pictures
-                                </Button>
+                                    <Menu.Item
+                                        leadingIcon="camera"
+                                        onPress={handleTakePhoto}
+                                        title="Take Photo"
+                                    />
+                                    <Menu.Item
+                                        leadingIcon="image-multiple"
+                                        onPress={handlePickImage}
+                                        title="Choose from Gallery"
+                                    />
+                                </Menu>
                             </View>
                             {photos.length > 0 ? (
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
@@ -703,27 +664,6 @@ const CustomerDashboard: React.FC = () => {
                 {snackbarMessage}
             </Snackbar>
 
-            <Portal>
-                <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
-                    <Dialog.Icon icon="alert-circle" color="#EF4444" />
-                    <Dialog.Title style={{ textAlign: 'center' }}>Delete Account?</Dialog.Title>
-                    <Dialog.Content>
-                        <Text variant="bodyMedium" style={{ textAlign: 'center', color: '#64748B' }}>
-                            This will deactivate your profile and all services. This action initiates a deletion request for your data.
-                        </Text>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setDeleteDialogVisible(false)} textColor="#64748B">Cancel</Button>
-                        <Button
-                            onPress={handleDeleteAccount}
-                            loading={isDeleting}
-                            textColor="#EF4444"
-                        >
-                            Delete Account
-                        </Button>
-                    </Dialog.Actions>
-                </Dialog>
-            </Portal>
         </SafeAreaView>
     );
 };
@@ -900,81 +840,6 @@ const styles = StyleSheet.create({
     emptyText: {
         color: '#94A3B8',
         marginTop: 16,
-    },
-    tabTitle: {
-        fontWeight: '900',
-        color: '#1E293B',
-        marginBottom: 24,
-    },
-    serviceGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 16,
-        marginBottom: 32,
-    },
-    serviceItem: {
-        backgroundColor: '#FFFFFF',
-        padding: 16,
-        borderRadius: 20,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    serviceText: {
-        marginTop: 8,
-        fontWeight: 'bold',
-        color: '#1E293B',
-    },
-    upsellBanner: {
-        marginBottom: 32,
-    },
-    upsellInner: {
-        backgroundColor: '#F59E0B',
-        borderRadius: 24,
-        padding: 20,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    upsellText: {
-        flex: 1,
-        marginRight: 16,
-    },
-    upsellTitle: {
-        fontWeight: 'bold',
-        color: '#000',
-    },
-    upsellDesc: {
-        color: '#000',
-        opacity: 0.7,
-    },
-    upsellBtn: {
-        borderRadius: 12,
-        height: 40,
-    },
-    horizontalScroll: {
-        paddingBottom: 8,
-    },
-    vendorCard: {
-        width: 140,
-        backgroundColor: '#FFFFFF',
-        padding: 16,
-        borderRadius: 20,
-        marginRight: 16,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    vendorName: {
-        marginTop: 12,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        color: '#1E293B',
-    },
-    ratingRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 4,
     },
     profileHeader: {
         backgroundColor: '#FFFFFF',

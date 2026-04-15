@@ -1,0 +1,28 @@
+# Apple App Store Metadata: Elite Home Services
+
+## 🏷️ Basic Information
+- **App Name**: Elite Home Services
+- **Subtitle (max 30 chars)**:
+Premium Home Service Management
+
+## 📝 Description (max 4000 chars)
+Elevate your home service experience with Elite Home Services. From urgent repairs to routine maintenance, our app connects you with top-tier professionals or allows you to manage your entire service business from the palm of your hand.
+
+FEATURES:
+• **Quick Booking**: Professional services scheduled in seconds.
+• **Job Tracking**: Real-time status updates and history.
+• **Powerful Admin Tools**: Dashboard analytics and vendor assignments for business owners.
+• **Secure & Reliable**: Built-in security and verified service providers.
+
+Download Elite Home Services today and experience professional care, simplified.
+
+## 🗝️ Keywords (max 100 chars - comma separated)
+home,services,booking,admin,dashboard,plumbing,cleaning,electrical,maintenance,jobs,management,pro
+
+## 🔗 Live URLs
+- **Support URL**: https://eliteapp-api-prod.azurewebsites.net/api/legal/support
+- **Privacy Policy URL**: https://eliteapp-api-prod.azurewebsites.net/api/legal/privacy
+- **Marketing URL**: (Optional) https://eliteapp-api-prod.azurewebsites.net
+
+## ⚖️ License Agreement (EULA)
+Standard Apple EULA applies unless you provide your own.

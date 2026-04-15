@@ -60,6 +60,9 @@ export const jobService = {
     async addJobPhotos(jobId: string, photos: string[]): Promise<Job> {
         return apiClient.post<Job>(`/jobs/${jobId}/photos`, { photos });
     },
+    async removeJobPhoto(jobId: string, photoUrl: string): Promise<Job> {
+        return apiClient.delete<Job>(`/jobs/${jobId}/photos`, { data: { photoUrl } });
+    },
     async uploadFile(file: any): Promise<{ url: string }> {
         const formData = new FormData();
         formData.append('file', file);

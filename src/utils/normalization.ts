@@ -15,6 +15,7 @@ export const normalizeUser = (user: any): User | undefined => {
         phone: user.phone || user.Phone || '',
         role: user.role || user.Role,
         address: user.address || user.Address || '',
+        createdAt: user.createdAt || user.CreatedAt,
     };
 };
 

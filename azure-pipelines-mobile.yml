@@ -32,6 +32,13 @@ stages:
           - task: NodeTool@0
             inputs:
               versionSpec: 20.x
+          - task: Cache@2
+            displayName: Cache node_modules
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: node_modules
           - script: npm ci
             displayName: npm ci
           - script: npm run lint
@@ -57,6 +64,20 @@ stages:
           - task: NodeTool@0
             inputs:
               versionSpec: 20.x
+          - task: Cache@2
+            displayName: Cache node_modules
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: node_modules
+          - task: Cache@2
+            displayName: Cache Gradle
+            inputs:
+              key: 'gradle | "$(Agent.OS)"'
+              restoreKeys: |
+                gradle | "$(Agent.OS)"
+              path: $(HOME)/.gradle/caches
           - script: npm ci
             displayName: npm ci
           - task: DownloadSecureFile@1
@@ -104,6 +125,20 @@ stages:
           - task: NodeTool@0
             inputs:
               versionSpec: 20.x
+          - task: Cache@2
+            displayName: Cache node_modules
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: node_modules
+          - task: Cache@2
+            displayName: Cache CocoaPods
+            inputs:
+              key: 'pods | "$(Agent.OS)" | ios/Podfile.lock'
+              restoreKeys: |
+                pods | "$(Agent.OS)"
+              path: ios/Pods
           - script: npm ci
             displayName: npm ci
           - script: |

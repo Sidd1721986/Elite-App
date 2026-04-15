@@ -16,25 +16,28 @@ source "$ENV_FILE"
 IMAGE_NAME="eliteapp-api"
 TAG=$(date +%Y%m%d%H%M%S)
 
+AZ_PATH="/opt/homebrew/bin/az"
+DOCKER_PATH="/usr/local/bin/docker"
+
 echo "📦 Building and Pushing Docker Image to Azure [$ENV_LOWER]..."
 
 # Login to ACR
-az acr login --name $ACR_NAME
+$AZ_PATH acr login --name $ACR_NAME
 
 # Build the image
-docker build -t $IMAGE_NAME ./backend
+$DOCKER_PATH build -t $IMAGE_NAME ./backend
 
 # Tag with latest and timestamp for backup/versioning
-docker tag $IMAGE_NAME "$ACR_NAME.azurecr.io/$IMAGE_NAME:latest"
-docker tag $IMAGE_NAME "$ACR_NAME.azurecr.io/$IMAGE_NAME:$TAG"
+$DOCKER_PATH tag $IMAGE_NAME "$ACR_NAME.azurecr.io/$IMAGE_NAME:latest"
+$DOCKER_PATH tag $IMAGE_NAME "$ACR_NAME.azurecr.io/$IMAGE_NAME:$TAG"
 
 # Push to ACR
-docker push "$ACR_NAME.azurecr.io/$IMAGE_NAME:latest"
-docker push "$ACR_NAME.azurecr.io/$IMAGE_NAME:$TAG"
+$DOCKER_PATH push "$ACR_NAME.azurecr.io/$IMAGE_NAME:latest"
+$DOCKER_PATH push "$ACR_NAME.azurecr.io/$IMAGE_NAME:$TAG"
 
 # Update Web App to use the new image
 echo "🚀 Updating Web App $APP_NAME..."
-az webapp config container set --name $APP_NAME --resource-group $RG_NAME \
+$AZ_PATH webapp config container set --name $APP_NAME --resource-group $RG_NAME \
     --docker-custom-image-name "$ACR_NAME.azurecr.io/$IMAGE_NAME:latest"
 
 echo "✨ Image pushed and App updated successfully for $ENV_LOWER!"

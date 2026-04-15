@@ -19,8 +19,6 @@ interface Props {
 
 const ROLES: UserRole[] = [UserRole.ADMIN, UserRole.VENDOR, UserRole.CUSTOMER];
 
-const emailLooksValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const route = useRoute<RouteProp<RootStackParamList, 'Login'>>();
     const resetToastShown = useRef(false);
@@ -41,32 +39,15 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             setSnackbarMessage('Password updated. Sign in with your new password.');
             setSnackbarVisible(true);
         }
-    }, [route.params?.passwordResetOk]);
+        
+        if (route.params?.initialRole) {
+            setSelectedRole(route.params.initialRole);
+        }
+    }, [route.params?.passwordResetOk, route.params?.initialRole]);
 
     useEffect(() => {
-        let cancelled = false;
-        if (selectedRole !== UserRole.VENDOR) {
-            setShowForgotPassword(true);
-            return () => {
-                cancelled = true;
-            };
-        }
-        if (!emailLooksValid(email)) {
-            setShowForgotPassword(false);
-            return () => {
-                cancelled = true;
-            };
-        }
-        const t = setTimeout(() => {
-            void authService.forgotPasswordEligibility(email, UserRole.VENDOR).then((can) => {
-                if (!cancelled) setShowForgotPassword(can);
-            });
-        }, 400);
-        return () => {
-            cancelled = true;
-            clearTimeout(t);
-        };
-    }, [email, selectedRole]);
+        setShowForgotPassword(true);
+    }, []);
 
     const handleLogin = useCallback(async () => {
         if (!email || !password) {
@@ -84,8 +65,12 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     }, [email, password, selectedRole, login]);
 
     const handleSignupPress = useCallback(() => {
-        navigation.navigate('SignupRoleSelector');
-    }, [navigation]);
+        if (selectedRole === UserRole.VENDOR) {
+            navigation.navigate('VendorSignup');
+        } else {
+            navigation.navigate('CustomerSignup');
+        }
+    }, [navigation, selectedRole]);
 
     const dismissSnackbar = useCallback(() => setSnackbarVisible(false), []);
 
@@ -98,6 +83,19 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.container}
             >
+                {/* Top-left Back Button */}
+                <View style={styles.topNav}>
+                    <Button
+                        mode="text"
+                        onPress={() => navigation.navigate('Landing')}
+                        icon="arrow-left"
+                        labelStyle={styles.backButtonLabel}
+                        style={styles.backButton}
+                    >
+                        Role
+                    </Button>
+                </View>
+
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
@@ -110,9 +108,11 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                 <Text style={styles.brandElite}>Elite</Text>
                                 <Text style={styles.brandHome}> Home Services</Text>
                             </Text>
-                            <Text variant="labelMedium" style={styles.brandSubtitle} numberOfLines={1}>
-                                PREMIUM SERVICES • SEAMLESS EXPERIENCE
-                            </Text>
+                            <View style={styles.roleTitleContainer}>
+                                <Text style={styles.roleLoginTitle}>
+                                    {String(selectedRole).toUpperCase() === 'CUSTOMER' ? 'USER' : selectedRole} Login
+                                </Text>
+                            </View>
                         </View>
 
                         <Card style={styles.card} elevation={0}>
@@ -144,39 +144,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                     left={<TextInput.Icon icon="lock-outline" color="#94A3B8" />}
                                 />
 
-                                <View style={styles.roleContainer}>
-                                    <Text variant="labelLarge" style={styles.roleLabel}>I am an / a</Text>
-                                    <Menu
-                                        visible={showRoleMenu}
-                                        onDismiss={() => setShowRoleMenu(false)}
-                                        anchor={
-                                            <Button
-                                                mode="outlined"
-                                                onPress={() => setShowRoleMenu(true)}
-                                                style={styles.roleButton}
-                                                labelStyle={styles.roleButtonLabel}
-                                                icon="chevron-down"
-                                                contentStyle={{ flexDirection: 'row-reverse' }}
-                                            >
-                                                {selectedRole}
-                                            </Button>
-                                        }
-                                        contentStyle={styles.menuContent}
-                                    >
-                                        {ROLES.map((role) => (
-                                            <Menu.Item
-                                                key={role}
-                                                onPress={() => {
-                                                    setSelectedRole(role);
-                                                    setShowRoleMenu(false);
-                                                }}
-                                                title={role}
-                                                titleStyle={{ fontSize: 14 }}
-                                            />
-                                        ))}
-                                    </Menu>
-                                </View>
-
                                 <Button
                                     mode="contained"
                                     onPress={handleLogin}
@@ -189,36 +156,37 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                     Log In
                                 </Button>
 
-                                {showForgotPassword ? (
-                                    <Button
-                                        mode="text"
-                                        onPress={() =>
-                                            navigation.navigate('ForgotPassword', {
-                                                initialEmail: email,
-                                                initialRole: selectedRole,
-                                            })
-                                        }
-                                        style={styles.forgotButton}
-                                        labelStyle={styles.forgotButtonLabel}
-                                    >
-                                        Forgot password?
-                                    </Button>
-                                ) : selectedRole === UserRole.VENDOR ? (
-                                    <Text variant="labelSmall" style={styles.forgotHint}>
-                                        Forgot password is available after your vendor account is approved.
-                                    </Text>
-                                ) : null}
-
-                                <View style={styles.footerLinks}>
-                                    <Button
-                                        mode="text"
-                                        onPress={handleSignupPress}
-                                        style={styles.signupButton}
-                                        labelStyle={styles.signupButtonLabel}
-                                    >
-                                        New to Elite? <Text style={styles.signupAccent}>Join Now</Text>
-                                    </Button>
+                                <View style={styles.secondaryActions}>
+                                    {showForgotPassword ? (
+                                        <Button
+                                            mode="text"
+                                            onPress={() =>
+                                                navigation.navigate('ForgotPassword', {
+                                                    initialEmail: email,
+                                                    initialRole: selectedRole,
+                                                })
+                                            }
+                                            style={styles.forgotButton}
+                                            labelStyle={styles.forgotButtonLabel}
+                                        >
+                                            Forgot password?
+                                        </Button>
+                                    ) : null}
                                 </View>
+
+
+                                {selectedRole !== UserRole.ADMIN && (
+                                    <View style={styles.footerLinks}>
+                                        <Button
+                                            mode="text"
+                                            onPress={handleSignupPress}
+                                            style={styles.signupButton}
+                                            labelStyle={styles.signupButtonLabel}
+                                        >
+                                            New to Elite? <Text style={styles.signupAccent}>Join Now</Text>
+                                        </Button>
+                                    </View>
+                                )}
                             </Card.Content>
                         </Card>
                     </View>
@@ -325,28 +293,43 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         backgroundColor: 'rgba(255, 255, 255, 0.5)', // Brighter blending
     },
-    roleContainer: {
-        marginVertical: 12,
-    },
-    roleLabel: {
-        color: '#64748B',
-        marginBottom: 8,
-        marginLeft: 4,
-    },
-    roleButton: {
-        borderRadius: 12,
-        borderColor: 'rgba(226, 232, 240, 0.8)',
-        height: 50,
-        justifyContent: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    },
-    roleButtonLabel: {
-        color: '#1E293B',
-        fontSize: 15,
-    },
     menuContent: {
         backgroundColor: '#FFFFFF',
         borderRadius: 16,
+    },
+    roleTitleContainer: {
+        marginTop: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        backgroundColor: '#6366F110',
+        borderRadius: 20,
+    },
+    roleLoginTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#6366F1',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    secondaryActions: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 16,
+    },
+    topNav: {
+        position: 'absolute',
+        top: 10,
+        left: 10,
+        zIndex: 100,
+    },
+    backButton: {
+        marginLeft: -8,
+    },
+    backButtonLabel: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#64748B',
     },
     loginButton: {
         marginTop: 24,
@@ -369,13 +352,6 @@ const styles = StyleSheet.create({
         color: '#6366F1',
         fontSize: 14,
         fontWeight: '600',
-    },
-    forgotHint: {
-        color: '#94A3B8',
-        textAlign: 'center',
-        marginTop: 8,
-        paddingHorizontal: 12,
-        lineHeight: 18,
     },
     footerLinks: {
         marginTop: 16,

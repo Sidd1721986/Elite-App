@@ -1,39 +1,45 @@
 {
   "Logging": {
     "LogLevel": {
-      "Default": "Warning",
+      "Default": "Information",
       "Microsoft.AspNetCore": "Warning"
     }
   },
   "AllowedHosts": "your-api.azurewebsites.net;api.yourdomain.com",
   "ConnectionStrings": {
-    "DefaultConnection": "REPLACE_WITH_AZURE_POSTGRES_OR_SUPABASE_CONNECTION_STRING"
+    "DefaultConnection": "Host=YOUR_DB_HOST;Port=5432;Database=eliteapp_prod;Username=YOUR_DB_USER;Password=YOUR_DB_PASSWORD;SSL Mode=Require;Trust Server Certificate=true"
   },
   "Jwt": {
-    "Key": "REPLACE_WITH_LONG_RANDOM_SECRET_USE_KEY_VAULT_IN_AZURE"
+    "Key": "CHOOSE_A_LONG_SECURE_RANDOM_KEY_AT_LEAST_32_CHARACTERS"
   },
   "Cors": {
-    "AllowedOrigins": "https://your-web-app.example.com;https://expo-web-host.example.com"
-  },
-  "Bootstrap": {
-    "AdminPassword": "OPTIONAL_ONE_TIME_STRONG_PASSWORD_IF_NO_ADMIN_EXISTS_YET_REMOVE_AFTER_BOOTSTRAP"
+    "AllowedOrigins": "https://your-web-app.com;https://admin.yourdomain.com"
   },
   "Security": {
     "MinPasswordLength": 8
   },
   "PasswordReset": {
-    "Pepper": "REPLACE_WITH_SECRET_FROM_KEY_VAULT",
+    "Pepper": "STRONG_SECRET_PEPPER_FOR_HASHING",
     "TokenExpiryHours": 1
   },
   "Email": {
     "FromName": "Elite Services",
-    "FromAddress": "noreply@yourdomain.com",
-    "PasswordResetSubject": "Reset your password",
+    "FromAddress": "charlie@elitehomeservicesusa.com",
+    "PasswordResetSubject": "Reset your Elite password",
     "Smtp": {
-      "Host": "smtp.sendgrid.net",
+      "Host": "smtp.gmail.com",
       "Port": "587",
-      "User": "apikey",
-      "Password": "REPLACE_SENDGRID_OR_SMTP_SECRET"
+      "User": "charlie@elitehomeservicesusa.com",
+      "Password": "YOUR_SMTP_APP_PASSWORD"
     }
+  },
+  "Legal": {
+    "SupportEmail": "support@eliteservices.com"
+  },
+  "Bootstrap": {
+    "AdminPassword": "CHANGE_ME_TO_A_SECURE_ADMIN_PASSWORD"
+  },
+  "ApplicationInsights": {
+    "InstrumentationKey": "YOUR_APP_INSIGHTS_KEY_OPTIONAL"
   }
 }

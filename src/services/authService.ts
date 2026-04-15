@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SecureStorage } from './secureStorage';
 import { User, UserRole } from '../types/types';
 import { apiClient, setApiClientAuthToken } from './apiClient';
 
@@ -65,7 +66,7 @@ export const authService = {
             const token = response.token ?? (response as any).accessToken ?? (response as any).Token;
             const userPayload = response.user ?? (response as any).User;
             if (token && userPayload) {
-                await AsyncStorage.setItem('@auth_token', token);
+                await SecureStorage.setItem('auth_token', token);
                 setApiClientAuthToken(token);
                 await AsyncStorage.setItem('@current_user', JSON.stringify(userPayload));
                 return userPayload as User;
@@ -111,7 +112,7 @@ export const authService = {
     // Logout user
     async logout(): Promise<void> {
         try {
-            await AsyncStorage.removeItem('@auth_token');
+            await SecureStorage.removeItem('auth_token');
             await AsyncStorage.removeItem('@current_user');
             setApiClientAuthToken(null);
         } catch (error) {

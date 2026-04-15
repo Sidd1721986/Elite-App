@@ -12,14 +12,42 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import {
+    Portal,
+    Dialog,
+    Button as PaperButton,
+    Snackbar
+} from 'react-native-paper';
 import { RootStackParamList } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type NavigationProp = StackNavigationProp<RootStackParamList, 'AccountDetails'>;
 
 const AccountDetailsScreen: React.FC = () => {
-    const { user } = useAuth();
+    const { user, deleteAccount } = useAuth();
     const navigation = useNavigation<NavigationProp>();
+
+    const [deleteDialogVisible, setDeleteDialogVisible] = React.useState(false);
+    const [isDeleting, setIsDeleting] = React.useState(false);
+    const [snackbarVisible, setSnackbarVisible] = React.useState(false);
+    const [snackbarMessage, setSnackbarMessage] = React.useState('');
+
+    const handleDeleteAccount = React.useCallback(async () => {
+        setDeleteDialogVisible(false);
+        setIsDeleting(true);
+        try {
+            const result = await deleteAccount();
+            if (result !== true) {
+                setSnackbarMessage(typeof result === 'string' ? result : 'Failed to delete account');
+                setSnackbarVisible(true);
+            }
+        } catch (error) {
+            setSnackbarMessage('An unexpected error occurred');
+            setSnackbarVisible(true);
+        } finally {
+            setIsDeleting(false);
+        }
+    }, [deleteAccount]);
 
     if (!user) return null;
 
@@ -89,6 +117,49 @@ const AccountDetailsScreen: React.FC = () => {
                             description={user.role}
                             left={props => <List.Icon {...props} icon="shield-account-outline" />}
                         />
+                        <Divider />
+                        <List.Item
+                            title="Member Since"
+                            description={user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
+                            left={props => <List.Icon {...props} icon="calendar-outline" />}
+                        />
+                    </List.Section>
+
+                    <Divider style={styles.divider} />
+
+                    <List.Section style={styles.listSection}>
+                        <List.Subheader style={{ fontWeight: 'bold', color: '#64748B' }}>LEGAL & SUPPORT</List.Subheader>
+                        <List.Item
+                            title="Privacy Policy"
+                            onPress={() => navigation.navigate('PrivacyPolicy')}
+                            left={props => <List.Icon {...props} icon="shield-account-outline" />}
+                            right={props => <List.Icon {...props} icon="chevron-right" />}
+                        />
+                        <List.Item
+                            title="Terms of Service"
+                            onPress={() => navigation.navigate('TermsOfService')}
+                            left={props => <List.Icon {...props} icon="file-document-outline" />}
+                            right={props => <List.Icon {...props} icon="chevron-right" />}
+                        />
+                        <List.Item
+                            title="Contact Support"
+                            onPress={() => navigation.navigate('ContactSupport')}
+                            left={props => <List.Icon {...props} icon="help-circle-outline" />}
+                            right={props => <List.Icon {...props} icon="chevron-right" />}
+                        />
+                    </List.Section>
+
+                    <Divider style={styles.divider} />
+
+                    <List.Section style={styles.listSection}>
+                        <List.Subheader style={{ fontWeight: 'bold', color: '#EF4444' }}>DANGER ZONE</List.Subheader>
+                        <List.Item
+                            title="Delete Account"
+                            description="Permanently remove your account and data"
+                            titleStyle={{ color: '#EF4444', fontWeight: 'bold' }}
+                            onPress={() => setDeleteDialogVisible(true)}
+                            left={props => <List.Icon {...props} icon="delete-outline" color="#EF4444" />}
+                        />
                     </List.Section>
                 </Surface>
 
@@ -98,6 +169,36 @@ const AccountDetailsScreen: React.FC = () => {
                         These details are provided during registration. To update your information, please visit the Profile Settings page.
                     </Text>
                 </Surface>
+
+                <Portal>
+                    <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
+                        <Dialog.Icon icon="alert-circle" color="#EF4444" />
+                        <Dialog.Title style={{ textAlign: 'center' }}>Delete Account?</Dialog.Title>
+                        <Dialog.Content>
+                            <Text variant="bodyMedium" style={{ textAlign: 'center', color: '#64748B' }}>
+                                This will deactivate your profile and all services. This action initiates a deletion request for your data in compliance with our safety policies.
+                            </Text>
+                        </Dialog.Content>
+                        <Dialog.Actions>
+                            <PaperButton onPress={() => setDeleteDialogVisible(false)} textColor="#64748B">Cancel</PaperButton>
+                            <PaperButton
+                                onPress={handleDeleteAccount}
+                                loading={isDeleting}
+                                textColor="#EF4444"
+                            >
+                                Delete Account
+                            </PaperButton>
+                        </Dialog.Actions>
+                    </Dialog>
+
+                    <Snackbar
+                        visible={snackbarVisible}
+                        onDismiss={() => setSnackbarVisible(false)}
+                        duration={3000}
+                    >
+                        {snackbarMessage}
+                    </Snackbar>
+                </Portal>
             </ScrollView>
         </SafeAreaView>
     );
