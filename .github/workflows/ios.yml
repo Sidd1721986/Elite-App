@@ -34,6 +34,13 @@ jobs:
       - name: Install JS dependencies
         run: npm ci --ignore-scripts
 
+      - name: Generate env.ts with production API URL
+        run: |
+          mkdir -p src/config
+          cat > src/config/env.ts <<EOF
+          export const PRODUCTION_API_BASE_URL = '${{ secrets.PROD_API_URL }}';
+          EOF
+
       - name: Cache CocoaPods
         uses: actions/cache@v4
         with:
@@ -63,6 +70,11 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}" | base64 --decode \
             > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+      - name: Bump CFBundleVersion
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" ios/multiuserauthapp/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.${{ github.run_number }}" ios/multiuserauthapp/Info.plist
 
       - name: Archive
         run: |

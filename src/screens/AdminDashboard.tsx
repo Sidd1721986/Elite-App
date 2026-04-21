@@ -3,6 +3,8 @@ import { useCallback, useMemo } from 'react';
 import { View, StyleSheet, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Text, Card, Button, Avatar, Divider, Surface, IconButton, Icon, List, Chip, Snackbar, Portal, Menu, Dialog, Searchbar } from 'react-native-paper';
+import { MotiView } from 'moti';
+import { useReducedMotion } from 'react-native-reanimated';
 import { useAuth } from '../context/AuthContext';
 import AppLogo from '../components/AppLogo';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -28,6 +30,7 @@ const AdminList = FlashList as any;
 
 const AdminDashboard: React.FC = () => {
     const { width: windowWidth } = useWindowDimensions();
+    const reducedMotion = useReducedMotion();
     const [pendingVendors, setPendingVendors] = React.useState<User[]>([]);
     const [approvedVendors, setApprovedVendors] = React.useState<User[]>([]);
     const [refreshing, setRefreshing] = React.useState(false);
@@ -52,7 +55,7 @@ const AdminDashboard: React.FC = () => {
             setPendingVendors(pending);
             setApprovedVendors(approved);
             const sorted = [...(conv || [])].sort(
-                (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+                (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime(),
             );
             setConversations(sorted);
             await refreshJobs();
@@ -71,7 +74,7 @@ const AdminDashboard: React.FC = () => {
         try {
             const conv = await messageService.getConversations().catch(() => [] as Conversation[]);
             const sorted = [...(conv || [])].sort(
-                (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+                (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime(),
             );
             setConversations(sorted);
         } catch {
@@ -85,17 +88,47 @@ const AdminDashboard: React.FC = () => {
         }, [refreshInbox]),
     );
 
+    const jobsDeduped = useMemo(() => {
+        const seen = new Set<string>();
+        return jobs.filter(j => {
+            if (!j?.id) return false;
+            if (seen.has(j.id)) return false;
+            seen.add(j.id);
+            return true;
+        });
+    }, [jobs]);
+
     const filteredJobs = useMemo(() => {
-        if (!searchQuery.trim()) return jobs;
+        // Hide only true shell records (typically split-parent containers) but keep real submitted requests visible.
+        const visibleJobs = jobsDeduped.filter(j => {
+            // Split children are represented on the parent card; do not show duplicate rows.
+            if (j.parentJobId) return false;
+
+            const hasServices = Array.isArray(j.services) && j.services.length > 0;
+            const hasItems = Array.isArray(j.items) && j.items.length > 0;
+            const hasVendor = !!j.vendorId;
+            const hasCustomerContent =
+                Boolean(j.description?.trim()) ||
+                Boolean(j.address?.trim()) ||
+                Boolean(j.contactPhone?.trim()) ||
+                Boolean(j.contactEmail?.trim());
+            const hasChildren = Array.isArray(j.childJobs) && j.childJobs.length > 0;
+
+            // Keep any real request/activity row; hide only empty parent containers.
+            if (hasServices || hasItems || hasVendor || hasCustomerContent) return true;
+            return !hasChildren;
+        });
+
+        if (!searchQuery.trim()) return visibleJobs;
         const query = searchQuery.toLowerCase().trim();
-        return jobs.filter(j => 
+        return visibleJobs.filter(j => 
             j.address?.toLowerCase().includes(query) ||
             j.description?.toLowerCase().includes(query) ||
             j.jobNumber?.toString().includes(query) ||
             `#${j.jobNumber}`.includes(query) ||
             j.customer?.name?.toLowerCase().includes(query)
         );
-    }, [jobs, searchQuery]);
+    }, [jobsDeduped, searchQuery]);
 
     const submittedJobs = useMemo(() => filteredJobs.filter(j => j.status === JobStatus.SUBMITTED), [filteredJobs]);
 
@@ -238,13 +271,19 @@ const AdminDashboard: React.FC = () => {
                     </View>
                 </View>
 
-                <View style={styles.profileBox}>
+                <MotiView 
+                    from={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ type: 'timing', duration: 400 }}
+                    style={styles.profileBox}
+                    reducedMotion={reducedMotion}
+                >
                     <Avatar.Icon size={64} icon="shield-crown-outline" style={styles.mainAvatar} color="#FFFFFF" />
                     <View style={styles.profileText}>
                         <Text variant="headlineSmall" style={styles.welcomeText}>Control Center</Text>
                         <Text variant="bodyMedium" style={styles.emailText}>{user?.email}</Text>
                     </View>
-                </View>
+                </MotiView>
 
                 <Searchbar
                     placeholder="Search by Job # or Address"
@@ -259,19 +298,27 @@ const AdminDashboard: React.FC = () => {
 
                 <View style={styles.statsGrid}>
                     {stats.map((stat, index) => (
-                        <Pressable
+                        <MotiView
                             key={index}
-                            onPress={() => scrollToSection((stat as any).sectionKey)}
-                            style={({ pressed }) => [
-                                styles.statCard,
-                                { width: Math.max(0, (windowWidth - 60) / 2) },
-                                pressed && { opacity: 0.85 },
-                            ]}
+                            from={{ opacity: 0, translateY: 10 }}
+                            animate={{ opacity: 1, translateY: 0 }}
+                            transition={{ type: 'timing', duration: 400, delay: 100 + index * 50 }}
+                            style={{ width: Math.max(0, (windowWidth - 60) / 2) }}
+                            reducedMotion={reducedMotion}
                         >
-                            <Avatar.Icon size={32} icon={stat.icon} style={{ backgroundColor: stat.color + '10' }} color={stat.color} />
-                            <Text variant="titleLarge" style={styles.statValue}>{stat.value}</Text>
-                            <Text variant="labelSmall" style={styles.statLabel}>{stat.label}</Text>
-                        </Pressable>
+                            <Pressable
+                                onPress={() => scrollToSection((stat as any).sectionKey)}
+                                style={({ pressed }) => [
+                                    styles.statCard,
+                                    { width: '100%' },
+                                    pressed && { opacity: 0.85 },
+                                ]}
+                            >
+                                <Avatar.Icon size={32} icon={stat.icon} style={{ backgroundColor: stat.color + '10' }} color={stat.color} />
+                                <Text variant="titleLarge" style={styles.statValue}>{stat.value}</Text>
+                                <Text variant="labelSmall" style={styles.statLabel}>{stat.label}</Text>
+                            </Pressable>
+                        </MotiView>
                     ))}
                 </View>
             </Surface>
@@ -382,10 +429,21 @@ const AdminDashboard: React.FC = () => {
         return data;
     }, [conversations, submittedJobs, pendingVendors, activeProjects, approvedVendors, completedJobs]);
 
-    const renderItem = useCallback(({ item }: { item: AdminDashboardDataItem }) => {
+    const renderItem = useCallback(({ item, index }: { item: AdminDashboardDataItem, index: number }) => {
+        const wrapInMoti = (content: React.ReactNode) => (
+            <MotiView
+                from={{ opacity: 0, translateY: 10 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 300, delay: index * 50 }}
+                reducedMotion={reducedMotion}
+            >
+                {content}
+            </MotiView>
+        );
+
         switch (item.type) {
             case 'section_inbox':
-                return (
+                return wrapInMoti(
                     <View style={styles.messagesSection}>
                         <Surface style={styles.messagesPanel} elevation={0}>
                             <View style={styles.messagesPanelHeader}>
@@ -447,7 +505,7 @@ const AdminDashboard: React.FC = () => {
                     </View>
                 );
             case 'section_header':
-                return (
+                return wrapInMoti(
                     <View onLayout={(e) => updateSectionY(item.sectionKey, e.nativeEvent.layout.y)}>
                         <View style={styles.sectionHeaderBar}>
                             <Text variant="titleLarge" style={styles.sectionTitle}>{item.title}</Text>
@@ -457,19 +515,54 @@ const AdminDashboard: React.FC = () => {
                 );
             case 'job_request':
                 const job = item.data;
-                return (
+                return wrapInMoti(
                     <Card style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}>
                         <Card.Content style={styles.cardInner}>
                             <View style={styles.requestCardRow}>
                                 <View style={{ backgroundColor: getTimelineBarColor(job.createdAt), width: 6, borderTopLeftRadius: 24, borderBottomLeftRadius: 24 }} />
                                 <View style={styles.requestCardContent}>
                                     <View style={styles.vendorInfo}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                                             <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: '900' }}>#{job.jobNumber}</Text>
-                                            <Text variant="titleMedium" style={styles.vendorName} numberOfLines={1}>{job.address}</Text>
+                                            <Text variant="titleMedium" style={[styles.vendorName, { flex: 1 }]} numberOfLines={1}>{job.address}</Text>
                                         </View>
                                         <Text variant="labelSmall" style={{ color: '#64748B', fontWeight: 'bold' }}>{job.customer?.name || 'Homeowner'}</Text>
-                                        <Text variant="labelSmall" style={styles.vendorEmail} numberOfLines={1}>{job.description}</Text>
+                                        {job.services && job.services.length > 0 && (
+                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginVertical: 4 }}>
+                                                {job.services.map(s => (
+                                                    <View key={s} style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                                        <Text style={{ fontSize: 9, color: '#6366F1', fontWeight: 'bold' }}>{s.toUpperCase()}</Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        )}
+                                        <Text variant="labelSmall" style={[styles.vendorEmail, { flex: 1 }]} numberOfLines={1}>{job.description}</Text>
+                                        {(() => {
+                                            const partsDone = (job.childJobs || []).filter(c => c?.vendorId);
+                                            const remainingSvc = job.services?.length || 0;
+                                            const itemsLeft = (job.items || []).filter(i => i && !i.isAssigned).length;
+                                            const stillNeedsVendor = remainingSvc > 0 || itemsLeft > 0;
+                                            if (!stillNeedsVendor) return null;
+                                            const partsLine = partsDone
+                                                .map(c => `#${c.jobNumber}${c.jobSuffix || ''} → ${c.vendor?.name || 'Vendor'}`)
+                                                .join(' • ');
+                                            const assignLine =
+                                                remainingSvc > 0
+                                                    ? `Still needs vendor assignment: ${(job.services || []).join(', ')}`
+                                                    : `Still needs vendor assignment for ${itemsLeft} item(s).`;
+                                            return (
+                                                <Surface style={styles.partialAssignNotice} elevation={0}>
+                                                    {partsLine.length > 0 ? (
+                                                        <Text variant="labelSmall" style={styles.partialAssignParts}>
+                                                            {partsLine}
+                                                        </Text>
+                                                    ) : null}
+                                                    <Text variant="labelSmall" style={styles.partialAssignMain}>
+                                                        {assignLine}
+                                                    </Text>
+                                                </Surface>
+                                            );
+                                        })()}
                                     </View>
                                     <View style={styles.actionColumn}>
                                         <Button mode="contained" compact onPress={() => navigation.navigate('AssignVendor', { jobId: job.id })} style={styles.jobActionBtn} icon="account-plus-outline" labelStyle={{ fontSize: 11 }}>Assign</Button>
@@ -480,20 +573,29 @@ const AdminDashboard: React.FC = () => {
                     </Card>
                 );
             case 'vendor_verification':
-                return renderVendorItem({ item: item.data });
+                return wrapInMoti(renderVendorItem({ item: item.data }));
             case 'active_project':
                 const activeJob = item.data;
-                return (
+                return wrapInMoti(
                     <Card style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: activeJob.id })}>
                         <Card.Content style={styles.cardInner}>
                             <View style={styles.cardHeader}>
                                 <Avatar.Icon size={40} icon="hammer-wrench" style={{ backgroundColor: '#ECFDF5' }} color="#10B981" />
                                 <View style={styles.vendorInfo}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                                         <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: '900' }}>#{activeJob.jobNumber}</Text>
-                                        <Text variant="titleMedium" style={styles.vendorName} numberOfLines={1}>{activeJob.address}</Text>
+                                        <Text variant="titleMedium" style={[styles.vendorName, { flex: 1 }]} numberOfLines={1}>{activeJob.address}</Text>
                                     </View>
                                     <Text variant="labelSmall" style={{ color: '#94A3B8' }}>{activeJob.customer?.name || 'Homeowner'} • {(activeJob.status || 'SUBMITTED').toUpperCase()}</Text>
+                                    {activeJob.services && activeJob.services.length > 0 && (
+                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                                            {activeJob.services.map(s => (
+                                                <View key={s} style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                                    <Text style={{ fontSize: 9, color: '#10B981', fontWeight: 'bold' }}>{s.toUpperCase()}</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
                                 </View>
                                 <View style={styles.activeProjectActions}>
                                     <Button 
@@ -514,7 +616,7 @@ const AdminDashboard: React.FC = () => {
                 );
             case 'verified_vendor':
                 const vVendor = item.data;
-                return (
+                return wrapInMoti(
                     <Card style={styles.approvalCard} elevation={0}>
                         <Card.Content style={styles.cardInner}>
                             <View style={styles.cardHeader}>
@@ -533,17 +635,26 @@ const AdminDashboard: React.FC = () => {
                 );
             case 'completed_job':
                 const compJob = item.data;
-                return (
+                return wrapInMoti(
                     <Card style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: compJob.id })}>
                         <Card.Content style={styles.cardInner}>
                             <View style={styles.cardHeader}>
                                 <Avatar.Icon size={40} icon="check-decagram" style={{ backgroundColor: '#ECFDF5' }} color="#059669" />
                                 <View style={styles.vendorInfo}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                                         <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: '900' }}>#{compJob.jobNumber}</Text>
-                                        <Text variant="titleMedium" style={styles.vendorName} numberOfLines={1}>{compJob.address}</Text>
+                                        <Text variant="titleMedium" style={[styles.vendorName, { flex: 1 }]} numberOfLines={1}>{compJob.address}</Text>
                                     </View>
                                     <Text variant="labelSmall" style={{ color: '#94A3B8' }}>{compJob.customer?.name || 'Homeowner'} • {(compJob.status || '').toUpperCase()}</Text>
+                                    {compJob.services && compJob.services.length > 0 && (
+                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                                            {compJob.services.map(s => (
+                                                <View key={s} style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                                                    <Text style={{ fontSize: 9, color: '#64748B', fontWeight: 'bold' }}>{s.toUpperCase()}</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
                                 </View>
                                 <IconButton icon="chevron-right" />
                             </View>
@@ -551,7 +662,7 @@ const AdminDashboard: React.FC = () => {
                     </Card>
                 );
             case 'empty':
-                return (
+                return wrapInMoti(
                     <View style={styles.emptyBox}>
                         <IconButton icon={item.icon} size={48} iconColor="#E2E8F0" />
                         <Text variant="bodyLarge" style={styles.emptyText}>{item.title}</Text>
@@ -576,6 +687,7 @@ const AdminDashboard: React.FC = () => {
                 estimatedItemSize={200}
                 ListHeaderComponent={renderHeader}
                 contentContainerStyle={styles.scrollContent}
+                extraData={[pendingVendors, approvedVendors, conversations, filteredJobs, refreshing]}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
                 }
@@ -742,7 +854,7 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     approvalCard: {
-        marginHorizontal: 24,
+        marginHorizontal: 12,
         marginBottom: 16,
         backgroundColor: '#FFFFFF',
         borderRadius: 24,
@@ -754,15 +866,15 @@ const styles = StyleSheet.create({
     },
     cardHeader: {
         flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 12,
+        alignItems: 'flex-start', // Align to top
+        padding: 16,
     },
     vendorAvatar: {
         backgroundColor: '#EEF2FF',
     },
     vendorInfo: {
         flex: 1,
+        marginHorizontal: 12, // Space between icon and buttons
     },
     vendorName: {
         fontWeight: 'bold',
@@ -829,20 +941,37 @@ const styles = StyleSheet.create({
     requestCardContent: {
         flex: 1,
         flexDirection: 'row',
+        paddingVertical: 14,
+        paddingLeft: 12,
+        paddingRight: 16,
         alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
     },
     actionColumn: {
-        justifyContent: 'center',
-        alignItems: 'center',
         width: 100,
+        alignItems: 'flex-end',
+        justifyContent: 'center',
     },
     jobActionBtn: {
         borderRadius: 10,
         backgroundColor: '#6366F1',
         elevation: 0,
         width: '100%',
+    },
+    partialAssignNotice: {
+        marginTop: 8,
+        padding: 10,
+        borderRadius: 10,
+        backgroundColor: '#FFFBEB',
+        borderWidth: 1,
+        borderColor: '#FDE68A',
+    },
+    partialAssignParts: {
+        color: '#92400E',
+        marginBottom: 4,
+    },
+    partialAssignMain: {
+        color: '#B45309',
+        fontWeight: '700',
     },
     messageBtn: {
         flex: 1,

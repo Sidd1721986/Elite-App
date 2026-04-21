@@ -25,6 +25,10 @@ interface JobContextType {
     uploadInvoice: (jobId: string, url: string) => Promise<void>;
     addJobPhotos: (jobId: string, photos: string[]) => Promise<void>;
     removeJobPhoto: (jobId: string, photoUrl: string) => Promise<void>;
+    partialAssign: (jobId: string, vendorId: string, selectedItemIds: string[], selectedPhotoUrls: string[], manualDescription?: string, selectedServices?: string[]) => Promise<void>;
+    finalizeAssignment: (jobId: string) => Promise<void>;
+    unassignVendor: (jobId: string) => Promise<void>;
+    unassignVendorScope: (parentJobId: string, vendorId: string) => Promise<void>;
     getJobById: (jobId: string) => Job | undefined;
     isLoading: boolean;
     refreshJobs: () => Promise<void>;
@@ -39,6 +43,18 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const isMounted = useRef(true);
+
+    const jobsMap = useMemo(() => {
+        const map = new Map<string, Job>();
+        jobs.forEach(job => {
+            if (job && job.id) map.set(job.id, job);
+        });
+        return map;
+    }, [jobs]);
+
+    const getJobById = useCallback((jobId: string) => {
+        return jobsMap.get(jobId);
+    }, [jobsMap]);
 
     useEffect(() => {
         return () => { isMounted.current = false; };
@@ -152,6 +168,170 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, []);
 
+    const partialAssign = useCallback(async (
+        jobId: string, 
+        vendorId: string, 
+        selectedItemIds: string[], 
+        selectedPhotoUrls: string[], 
+        manualDescription?: string,
+        selectedServices: string[] = []
+    ) => {
+        const originalJob = jobsMap.get(jobId);
+        if (!originalJob) throw new Error('Original job not found');
+
+        const originalItems = originalJob.items || [];
+        const originalServices = originalJob.services || [];
+        
+        // Determine if this is a "Full Swap" (selecting everything currently on the job)
+        // or a "Partial Split" (taking a subset)
+        const isSelectingAllItems = originalItems.length === 0 || 
+            (selectedItemIds.length > 0 && originalItems.every(i => selectedItemIds.includes(i.id)));
+        
+        const isSelectingAllServices = originalServices.length === 0 || 
+            (selectedServices.length > 0 && originalServices.every(s => selectedServices.includes(s)));
+
+        const isFullReassign = isSelectingAllItems && isSelectingAllServices && originalJob.vendorId !== undefined;
+
+        try {
+            if (isFullReassign) {
+                // 1. Just swap the vendor on the EXISTING job
+                const updatedJob = await jobService.updateJob(jobId, { 
+                    vendorId: vendorId,
+                    status: 'Assigned', // Ensure it stays/becomes assigned
+                    description: manualDescription || originalJob.description,
+                    services: selectedServices.length > 0 ? selectedServices : originalJob.services
+                });
+                const normalized = normalizeJob(updatedJob);
+                setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+                setError(null);
+                return;
+            }
+
+            // 2. Partial Split Logic (Creating a new sub-job)
+            const assignedItems = originalItems.filter(item => selectedItemIds.includes(item.id));
+            
+            const subJobData = {
+                ...originalJob,
+                id: undefined, 
+                jobNumber: undefined, 
+                vendorId: vendorId,
+                status: 'Assigned',
+                services: selectedServices.length > 0 ? selectedServices : (isSelectingAllServices ? originalServices : []),
+                description: manualDescription || (assignedItems.length > 0 ? assignedItems.map(i => i.description).join('\n') : originalJob.description),
+                photos: selectedPhotoUrls.length > 0 ? selectedPhotoUrls : (originalJob.photos || []),
+                parentJobId: jobId,
+                customerId: originalJob.customerId,
+                createdAt: new Date().toISOString(),
+                notes: [],
+            };
+
+            const newJob = await jobService.createJob(subJobData);
+            const normalizedNewJob = normalizeJob(newJob);
+
+            // Update the ORIGINAL job:
+            const updatedOriginalItems = originalItems.map(item => 
+                selectedItemIds.includes(item.id) ? { ...item, isAssigned: true } : item
+            );
+            
+            const remainingServices = originalServices.filter(s => !selectedServices.includes(s));
+            
+            const updatedParent = await jobService.updateJob(jobId, { 
+                items: updatedOriginalItems,
+                services: remainingServices
+            });
+            const normalizedParent = normalizeJob(updatedParent);
+            // Keep split child on the parent for admin UI until the next full refresh (PUT may not return ChildJobs).
+            const parentWithChildren: Job = {
+                ...normalizedParent,
+                childJobs: [...(normalizedParent.childJobs || []), normalizedNewJob],
+            };
+            
+            setJobs(prevJobs => {
+                const filtered = prevJobs.map(j => j.id === jobId ? parentWithChildren : j);
+                return [normalizedNewJob, ...filtered];
+            });
+            setError(null);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed assignment operation';
+            setError(msg);
+            throw err;
+        }
+    }, [jobsMap]);
+
+    const finalizeAssignment = useCallback(async (jobId: string) => {
+        const currentJob = jobsMap.get(jobId);
+        if (!currentJob) {
+            throw new Error('Job not found');
+        }
+
+        const hasRemainingServices = Array.isArray(currentJob.services) && currentJob.services.length > 0;
+        const hasUnassignedItems = Array.isArray(currentJob.items) && currentJob.items.some(i => i && !i.isAssigned);
+        if (hasRemainingServices || hasUnassignedItems) {
+            throw new Error('You still need to assign the remaining job request items before marking fully assigned.');
+        }
+
+        try {
+            // Mark the parent job as Assigned to move it out of the requests list
+            const updatedJob = await jobService.updateJob(jobId, { status: 'Assigned' });
+            const normalized = normalizeJob(updatedJob);
+            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to finalize assignment');
+            throw err;
+        }
+    }, [jobsMap]);
+
+    const unassignVendor = useCallback(async (jobId: string) => {
+        const previous = jobsMap.get(jobId);
+        try {
+            const updatedJob = await jobService.unassignVendor(jobId);
+            let normalized = normalizeJob(updatedJob);
+            // Items / isAssigned are client-side splits; API does not return them — reset so assign UI works again.
+            if (previous?.items?.length) {
+                normalized = {
+                    ...normalized,
+                    items: previous.items.map(i => ({ ...i, isAssigned: false })),
+                };
+            }
+            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            setError(null);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to unassign vendor');
+            throw err;
+        }
+    }, [jobsMap]);
+
+    const unassignVendorScope = useCallback(async (parentJobId: string, vendorId: string) => {
+        const snapshot = [...jobs];
+        const childIdsToRemove = snapshot
+            .filter(j => j.parentJobId === parentJobId && j.vendorId === vendorId)
+            .map(j => j.id);
+        const previousParent = snapshot.find(j => j.id === parentJobId);
+
+        try {
+            const updatedParent = await jobService.unassignVendorScope(parentJobId, vendorId);
+            let normalizedParent = normalizeJob(updatedParent);
+            if (previousParent?.items?.length) {
+                // Item-level split state lives on client; put all items back as assignable when a vendor scope is removed.
+                normalizedParent = {
+                    ...normalizedParent,
+                    items: previousParent.items.map(i => ({ ...i, isAssigned: false })),
+                };
+            }
+
+            setJobs(prevJobs => {
+                const withoutRemovedChildren = prevJobs.filter(j => !childIdsToRemove.includes(j.id));
+                return withoutRemovedChildren.map(j => (j.id === parentJobId ? normalizedParent : j));
+            });
+            setError(null);
+        } catch (err) {
+            setJobs(snapshot);
+            setError(err instanceof Error ? err.message : 'Failed to unassign vendor scope');
+            throw err;
+        }
+    }, [jobs]);
+
     const acceptJob = useCallback(async (jobId: string) => {
         try {
             const updatedJob = await jobService.acceptJob(jobId);
@@ -260,15 +440,6 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             throw err;
         }
     }, [refreshJobs]);
-    const jobsMap = useMemo(() => {
-        const map = new Map<string, Job>();
-        jobs.forEach(job => map.set(job.id, job));
-        return map;
-    }, [jobs]);
-
-    const getJobById = useCallback((jobId: string) => {
-        return jobsMap.get(jobId);
-    }, [jobsMap]);
 
     // Debounced AsyncStorage persistence logic
     // This ensures that frequent updates (like photo uploads) don't lock the UI with repeated JSON serialization
@@ -302,11 +473,15 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         uploadInvoice,
         addJobPhotos,
         removeJobPhoto,
+        partialAssign,
+        finalizeAssignment,
+        unassignVendor,
+        unassignVendorScope,
         getJobById,
         isLoading,
         refreshJobs,
         error
-    }), [jobs, addJob, updateJob, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, addJobPhotos, getJobById, isLoading, refreshJobs, error]);
+    }), [jobs, addJob, updateJob, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, addJobPhotos, getJobById, isLoading, refreshJobs, error, partialAssign, finalizeAssignment, unassignVendor, unassignVendorScope, removeJobPhoto]);
 
     return (
         <JobContext.Provider value={value}>

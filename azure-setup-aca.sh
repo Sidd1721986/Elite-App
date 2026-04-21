@@ -83,7 +83,7 @@ az containerapp env create \
 echo "🚀 Deploying Container App: $ACA_APP_NAME"
 # For production, set MIN_REPLICAS to 1 to avoid "Cold Start" delays.
 # For testing/demo, we use 0 to save costs.
-MIN_REPLICAS=0 
+MIN_REPLICAS=1
 MAX_REPLICAS=10
 
 # We create it with a "hello world" or the latest image if available.

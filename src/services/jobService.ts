@@ -22,6 +22,15 @@ export const jobService = {
         return apiClient.post<Job>(`/jobs/${jobId}/assign`, { vendorId });
     },
 
+    async unassignVendor(jobId: string): Promise<Job> {
+        // Use PUT /jobs/{id} so deployments that only expose standard CRUD still work (POST .../unassign-vendor 404s on older builds).
+        return apiClient.put<Job>(`/jobs/${jobId}`, { clearAssignedVendor: true });
+    },
+
+    async unassignVendorScope(parentJobId: string, vendorId: string): Promise<Job> {
+        return apiClient.post<Job>(`/jobs/${parentJobId}/unassign-scope-vendor`, { vendorId });
+    },
+
     async acceptJob(jobId: string): Promise<Job> {
         return apiClient.post<Job>(`/jobs/${jobId}/accept`, {});
     },
@@ -61,7 +70,7 @@ export const jobService = {
         return apiClient.post<Job>(`/jobs/${jobId}/photos`, { photos });
     },
     async removeJobPhoto(jobId: string, photoUrl: string): Promise<Job> {
-        return apiClient.delete<Job>(`/jobs/${jobId}/photos`, { data: { photoUrl } });
+        return apiClient.post<Job>(`/jobs/${jobId}/photos/remove`, { photoUrl });
     },
     async uploadFile(file: any): Promise<{ url: string }> {
         const formData = new FormData();

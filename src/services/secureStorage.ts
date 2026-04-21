@@ -46,8 +46,14 @@ export const SecureStorage = {
                 if (credentials) {
                     return credentials.password;
                 }
-                // Check fallback if not in keychain (for migration)
-                return await AsyncStorage.getItem(key);
+                // Migration fallback: token was stored in AsyncStorage before Keychain was introduced.
+                // Warn so we know when this path is hit; it should become unreachable after one login cycle.
+                const legacy = await AsyncStorage.getItem(key);
+                if (legacy) {
+                    console.warn(`SecureStorage: token "${key}" found only in AsyncStorage (unencrypted). ` +
+                        'User should re-login so the token is migrated to Keychain.');
+                }
+                return legacy;
             }
 
             return await AsyncStorage.getItem(key);

@@ -27,9 +27,17 @@ jobs:
           echo "Status: ${{ steps.health.outputs.status }}"
           echo "Response: ${{ steps.health.outputs.body }}"
           echo ""
-          echo "To start disaster recovery, go to:"
-          echo "https://github.com/${{ github.repository }}/actions/workflows/disaster-recovery.yml"
+          echo "DR link: https://github.com/${{ github.repository }}/actions/workflows/disaster-recovery.yml"
           exit 1
+
+      - name: Notify on failure via webhook
+        if: steps.health.outputs.status != '200' && secrets.ALERT_WEBHOOK_URL != ''
+        run: |
+          curl -s -X POST "${{ secrets.ALERT_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "text": "🚨 *Elite App API is DOWN*\nStatus: ${{ steps.health.outputs.status }}\nEnvironment: ${{ secrets.AZURE_WEBAPP_NAME }}\nTime: '"$(date -u)"'\nDR: https://github.com/${{ github.repository }}/actions/workflows/disaster-recovery.yml"
+            }' || true
 
       - name: Report healthy
         if: steps.health.outputs.status == '200'
