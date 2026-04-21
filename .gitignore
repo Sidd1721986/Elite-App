@@ -34,6 +34,10 @@ yarn-error.*
 .env*.local
 .env.prod
 
+# Environment-specific config (contains production API URL — never commit)
+# Copy src/config/env.example.ts → src/config/env.ts and fill in real values.
+src/config/env.ts
+
 # typescript
 *.tsbuildinfo
 

@@ -27,15 +27,15 @@ const SignupRoleSelectorScreen: React.FC<Props> = ({ navigation }) => {
                     Choose how you want to use the platform
                 </Text>
 
-                <Card style={styles.card} onPress={() => navigation.navigate('CustomerSignup')}>
+                <Card style={styles.card} onPress={() => navigation.navigate('UserSignup')}>
                     <Card.Content style={styles.cardContent}>
                         <View style={styles.iconContainer}>
                             <View style={[styles.iconCircle, { backgroundColor: '#E3F2FD' }]}>
-                                <Button icon="account-tie" textColor="#1976D2" contentStyle={styles.cardIcon} children={undefined} />
+                                <Button icon="account" textColor="#1976D2" contentStyle={styles.cardIcon} children={undefined} />
                             </View>
                         </View>
                         <View style={styles.textContainer}>
-                            <Text variant="titleLarge" style={styles.cardTitle}>I am a Customer</Text>
+                            <Text variant="titleLarge" style={styles.cardTitle}>I am a User</Text>
                             <Text variant="bodyMedium" style={styles.cardDesc}>I need services for my home or business</Text>
                         </View>
                     </Card.Content>

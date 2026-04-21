@@ -30,12 +30,18 @@ public class MessagesController : ControllerBase
     }
 
     // GET: api/messages/admin-id
+    // Projects only the Id — never loads PasswordHash or other sensitive fields.
     [HttpGet("admin-id")]
     public async Task<ActionResult<Guid>> GetDefaultAdminId()
     {
-        var admin = await _context.Users.FirstOrDefaultAsync(u => u.Role == "Admin");
-        if (admin == null) return NotFound("No admin found");
-        return Ok(admin.Id);
+        var adminId = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Role == "Admin" && u.IsActive)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync();
+
+        if (adminId == null) return NotFound(new { message = "No admin found" });
+        return Ok(adminId.Value);
     }
 
     // POST: api/messages
@@ -45,6 +51,18 @@ public class MessagesController : ControllerBase
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
             return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(messageDto.Content))
+            return BadRequest(new { message = "Message content cannot be empty." });
+        if (messageDto.ReceiverId == Guid.Empty)
+            return BadRequest(new { message = "ReceiverId is required." });
+        if (messageDto.ReceiverId == currentUserId)
+            return BadRequest(new { message = "Cannot send a message to yourself." });
+
+        var receiverExists = await _context.Users.AsNoTracking()
+            .AnyAsync(u => u.Id == messageDto.ReceiverId && u.IsActive);
+        if (!receiverExists)
+            return BadRequest(new { message = "Recipient not found." });
 
         var message = new Message
         {
@@ -58,7 +76,7 @@ public class MessagesController : ControllerBase
         _context.Messages.Add(message);
         await _context.SaveChangesAsync();
 
-        return Ok(message);
+        return StatusCode(StatusCodes.Status201Created, message);
     }
 
     // Static segments must be registered before {otherUserId} or "conversations" is parsed as a Guid and this route never runs.
@@ -117,26 +135,36 @@ public class MessagesController : ControllerBase
         return Ok(conversations);
     }
 
-    // GET: api/messages/{otherUserId}
+    // GET: api/messages/{otherUserId}?page=1&pageSize=50
+    // Returns the most-recent N messages, oldest-first (UI scrolls up to load more).
     [HttpGet("{otherUserId}")]
-    public async Task<ActionResult<IEnumerable<Message>>> GetMessages(Guid otherUserId)
+    public async Task<ActionResult<IEnumerable<Message>>> GetMessages(
+        Guid otherUserId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
             return Unauthorized();
+
+        pageSize = Math.Clamp(pageSize, 1, 100);
 
         // Mark incoming unread messages in one DB-side update.
         await _context.Messages
             .Where(m => m.SenderId == otherUserId && m.ReceiverId == currentUserId && !m.IsRead)
             .ExecuteUpdateAsync(setters => setters.SetProperty(m => m.IsRead, true));
 
+        // Fetch newest page first (DESC), then reverse in memory for chronological display.
         var messages = await _context.Messages
             .AsNoTracking()
             .Where(m => (m.SenderId == currentUserId && m.ReceiverId == otherUserId) ||
                         (m.SenderId == otherUserId && m.ReceiverId == currentUserId))
-            .OrderBy(m => m.Timestamp)
+            .OrderByDescending(m => m.Timestamp)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
+        messages.Reverse(); // oldest → newest for the UI
         return Ok(messages);
     }
 }

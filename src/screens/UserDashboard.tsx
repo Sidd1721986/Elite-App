@@ -6,10 +6,12 @@ import FastImage from 'react-native-fast-image';
 import {
     Text, Card, Button, Avatar, Divider, Surface,
     Portal, Modal, TextInput, List, IconButton,
-    Chip, Checkbox,
+    Chip,
     Menu, SegmentedButtons, Snackbar,
     ProgressBar, Dialog
 } from 'react-native-paper';
+import { MotiView, MotiText } from 'moti';
+import { useReducedMotion } from 'react-native-reanimated';
 import { useAuth } from '../context/AuthContext';
 import { useJobs } from '../context/JobContext';
 import AppLogo from '../components/AppLogo';
@@ -22,15 +24,23 @@ import JobItem from '../components/JobItem';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { JobSkeleton, DashboardStatsSkeleton } from '../components/SkeletonLoader';
 import { formatAddress, parseAddress, US_STATES } from '../utils/addressUtils';
+import { AVAILABLE_SERVICES } from '../config/services';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
-const CustomerDashboard: React.FC = () => {
+const UserDashboard: React.FC = () => {
     const { width: windowWidth } = useWindowDimensions();
+    const reducedMotion = useReducedMotion();
     const { user, logout } = useAuth();
     const { jobs, addJob, updateJob, getJobById, refreshJobs, isLoading } = useJobs();
     const { messageUnreadTotal, refreshInbox } = useChatInboxNotifications();
     const navigation = useNavigation<NavigationProp>();
+
+    const isCustomer = useMemo(() => {
+        if (!user?.role) return false;
+        const role = user.role.toLowerCase();
+        return role !== 'admin' && role !== 'vendor';
+    }, [user?.role]);
 
     // UI States
     const [isNewJobModalVisible, setNewJobModalVisible] = useState(false);
@@ -58,8 +68,20 @@ const CustomerDashboard: React.FC = () => {
     const [contactPhone, setContactPhone] = useState(user?.phone || '');
     const [contactEmail, setContactEmail] = useState(user?.email || '');
     const [photos, setPhotos] = useState<string[]>([]);
+    const [selectedServices, setSelectedServices] = useState<string[]>([]);
+    
+    // Auto-populate description from selected services
+    React.useEffect(() => {
+        if (selectedServices.length > 0) {
+            setDescription(selectedServices.join(', '));
+        } else {
+            setDescription('');
+        }
+    }, [selectedServices]);
+
     const [showUrgencyMenu, setShowUrgencyMenu] = useState(false);
     const [showStateMenu, setShowStateMenu] = useState(false);
+    const [showServicesMenu, setShowServicesMenu] = useState(false);
     const [showPhotoMenu, setShowPhotoMenu] = useState(false);
 
     const handleLogout = useCallback(async () => {
@@ -102,6 +124,7 @@ const CustomerDashboard: React.FC = () => {
         setOtherDetails('');
         setUrgency(Urgency.NO_RUSH);
         setPhotos([]);
+        setSelectedServices([]);
         setEditingJobId(null);
         
         const parts = parseAddress(user?.address);
@@ -117,8 +140,18 @@ const CustomerDashboard: React.FC = () => {
     const handleSubmitJob = useCallback(async () => {
         const address = formatAddress({ street, city, zip, state });
         
-        if (!street.trim() || !city.trim() || !zip.trim() || !state.trim() || !description.trim() || !contactPhone.trim() || !contactEmail.trim()) {
-            setSnackbarMessage('Please fill in all mandatory fields (Address, Description, Phone, and Email)');
+        const missingFields = [];
+        if (!street.trim()) missingFields.push('Address');
+        if (!city.trim()) missingFields.push('City');
+        if (!zip.trim()) missingFields.push('Zip');
+        if (!state.trim()) missingFields.push('State');
+        if (selectedServices.length === 0) missingFields.push('Services');
+        if (!description.trim()) missingFields.push('What\'s needs fixing');
+        if (!contactPhone.trim()) missingFields.push('Contact Phone');
+        if (!contactEmail.trim()) missingFields.push('Contact Email');
+
+        if (missingFields.length > 0) {
+            setSnackbarMessage(`Missing: ${missingFields.join(', ')}`);
             setSnackbarVisible(true);
             return;
         }
@@ -131,12 +164,19 @@ const CustomerDashboard: React.FC = () => {
             return;
         }
 
+        if (!isCustomer) {
+            setSnackbarMessage('Error: Only User accounts can create service requests.');
+            setSnackbarVisible(true);
+            return;
+        }
+
         try {
             if (editingJobId) {
                 await updateJob(editingJobId, {
                     address: address,
                     description,
                     photos: photos,
+                    services: selectedServices,
                     urgency,
                     otherDetails,
                     contactPhone,
@@ -145,10 +185,11 @@ const CustomerDashboard: React.FC = () => {
                 setSnackbarMessage('Job request updated successfully!');
             } else {
                 await addJob({
-                    customerId: user?.email || 'anon',
+                    customerId: user?.id || user?.email || 'anon',
                     address: address,
                     description,
                     photos: photos,
+                    services: selectedServices,
                     urgency,
                     otherDetails,
                     contactPhone,
@@ -188,6 +229,8 @@ const CustomerDashboard: React.FC = () => {
             setContactPhone(jobToEdit.contactPhone || '');
             setContactEmail(jobToEdit.contactEmail || '');
             setPhotos(jobToEdit.photos || []);
+            setSelectedServices(jobToEdit.services || []);
+            setDescription(jobToEdit.description || '');
             setNewJobModalVisible(true);
         }
     }, [getJobById]);
@@ -200,11 +243,12 @@ const CustomerDashboard: React.FC = () => {
         jobs.filter(j => j.status === JobStatus.COMPLETED || j.status === JobStatus.INVOICED),
         [jobs]);
 
-    const renderJobItem = useCallback(({ item }: { item: Job }) => (
+    const renderJobItem = useCallback(({ item, index }: { item: Job, index: number }) => (
         <JobItem
             job={item}
             onViewDetails={handleViewDetails}
             onModify={handleModifyJob}
+            index={index}
         />
     ), [handleViewDetails, handleModifyJob]);
 
@@ -272,10 +316,16 @@ const CustomerDashboard: React.FC = () => {
                     </View>
                 </View>
 
-                <View style={styles.welcomeSection}>
+                <MotiView 
+                    from={{ opacity: 0, translateX: -20 }}
+                    animate={{ opacity: 1, translateX: 0 }}
+                    transition={{ type: 'timing', duration: 600 }}
+                    style={styles.welcomeSection}
+                    reducedMotion={reducedMotion}
+                >
                     <Text variant="headlineSmall" style={styles.welcomeText}>Hello, {user?.name?.split(' ')[0] || 'Member'}</Text>
                     <Text variant="labelMedium" style={styles.headerSubtitle}>Ready to fix something today?</Text>
-                </View>
+                </MotiView>
 
                 {isLoading ? (
                     <DashboardStatsSkeleton />
@@ -315,25 +365,44 @@ const CustomerDashboard: React.FC = () => {
                 estimatedItemSize={250}
                 ListHeaderComponent={() => (
                     <View style={styles.tabHeader}>
-                        <Surface style={styles.bannerSurface} elevation={3}>
-                            <View style={styles.bannerTextContainer}>
-                                <Text variant="titleLarge" style={styles.bannerTitle}>Need a professional?</Text>
-                                <Text variant="bodyMedium" style={styles.bannerText}>Get your job started in seconds.</Text>
-                                <Button
-                                    mode="contained"
-                                    icon="plus"
-                                    style={styles.newJobBtn}
-                                    labelStyle={{ fontWeight: '900' }}
-                                    onPress={() => {
-                                        clearForm();
-                                        setNewJobModalVisible(true);
-                                    }}
-                                >
-                                    Request Service
-                                </Button>
-                            </View>
-                            <AppLogo size={80} showSurface={false} />
-                        </Surface>
+                <MotiView 
+                    from={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ type: 'spring', delay: 200 }}
+                    style={styles.bannerSurface} 
+                    elevation={3}
+                    reducedMotion={reducedMotion}
+                >
+                    <View style={styles.bannerTextContainer}>
+                        {!isCustomer && (
+                            <Chip icon="eye-outline" style={{ marginBottom: 8, alignSelf: 'flex-start' }}>Preview Mode</Chip>
+                        )}
+                        <Text variant="titleLarge" style={styles.bannerTitle}>
+                            {isCustomer ? 'How can we help today?' : 'Service Request Preview'}
+                        </Text>
+                        <Text variant="bodyMedium" style={styles.bannerText}>
+                            {isCustomer 
+                                ? 'Describe your needs and we\'ll assign the best experts for the job.'
+                                : 'This is a preview of the user request flow. Only User accounts can create requests.'
+                            }
+                        </Text>
+                        {isCustomer && (
+                            <Button
+                                mode="contained"
+                                icon="plus"
+                                style={styles.newJobBtn}
+                                labelStyle={{ fontWeight: '900' }}
+                                onPress={() => {
+                                    clearForm();
+                                    setNewJobModalVisible(true);
+                                }}
+                            >
+                                Request Service
+                            </Button>
+                        )}
+                    </View>
+                    <AppLogo size={80} showSurface={false} />
+                </MotiView>
 
                         {isLoading ? (
                             <View style={{ marginTop: 20 }}>
@@ -375,6 +444,7 @@ const CustomerDashboard: React.FC = () => {
                 </View>
             )}
             contentContainerStyle={styles.tabContent}
+            extraData={[isLoading, activeJobs, refreshing, messageUnreadTotal, historyJobs]}
             />
         </View>
     );
@@ -449,8 +519,19 @@ const CustomerDashboard: React.FC = () => {
                     contentContainerStyle={styles.modalContent}
                 >
                     <Text variant="headlineSmall" style={styles.modalTitle}>
-                        {editingJobId ? 'Modify Request' : 'Request Service'}
+                        {editingJobId ? 'Edit Service Request' : 'Request Service'}
                     </Text>
+
+                    {!isCustomer && (
+                        <Surface style={{ padding: 12, backgroundColor: '#FEF2F2', borderRadius: 12, marginBottom: 16 }}>
+                            <Text style={{ color: '#991B1B', fontWeight: 'bold' }}>
+                                ⚠️ Admin/Vendor View
+                            </Text>
+                            <Text style={{ color: '#991B1B', fontSize: 12 }}>
+                                You are in a read-only preview. Please login as a User to create requests.
+                            </Text>
+                        </Surface>
+                    )}
                     <ScrollView showsVerticalScrollIndicator={false}>
                         <TextInput
                             label="Service Street Address *"
@@ -513,16 +594,79 @@ const CustomerDashboard: React.FC = () => {
                                 </ScrollView>
                             </Menu>
                         </View>
+                        
+                        <Text variant="titleSmall" style={styles.sectionLabel}>Select Services Needed *</Text>
+                        <Menu
+                            visible={showServicesMenu}
+                            onDismiss={() => setShowServicesMenu(false)}
+                            anchor={
+                                <TouchableOpacity
+                                    onPress={() => setShowServicesMenu(true)}
+                                    activeOpacity={1}
+                                >
+                                    <View pointerEvents="none">
+                                        <TextInput
+                                            label="Service Needed *"
+                                            value={selectedServices.length > 0 ? `${selectedServices.length} selected` : ''}
+                                            mode="outlined"
+                                            style={styles.modalInput}
+                                            placeholder="Select a service"
+                                            editable={false}
+                                            right={<TextInput.Icon icon="chevron-down" />}
+                                        />
+                                    </View>
+                                </TouchableOpacity>
+                            }
+                        >
+                            <ScrollView style={{ maxHeight: 260 }}>
+                                {AVAILABLE_SERVICES.map((service) => (
+                                    <Menu.Item
+                                        key={service}
+                                        title={service}
+                                        leadingIcon={selectedServices.includes(service) ? 'check-circle-outline' : 'plus-circle-outline'}
+                                        onPress={() => {
+                                            setSelectedServices(prev =>
+                                                prev.includes(service) ? prev : [...prev, service]
+                                            );
+                                            setShowServicesMenu(false);
+                                        }}
+                                    />
+                                ))}
+                            </ScrollView>
+                        </Menu>
+
+                        <View style={styles.selectedServicesContainer}>
+                            {selectedServices.length === 0 ? (
+                                <Text variant="bodySmall" style={styles.selectedServicesHint}>
+                                    Selected services will appear here.
+                                </Text>
+                            ) : (
+                                selectedServices.map(service => (
+                                    <Chip
+                                        key={service}
+                                        mode="outlined"
+                                        compact
+                                        style={styles.selectedServiceChip}
+                                        textStyle={styles.selectedServiceChipText}
+                                        onClose={() => {
+                                            setSelectedServices(prev => prev.filter(s => s !== service));
+                                        }}
+                                    >
+                                        {service}
+                                    </Chip>
+                                ))
+                            )}
+                        </View>
 
                         <TextInput
-                            label="Description of Work *"
+                            label="Summary of Services Needed *"
                             value={description}
-                            onChangeText={setDescription}
                             mode="outlined"
-                            style={styles.modalInput}
+                            style={[styles.modalInput, { backgroundColor: '#F8FAFC' }]}
                             multiline
-                            numberOfLines={4}
-                            placeholder="e.g. Living room faucet is leaking..."
+                            numberOfLines={2}
+                            editable={false}
+                            placeholder="Select services above to populate this summary..."
                         />
 
                         <TextInput
@@ -913,6 +1057,31 @@ const styles = StyleSheet.create({
         marginTop: 8,
         borderRadius: 16,
     },
+    sectionLabel: {
+        marginTop: 16,
+        marginBottom: 8,
+        fontWeight: 'bold',
+        color: '#1E293B',
+    },
+    selectedServicesContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 16,
+        minHeight: 32,
+    },
+    selectedServicesHint: {
+        color: '#94A3B8',
+        marginBottom: 8,
+    },
+    selectedServiceChip: {
+        backgroundColor: '#EEF2FF',
+        borderColor: '#CBD5FF',
+    },
+    selectedServiceChipText: {
+        fontSize: 12,
+        color: '#4338CA',
+    },
     snackbar: {
         borderRadius: 12,
         backgroundColor: '#1E293B',
@@ -944,8 +1113,40 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: -10,
         right: -10,
-        backgroundColor: '#FFFFFF',
         margin: 0,
+        backgroundColor: '#FFFFFF',
+    },
+    itemsSection: {
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    itemsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    itemCard: {
+        backgroundColor: '#F8FAFC',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    itemCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    itemNumber: {
+        color: '#6366F1',
+        fontWeight: 'bold',
+    },
+    itemInput: {
+        backgroundColor: '#FFFFFF',
+        marginBottom: 8,
     },
     emptyPhotoBox: {
         height: 100,
@@ -959,4 +1160,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default React.memo(CustomerDashboard);
+export default React.memo(UserDashboard);

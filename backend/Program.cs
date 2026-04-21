@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using EliteApp.API.Services.Email;
+using EliteApp.API.Services.Sms;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -73,6 +74,16 @@ builder.Services.AddSingleton<IEmailSender>(sp =>
 });
 builder.Services.AddScoped<EliteApp.API.Services.IAuthService, EliteApp.API.Services.AuthService>();
 
+// SMS: swap MockSmsService for a real provider when Sms:Provider config is present.
+// See MockSmsService.cs for integration instructions (Twilio, Azure Communication Services, etc.).
+builder.Services.AddSingleton<ISmsService>(sp =>
+{
+    var cfg    = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<MockSmsService>>();
+    // TODO: check cfg["Sms:Twilio:AccountSid"] (or your chosen provider) and return a real impl.
+    return new MockSmsService(logger);
+});
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -126,22 +137,11 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<EliteApp.API.Data.AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// Advanced Health Checks
+// Health Checks — uses the registered NpgSql package (async, pooled connection)
+// instead of the former raw-connection + synchronous Open() that blocked the thread pool.
 builder.Services.AddHealthChecks()
-    .AddCheck("Postgres", () => 
-    {
-        try 
-        {
-            using var conn = new Npgsql.NpgsqlConnection(connectionString);
-            conn.Open();
-            return HealthCheckResult.Healthy();
-        }
-        catch (Exception ex)
-        {
-            return HealthCheckResult.Unhealthy(exception: ex);
-        }
-    })
-    .AddCheck("Memory", () => 
+    .AddNpgSql(connectionString!, name: "Postgres")
+    .AddCheck("Memory", () =>
     {
         var used = Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024;
         return used < 1024 ? HealthCheckResult.Healthy() : HealthCheckResult.Degraded();
@@ -183,6 +183,17 @@ if (builder.Environment.IsProduction())
 }
 
 var jwtKey = ResolveJwtSigningKey(builder.Configuration, builder.Environment);
+
+// Issuer and audience are read from config (default: "EliteApp").
+// Override via Jwt:Issuer / Jwt:Audience in appsettings or environment variables.
+var jwtIssuer   = builder.Configuration["Jwt:Issuer"]?.Trim()   is { Length: > 0 } iss ? iss : "EliteApp";
+var jwtAudience = builder.Configuration["Jwt:Audience"]?.Trim() is { Length: > 0 } aud ? aud : "EliteApp";
+
+// Single source of truth for the signing key, issuer, and audience — used both here
+// (JWT validation middleware) and in AuthService (token generation).  Eliminates the old
+// bifurcated code path that had a hard-coded fallback key inside AuthService.
+builder.Services.AddSingleton(new EliteApp.API.Services.JwtSigningKeyProvider(jwtKey, jwtIssuer, jwtAudience));
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
@@ -192,8 +203,10 @@ builder.Services.AddAuthentication(options =>
 {
     options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
     {
-        ValidateIssuer = false, // Set to true and provide 'ValidIssuer' in production if known
-        ValidateAudience = false, // Set to true and provide 'ValidAudience' in production if known
+        ValidateIssuer = true,
+        ValidIssuer = jwtIssuer,
+        ValidateAudience = true,
+        ValidAudience = jwtAudience,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtKey)),
@@ -250,13 +263,19 @@ app.Use(async (context, next) =>
     {
         var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
         Log.Error(ex, "Unhandled Exception [TraceId: {TraceId}]", traceId);
-        
-        context.Response.StatusCode = 500;
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new { 
-            message = "An internal server error occurred. Please contact support with this Trace ID.",
-            traceId = traceId
-        });
+
+        // Guard: if the response has already started (e.g., mid-stream file download),
+        // writing more bytes would corrupt the output. Let the pipeline handle teardown.
+        if (!context.Response.HasStarted)
+        {
+            context.Response.StatusCode = 500;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                message = "An internal server error occurred. Please contact support with this Trace ID.",
+                traceId
+            });
+        }
     }
 });
 
@@ -307,14 +326,19 @@ using (var scope = app.Services.CreateScope())
     var env = services.GetRequiredService<IHostEnvironment>();
     var configuration = services.GetRequiredService<IConfiguration>();
 
-    // WARNING: context.Database.Migrate() runs on every application startup.
-    // In a multi-replica production environment (like Azure Container Apps with scale > 1),
-    // this can cause race conditions or deployment failures if multiple replicas try to migrate at once.
-    // RECOMMENDED: For high-scale production, run migrations as a separate CI/CD step or a one-time job.
-    context.Database.Migrate();
+    // Default: migrate on startup (single-instance App Service / local). For multiple replicas
+    // without extra infrastructure, set Database__RunMigrations=false and apply migrations
+    // once from CI or `dotnet ef database update` before rolling out new instances.
+    var runMigrations = configuration.GetValue("Database:RunMigrations", true);
+    if (runMigrations)
+        await context.Database.MigrateAsync();
+    else
+        Log.Warning(
+            "Database:RunMigrations is false; skipping EF migrations at startup. Apply pending migrations before serving traffic.");
 
     const string adminEmail = "admin@elite.com";
-    var existingAdmin = context.Users.FirstOrDefault(u => u.Email == adminEmail);
+    // Use async query — synchronous DB calls block thread-pool threads at startup.
+    var existingAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == adminEmail);
 
     if (!env.IsProduction())
     {
@@ -331,12 +355,12 @@ using (var scope = app.Services.CreateScope())
                 CreatedAt = DateTime.UtcNow
             };
             context.Users.Add(adminUser);
-            context.SaveChanges();
+            await context.SaveChangesAsync();
         }
         else if (!existingAdmin.PasswordHash.StartsWith("$2"))
         {
             existingAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123");
-            context.SaveChanges();
+            await context.SaveChangesAsync();
         }
     }
     else
@@ -355,7 +379,7 @@ using (var scope = app.Services.CreateScope())
                 CreatedAt = DateTime.UtcNow
             };
             context.Users.Add(adminUser);
-            context.SaveChanges();
+            await context.SaveChangesAsync();
         }
     }
 }

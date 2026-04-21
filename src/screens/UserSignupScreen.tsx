@@ -16,7 +16,7 @@ interface Props {
     navigation: SignupScreenNavigationProp;
 }
 
-const CustomerSignupScreen: React.FC<Props> = ({ navigation }) => {
+const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [street, setStreet] = useState('');
@@ -474,4 +474,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default CustomerSignupScreen;
+export default UserSignupScreen;

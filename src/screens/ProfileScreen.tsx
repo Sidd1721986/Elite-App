@@ -25,7 +25,7 @@ import { formatAddress, parseAddress, US_STATES } from '../utils/addressUtils';
 type NavigationProp = StackNavigationProp<RootStackParamList, 'Profile'>;
 
 const ProfileScreen: React.FC = () => {
-    const { user, updateProfile, requestPhoneVerification, verifyPhone } = useAuth();
+    const { user, updateProfile, requestPhoneVerification, verifyPhone, deleteAccount } = useAuth();
     const navigation = useNavigation<NavigationProp>();
 
     const [name, setName] = useState(user?.name || '');
@@ -128,6 +128,41 @@ const ProfileScreen: React.FC = () => {
         } finally {
             setIsVerifyingOTP(false);
         }
+    };
+
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            "We're sad to see you go! 😢",
+            "Are you sure you want to delete your account? You'll lose access to all your personalized features and settings that make your experience smooth.",
+            [
+                { text: "I'll Stay! (Recommended)", style: "cancel" },
+                {
+                    text: "Continue to Deletion",
+                    style: "destructive",
+                    onPress: () => {
+                        Alert.alert(
+                            "WAIT! Your Home Still Needs Us! 🏠",
+                            "Every house needs something eventually. Whether it's a repair, maintenance, or a new project—keep us and we will handle it for you! Are you absolutely sure you want to delete your history and start over from scratch?",
+                            [
+                                { text: "Keep My Account", style: "cancel" },
+                                {
+                                    text: "Delete Anyway",
+                                    style: "destructive",
+                                    onPress: async () => {
+                                        const result = await deleteAccount();
+                                        if (result !== true) {
+                                            setSnackbarMessage(typeof result === 'string' ? result : 'Deletion failed');
+                                            setSnackbarVisible(true);
+                                        }
+                                        // On success, AuthContext handles logout & redirect automatically
+                                    }
+                                }
+                            ]
+                        );
+                    }
+                }
+            ]
+        );
     };
 
     if (!user) return null;
@@ -317,6 +352,22 @@ const ProfileScreen: React.FC = () => {
                         right={props => <List.Icon {...props} icon="chevron-right" />}
                     />
                 </View>
+
+                <View style={[styles.accountSection, { marginTop: 24, marginBottom: 40 }]}>
+                    <Divider style={[styles.divider, { marginBottom: 24 }]} />
+                    <Button
+                        mode="outlined"
+                        onPress={handleDeleteAccount}
+                        textColor="#EF4444"
+                        style={styles.deleteBtn}
+                        contentStyle={{ height: 48 }}
+                    >
+                        Delete Account Permanently
+                    </Button>
+                    <Text style={styles.deleteWarning}>
+                        This action is permanent and cannot be reversed.
+                    </Text>
+                </View>
             </ScrollView>
 
             <Portal>
@@ -450,6 +501,17 @@ const styles = StyleSheet.create({
     divider: {
         marginVertical: 12,
         backgroundColor: '#E2E8F0',
+    },
+    deleteBtn: {
+        borderColor: '#EF4444',
+        borderWidth: 1.5,
+        borderRadius: 12,
+    },
+    deleteWarning: {
+        textAlign: 'center',
+        fontSize: 12,
+        color: '#94A3B8',
+        marginTop: 12,
     }
 });
 

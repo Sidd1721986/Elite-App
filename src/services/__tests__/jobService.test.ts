@@ -35,6 +35,16 @@ describe('jobService', () => {
         expect(apiClient.post).toHaveBeenCalledWith('/jobs/job1/assign', { vendorId: 'vendor1' });
     });
 
+    it('unassignVendor should call PUT with clearAssignedVendor', async () => {
+        await jobService.unassignVendor('job1');
+        expect(apiClient.put).toHaveBeenCalledWith('/jobs/job1', { clearAssignedVendor: true });
+    });
+
+    it('unassignVendorScope should call correct endpoint', async () => {
+        await jobService.unassignVendorScope('parent1', 'vendor1');
+        expect(apiClient.post).toHaveBeenCalledWith('/jobs/parent1/unassign-scope-vendor', { vendorId: 'vendor1' });
+    });
+
     it('acceptJob should call correct endpoint', async () => {
         await jobService.acceptJob('job1');
         expect(apiClient.post).toHaveBeenCalledWith('/jobs/job1/accept', {});

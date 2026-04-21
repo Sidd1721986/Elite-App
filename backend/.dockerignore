@@ -1,6 +1,28 @@
+# ── Build artefacts ───────────────────────────────────────────────────────────
 bin*/
 obj*/
 *.log
+
+# ── Secrets / environment-specific config ────────────────────────────────────
+# Never bake local secrets or dev settings into the image.
+.env
+.env.*
+appsettings.Development.json
+appsettings.Local.json
+appsettings.Production.json        # use environment variables / Key Vault in prod
+*.user
+
+# ── IDE / OS noise ────────────────────────────────────────────────────────────
 .vs/
 .vscode/
-appsettings.Development.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Test results / coverage ───────────────────────────────────────────────────
+TestResults/
+coverage*.xml
+*.coverage
+
+# ── Local uploads (generated at runtime, not part of the image) ──────────────
+wwwroot/uploads/

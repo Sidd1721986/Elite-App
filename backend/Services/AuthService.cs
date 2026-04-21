@@ -5,6 +5,7 @@ using System.Text;
 using EliteApp.API.Data;
 using EliteApp.API.Models;
 using EliteApp.API.Services.Email;
+using EliteApp.API.Services.Sms;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -26,18 +27,24 @@ public class AuthService : IAuthService
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly IEmailSender _emailSender;
+    private readonly ISmsService _smsService;
     private readonly ILogger<AuthService> _logger;
+    private readonly JwtSigningKeyProvider _jwtKeyProvider;
 
     public AuthService(
         AppDbContext context,
         IConfiguration configuration,
         IEmailSender emailSender,
-        ILogger<AuthService> logger)
+        ISmsService smsService,
+        ILogger<AuthService> logger,
+        JwtSigningKeyProvider jwtKeyProvider)
     {
         _context = context;
         _configuration = configuration;
         _emailSender = emailSender;
+        _smsService = smsService;
         _logger = logger;
+        _jwtKeyProvider = jwtKeyProvider;
     }
 
     public async Task<(User? User, string Error)> RegisterAsync(User user, string password)
@@ -109,13 +116,11 @@ public class AuthService : IAuthService
 
     private string GenerateJwtToken(User user)
     {
-        var jwtKey = _configuration["Jwt:Key"];
-        if (string.IsNullOrWhiteSpace(jwtKey))
-        {
-            jwtKey = "supersecretsupersecretsupersecret123!";
-        }
-
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+        // Key, issuer, and audience are resolved and validated once at startup
+        // (Program.cs → ResolveJwtSigningKey) and injected via JwtSigningKeyProvider.
+        // There is no fallback here — a missing key throws at startup before any request
+        // can reach this point.
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtKeyProvider.Key));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
@@ -129,8 +134,8 @@ public class AuthService : IAuthService
         };
 
         var token = new JwtSecurityToken(
-            issuer: null,
-            audience: null,
+            issuer: _jwtKeyProvider.Issuer,
+            audience: _jwtKeyProvider.Audience,
             claims: claims,
             expires: DateTime.UtcNow.AddDays(7),
             signingCredentials: creds
@@ -191,14 +196,16 @@ public class AuthService : IAuthService
         }
 
         var expiryHours = Math.Clamp(_configuration.GetValue("PasswordReset:TokenExpiryHours", 1), 1, 72);
-        var oldTokens = await _context.PasswordResetTokens
-            .Where(t => t.UserId == user.Id && !t.Used)
-            .AsNoTracking()
-            .ToListAsync();
-        _context.PasswordResetTokens.RemoveRange(oldTokens);
 
-        // Simple 6-digit code instead of long Base64 string
-        var plaintextCode = new Random().Next(100000, 999999).ToString();
+        // Single DELETE statement — no round-trip to load rows into memory first.
+        // (The old AsNoTracking + RemoveRange pattern was fragile across EF Core versions.)
+        await _context.PasswordResetTokens
+            .Where(t => t.UserId == user.Id && !t.Used)
+            .ExecuteDeleteAsync();
+
+        // Cryptographically secure 6-digit OTP (100000–999999).
+        // RandomNumberGenerator.GetInt32 uses the OS CSPRNG, unlike System.Random.
+        var plaintextCode = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         var tokenHash = HashResetCode(plaintextCode);
 
         _context.PasswordResetTokens.Add(new PasswordResetToken
@@ -212,12 +219,10 @@ public class AuthService : IAuthService
 
         if (deliveryMethod.Equals("Phone", StringComparison.OrdinalIgnoreCase))
         {
-            // MOCK SMS: Log to console
-            var smsMsg = $"[SMS MOCK] To {user.Phone}: Your Elite password reset code is {plaintextCode}. Valid for {expiryHours} hour(s).";
-            Console.WriteLine(smsMsg);
-            Log.Information(smsMsg);
-            return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, 
-                "A reset code has been sent to your phone (Mocked to terminal).");
+            var smsBody = $"Your Elite password reset code is {plaintextCode}. Valid for {expiryHours} hour(s). Do not share this code.";
+            await _smsService.SendAsync(user.Phone!, smsBody);
+            return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed,
+                "If an account exists for this email and role, password reset instructions have been sent.");
         }
         else
         {

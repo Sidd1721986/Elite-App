@@ -10,11 +10,11 @@ import LandingScreen from '../screens/LandingScreen';
 import LoginScreen from '../screens/LoginScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
-import CustomerSignupScreen from '../screens/CustomerSignupScreen';
+import UserSignupScreen from '../screens/UserSignupScreen';
 import VendorSignupScreen from '../screens/VendorSignupScreen';
 import AdminDashboard from '../screens/AdminDashboard';
 import VendorDashboard from '../screens/VendorDashboard';
-import CustomerDashboard from '../screens/CustomerDashboard';
+import UserDashboard from '../screens/UserDashboard';
 import JobDetailsScreen from '../screens/JobDetailsScreen';
 import AssignVendorScreen from '../screens/AssignVendorScreen';
 import ChatScreen from '../screens/ChatScreen';
@@ -71,7 +71,7 @@ function mainInitialRoute(user: User, customerRole: boolean): keyof RootStackPar
     const r = roleKey(user.role);
     if (r === 'admin') return 'AdminDashboard';
     if (r === 'vendor') return 'VendorDashboard';
-    if (customerRole || r === 'customer') return 'CustomerDashboard';
+    if (customerRole || r === 'customer') return 'UserDashboard';
     return 'RoleFallback';
 }
 
@@ -148,29 +148,26 @@ const AppNavigator: React.FC = () => {
                     <Stack.Screen name="Login" component={LoginScreen} />
                     <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
                     <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-                    <Stack.Screen name="CustomerSignup" component={CustomerSignupScreen} />
+                    <Stack.Screen name="UserSignup" component={UserSignupScreen} />
                     <Stack.Screen name="VendorSignup" component={VendorSignupScreen} />
                 </Stack.Navigator>
             ) : (
                 <Stack.Navigator
+                    key={user.id} // VITAL: Forces reset of all navigation state on identity change
                     detachInactiveScreens={false}
                     screenOptions={mainScreenOptions}
                     initialRouteName={mainInitialRoute(user, customerRole)}
                 >
-                    {isAdmin && (
+                    {isAdmin ? (
                         <>
                             <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ headerShown: false }} />
                             <Stack.Screen name="VendorDashboard" component={VendorDashboard} options={{ headerShown: false }} />
-                            <Stack.Screen name="CustomerDashboard" component={CustomerDashboard} options={{ headerShown: false }} />
+                            <Stack.Screen name="UserDashboard" component={UserDashboard} options={{ headerShown: false }} />
                         </>
-                    )}
-
-                    {isVendor && (
+                    ) : isVendor ? (
                         <Stack.Screen name="VendorDashboard" component={VendorDashboard} options={{ headerShown: false }} />
-                    )}
-
-                    {customerRole && (
-                        <Stack.Screen name="CustomerDashboard" component={CustomerDashboard} options={{ headerShown: false }} />
+                    ) : (
+                        <Stack.Screen name="UserDashboard" component={UserDashboard} options={{ headerShown: false }} />
                     )}
 
                     <Stack.Screen name="RoleFallback" component={RoleFallbackScreen} options={{ headerShown: false }} />

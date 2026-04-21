@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using EliteApp.API.Data;
 using EliteApp.API.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -14,11 +16,23 @@ public class UsersController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IWebHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
 
-    public UsersController(AppDbContext context, IWebHostEnvironment environment)
+    public UsersController(AppDbContext context, IWebHostEnvironment environment, IConfiguration configuration)
     {
         _context = context;
         _environment = environment;
+        _configuration = configuration;
+    }
+
+    // ── Phone-OTP hashing (mirrors AuthService.HashResetCode) ──────────────────
+    // The pepper is the same shared secret used for password-reset OTPs so both
+    // flows benefit from the same protection without a second secret to manage.
+    private string HashPhoneCode(string plaintext)
+    {
+        var pepper = _configuration["PasswordReset:Pepper"] ?? string.Empty;
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(plaintext + pepper));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     [HttpGet("me")]
@@ -30,7 +44,13 @@ public class UsersController : ControllerBase
         var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
         if (user == null) return NotFound();
 
-        return Ok(user);
+        // Project to a safe DTO — never expose PasswordHash, PhoneVerificationCode, or
+        // PhoneVerificationExpiry to the client, even when the token is valid.
+        return Ok(new
+        {
+            user.Id, user.Name, user.Email, user.Role, user.Address, user.Phone,
+            user.IsApproved, user.IsActive, user.IsPhoneVerified, user.CreatedAt
+        });
     }
 
     [HttpGet("pending-vendors")]
@@ -70,9 +90,14 @@ public class UsersController : ControllerBase
         var user = await _context.Users.FindAsync(id);
         if (user == null) return NotFound();
 
-        // In a real app, you might flag as 'Denied'. 
-        // For this demo, denying means removing the registration request.
-        _context.Users.Remove(user);
+        // Soft-delete: mark as inactive instead of hard-deleting.
+        // Benefits:
+        //  • Audit trail — the record and CreatedAt are preserved for review.
+        //  • Prevents silent re-registration on the same email (email unique index
+        //    is still respected, so a denied vendor cannot simply re-register).
+        //  • Consistent with how DeleteSelf works (IsActive = false).
+        // A denied vendor is identified by: Role == "Vendor" && IsApproved == false && IsActive == false.
+        user.IsActive = false;
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Vendor denied" });
@@ -100,7 +125,9 @@ public class UsersController : ControllerBase
         var user = await _context.Users.FindAsync(id);
         if (user == null) return NotFound();
 
-        _context.Users.Remove(user);
+        // Soft-delete — preserves the record for audit, prevents FK cascade errors
+        // on Jobs and Messages, and mirrors the pattern used by DenyVendor and DeleteSelf.
+        user.IsActive = false;
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Vendor removed" });
@@ -127,7 +154,12 @@ public class UsersController : ControllerBase
         }
 
         await _context.SaveChangesAsync();
-        return Ok(user);
+
+        return Ok(new
+        {
+            user.Id, user.Name, user.Email, user.Role, user.Address, user.Phone,
+            user.IsApproved, user.IsActive, user.IsPhoneVerified, user.CreatedAt
+        });
     }
 
     [HttpPost("request-phone-verification")]
@@ -141,18 +173,23 @@ public class UsersController : ControllerBase
 
         if (string.IsNullOrEmpty(user.Phone)) return BadRequest(new { message = "No phone number set" });
 
-        // Simple 6-digit code for demo
-        var code = new Random().Next(100000, 999999).ToString();
-        user.PhoneVerificationCode = code;
+        // Cryptographically secure 6-digit OTP (100000–999999).
+        var plainCode = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+
+        // Hash the OTP before storing — same pattern as password-reset tokens.
+        // The plaintext is sent to the user; only the hash lives in the database.
+        user.PhoneVerificationCode = HashPhoneCode(plainCode);
         user.PhoneVerificationExpiry = DateTime.UtcNow.AddMinutes(10);
 
         await _context.SaveChangesAsync();
 
-        // MOCK: Log to console so user can see it
-        Console.WriteLine($"[MOCK SMS] To {user.Phone}: Your verification code is {code}");
-        Serilog.Log.Information("[MOCK SMS] To {Phone}: Your verification code is {Code}", user.Phone, code);
-        
-        return Ok(new { message = "Verification code sent (mocked)" });
+        // TODO: Replace with a real SMS provider (e.g. Twilio, Azure Communication Services).
+        // Until then the code is logged at Warning level so it is visible in dev but still
+        // surfaced as a configuration gap in production log monitoring.
+        Serilog.Log.Warning("[SMS NOT CONFIGURED] Phone verification code for {Phone}: {Code}. " +
+            "Wire up ISmsService with a real provider before shipping.", user.Phone, plainCode);
+
+        return Ok(new { message = "Verification code sent" });
     }
 
     [HttpPost("verify-phone")]
@@ -164,7 +201,16 @@ public class UsersController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user == null) return NotFound();
 
-        if (user.PhoneVerificationCode == request.Code && user.PhoneVerificationExpiry > DateTime.UtcNow)
+        // Compare hashes — the DB stores only the hashed OTP, never the plaintext.
+        // CryptographicOperations.FixedTimeEquals prevents timing-based side-channel attacks.
+        var submittedHash = HashPhoneCode(request.Code ?? string.Empty);
+        var storedHash    = user.PhoneVerificationCode ?? string.Empty;
+
+        var hashesMatch = CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(submittedHash),
+            Encoding.UTF8.GetBytes(storedHash));
+
+        if (hashesMatch && user.PhoneVerificationExpiry > DateTime.UtcNow)
         {
             user.IsPhoneVerified = true;
             user.PhoneVerificationCode = null;
@@ -203,12 +249,15 @@ public class UsersController : ControllerBase
         {
             return Ok(new { message = "Database already seeded" });
         }
-        
+
         var users = new List<User>
         {
             new User { Id = Guid.NewGuid(), Email = "admin@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"), Role = "Admin", Name = "Admin User", IsApproved = true },
             new User { Id = Guid.NewGuid(), Email = "vendor@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Vendor User", IsApproved = true },
-            new User { Id = Guid.NewGuid(), Email = "customer@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("customer123"), Role = "Customer", Name = "Customer User", IsApproved = true }
+            new User { Id = Guid.NewGuid(), Email = "customer@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("customer123"), Role = "Customer", Name = "Customer User", IsApproved = true },
+            new User { Id = Guid.NewGuid(), Email = "plumber@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Premium Plumbing", IsApproved = true, Address = "123 Water St", Phone = "555-0101" },
+            new User { Id = Guid.NewGuid(), Email = "electric@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Elite Electricians", IsApproved = true, Address = "456 Spark Ave", Phone = "555-0202" },
+            new User { Id = Guid.NewGuid(), Email = "roofer@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Top Tier Roofing", IsApproved = true, Address = "789 Peak Rd", Phone = "555-0303" }
         };
         
         _context.Users.AddRange(users);

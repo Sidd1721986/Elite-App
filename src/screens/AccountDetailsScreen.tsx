@@ -13,41 +13,16 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import {
-    Portal,
-    Dialog,
-    Button as PaperButton,
-    Snackbar
-} from 'react-native-paper';
-import { RootStackParamList } from '../types/types';
+    RootStackParamList
+} from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type NavigationProp = StackNavigationProp<RootStackParamList, 'AccountDetails'>;
 
 const AccountDetailsScreen: React.FC = () => {
-    const { user, deleteAccount } = useAuth();
+    const { user } = useAuth();
+
     const navigation = useNavigation<NavigationProp>();
-
-    const [deleteDialogVisible, setDeleteDialogVisible] = React.useState(false);
-    const [isDeleting, setIsDeleting] = React.useState(false);
-    const [snackbarVisible, setSnackbarVisible] = React.useState(false);
-    const [snackbarMessage, setSnackbarMessage] = React.useState('');
-
-    const handleDeleteAccount = React.useCallback(async () => {
-        setDeleteDialogVisible(false);
-        setIsDeleting(true);
-        try {
-            const result = await deleteAccount();
-            if (result !== true) {
-                setSnackbarMessage(typeof result === 'string' ? result : 'Failed to delete account');
-                setSnackbarVisible(true);
-            }
-        } catch (error) {
-            setSnackbarMessage('An unexpected error occurred');
-            setSnackbarVisible(true);
-        } finally {
-            setIsDeleting(false);
-        }
-    }, [deleteAccount]);
 
     if (!user) return null;
 
@@ -150,55 +125,7 @@ const AccountDetailsScreen: React.FC = () => {
                     </List.Section>
 
                     <Divider style={styles.divider} />
-
-                    <List.Section style={styles.listSection}>
-                        <List.Subheader style={{ fontWeight: 'bold', color: '#EF4444' }}>DANGER ZONE</List.Subheader>
-                        <List.Item
-                            title="Delete Account"
-                            description="Permanently remove your account and data"
-                            titleStyle={{ color: '#EF4444', fontWeight: 'bold' }}
-                            onPress={() => setDeleteDialogVisible(true)}
-                            left={props => <List.Icon {...props} icon="delete-outline" color="#EF4444" />}
-                        />
-                    </List.Section>
                 </Surface>
-
-                <Surface style={styles.infoCard} elevation={0}>
-                    <IconButton icon="information-outline" iconColor="#6366F1" size={24} />
-                    <Text variant="bodySmall" style={styles.infoText}>
-                        These details are provided during registration. To update your information, please visit the Profile Settings page.
-                    </Text>
-                </Surface>
-
-                <Portal>
-                    <Dialog visible={deleteDialogVisible} onDismiss={() => setDeleteDialogVisible(false)}>
-                        <Dialog.Icon icon="alert-circle" color="#EF4444" />
-                        <Dialog.Title style={{ textAlign: 'center' }}>Delete Account?</Dialog.Title>
-                        <Dialog.Content>
-                            <Text variant="bodyMedium" style={{ textAlign: 'center', color: '#64748B' }}>
-                                This will deactivate your profile and all services. This action initiates a deletion request for your data in compliance with our safety policies.
-                            </Text>
-                        </Dialog.Content>
-                        <Dialog.Actions>
-                            <PaperButton onPress={() => setDeleteDialogVisible(false)} textColor="#64748B">Cancel</PaperButton>
-                            <PaperButton
-                                onPress={handleDeleteAccount}
-                                loading={isDeleting}
-                                textColor="#EF4444"
-                            >
-                                Delete Account
-                            </PaperButton>
-                        </Dialog.Actions>
-                    </Dialog>
-
-                    <Snackbar
-                        visible={snackbarVisible}
-                        onDismiss={() => setSnackbarVisible(false)}
-                        duration={3000}
-                    >
-                        {snackbarMessage}
-                    </Snackbar>
-                </Portal>
             </ScrollView>
         </SafeAreaView>
     );

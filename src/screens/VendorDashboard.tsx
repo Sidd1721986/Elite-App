@@ -3,6 +3,8 @@ import { useCallback, useMemo } from 'react';
 import { View, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Text, Card, Button, Avatar, Divider, Surface, Chip, IconButton, List, Menu, Portal, Dialog, Snackbar, Searchbar } from 'react-native-paper';
+import { MotiView } from 'moti';
+import { useReducedMotion } from 'react-native-reanimated';
 import { useAuth } from '../context/AuthContext';
 import AppLogo from '../components/AppLogo';
 import { useJobs } from '../context/JobContext';
@@ -17,7 +19,85 @@ type NavigationProp = StackNavigationProp<RootStackParamList>;
 
 const VendorList = FlashList as any;
 
+/** One dashboard row: same customer request (parent), possibly several scopes/parts for this vendor. */
+type VendorJobGroup = {
+    groupKey: string;
+    /** Open JobDetails for this id (parent when card is merged split children). */
+    navigateJobId: string;
+    parts: Job[];
+};
+
+function groupVendorJobsForDisplay(feed: Job[]): VendorJobGroup[] {
+    const orderKeys: string[] = [];
+    const map = new Map<string, Job[]>();
+
+    for (const j of feed) {
+        const key = j.parentJobId ? String(j.parentJobId) : String(j.id);
+        if (!map.has(key)) orderKeys.push(key);
+        const arr = map.get(key) || [];
+        arr.push(j);
+        map.set(key, arr);
+    }
+
+    return orderKeys.map(groupKey => {
+        const partsRaw = map.get(groupKey)!;
+        const parts = [...partsRaw].sort((a, b) => {
+            const na = a.jobNumber ?? 0;
+            const nb = b.jobNumber ?? 0;
+            if (na !== nb) return na - nb;
+            return String(a.jobSuffix || '').localeCompare(String(b.jobSuffix || ''));
+        });
+
+        const hasParentRow = parts.some(p => String(p.id) === groupKey);
+        const onlyChildren =
+            parts.length > 0 &&
+            parts.every(p => Boolean(p.parentJobId) && String(p.parentJobId) === groupKey);
+
+        let navigateJobId = parts[0].id;
+        if (hasParentRow) {
+            navigateJobId = groupKey;
+        } else if (onlyChildren) {
+            // Parent row is not on the vendor feed; open a child that still needs action (accept / invoice).
+            const pendingAssign = parts.find(p => p.status === JobStatus.ASSIGNED);
+            const inv = parts.find(p => p.status === JobStatus.INVOICE_REQUESTED);
+            navigateJobId = pendingAssign?.id ?? inv?.id ?? parts[0].id;
+        }
+
+        return { groupKey, navigateJobId, parts };
+    });
+}
+
+function mergedGroupStatus(parts: Job[]): string {
+    if (parts.some(p => p.status === JobStatus.ASSIGNED)) return JobStatus.ASSIGNED;
+    if (parts.some(p => p.status === JobStatus.INVOICE_REQUESTED)) return JobStatus.INVOICE_REQUESTED;
+    return parts[0]?.status ?? JobStatus.SUBMITTED;
+}
+
+function displayRootForGroup(groupKey: string, parts: Job[], allJobs: Job[]): Job {
+    const parent = allJobs.find(j => String(j.id) === groupKey);
+    if (parent) return parent;
+    return parts[0];
+}
+
+function mergedServicesLine(parts: Job[]): string {
+    const set = new Set<string>();
+    parts.forEach(p => (p.services || []).forEach(s => {
+        if (s && String(s).trim()) set.add(String(s).trim());
+    }));
+    if (set.size > 0) return Array.from(set).join(' · ');
+    const desc = parts.map(p => p.description).filter(Boolean).join(' · ');
+    return desc.length > 180 ? `${desc.slice(0, 177)}…` : desc;
+}
+
+function mergedUrgency(parts: Job[], root: Job): string {
+    if (parts.some(p => p.urgency === Urgency.IMMEDIATE) || root.urgency === Urgency.IMMEDIATE) {
+        return Urgency.IMMEDIATE;
+    }
+    return root.urgency;
+}
+
 const VendorDashboard: React.FC = () => {
+    const reducedMotion = useReducedMotion();
     const { user, logout } = useAuth();
     const { jobs, refreshJobs, isLoading } = useJobs();
     const { messageUnreadTotal, refreshInbox } = useChatInboxNotifications();
@@ -34,9 +114,9 @@ const VendorDashboard: React.FC = () => {
         setRefreshing(false);
     }, [refreshJobs, refreshInbox]);
 
-    React.useEffect(() => {
-        refreshJobs();
-    }, [refreshJobs]);
+    // Removed: the redundant useEffect(() => refreshJobs(), [refreshJobs]) that was
+    // here caused an infinite re-fetch loop. The JobContext already calls loadJobs on
+    // mount and whenever the authenticated user changes. No extra trigger is needed.
 
     const handleLogout = useCallback(async () => {
         setSettingsMenuVisible(false);
@@ -54,17 +134,49 @@ const VendorDashboard: React.FC = () => {
         );
     }, [jobs, searchQuery]);
 
-    const activeJobs = useMemo(() =>
-        filteredJobs.filter(j => 
-            j.status === JobStatus.ACCEPTED || 
-            j.status === JobStatus.REACHED_OUT || 
-            j.status === JobStatus.APPT_SET || 
-            j.status === JobStatus.SALE ||
-            j.status === JobStatus.FOLLOW_UP ||
-            j.status === JobStatus.COMPLETED ||
-            j.status === JobStatus.INVOICE_REQUESTED
-        ),
-        [filteredJobs]
+    /** Jobs after the vendor has accepted (used for the "Active" stat). */
+    const activeJobs = useMemo(
+        () =>
+            filteredJobs.filter(
+                j =>
+                    j.status === JobStatus.ACCEPTED ||
+                    j.status === JobStatus.REACHED_OUT ||
+                    j.status === JobStatus.APPT_SET ||
+                    j.status === JobStatus.SALE ||
+                    j.status === JobStatus.FOLLOW_UP ||
+                    j.status === JobStatus.COMPLETED ||
+                    j.status === JobStatus.INVOICE_REQUESTED,
+            ),
+        [filteredJobs],
+    );
+
+    /** Everything the vendor should see in the feed, including new assignments they must accept. */
+    const vendorFeedJobs = useMemo(() => {
+        const list = filteredJobs.filter(
+            j =>
+                j.status === JobStatus.ASSIGNED ||
+                j.status === JobStatus.ACCEPTED ||
+                j.status === JobStatus.REACHED_OUT ||
+                j.status === JobStatus.APPT_SET ||
+                j.status === JobStatus.SALE ||
+                j.status === JobStatus.FOLLOW_UP ||
+                j.status === JobStatus.COMPLETED ||
+                j.status === JobStatus.INVOICE_REQUESTED,
+        );
+        return [...list].sort((a, b) => {
+            const pending = (x: Job) => (x.status === JobStatus.ASSIGNED ? 0 : 1);
+            const d = pending(a) - pending(b);
+            if (d !== 0) return d;
+            const ta = new Date(a.createdAt || 0).getTime();
+            const tb = new Date(b.createdAt || 0).getTime();
+            return tb - ta;
+        });
+    }, [filteredJobs]);
+
+    /** One card per customer request when admin split the same job across scopes for this vendor. */
+    const vendorGroupedFeed = useMemo(
+        () => groupVendorJobsForDisplay(vendorFeedJobs),
+        [vendorFeedJobs],
     );
 
     const pendingCount = useMemo(() => 
@@ -83,72 +195,100 @@ const VendorDashboard: React.FC = () => {
         { label: 'Completed', value: completedCount.toString(), icon: 'check-decagram', color: '#10B981' },
     ], [activeJobs.length, pendingCount, completedCount]);
 
-    const renderOrderCard = useCallback(({ item: job }: { item: Job }) => (
-        <Card
-            style={styles.orderCard}
-            elevation={0}
-            onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
-        >
-            <Card.Content>
-                <View style={styles.orderTop}>
-                    <Text variant="labelSmall" style={styles.orderId}>JOB ID: #{job.jobNumber || '...'}</Text>
-                    {job.urgency === Urgency.IMMEDIATE && (
-                        <Chip compact style={styles.urgentChip} textStyle={styles.urgentText}>IMMEDIATE</Chip>
-                    )}
-                </View>
-                <Text variant="titleMedium" style={styles.orderAddress} numberOfLines={1}>{job.address}</Text>
-                <Text variant="bodySmall" numberOfLines={2} style={styles.orderDesc}>{job.description}</Text>
+    const renderOrderCard = useCallback(({ item: group, index }: { item: VendorJobGroup; index: number }) => {
+        const { parts, navigateJobId, groupKey } = group;
+        const root = displayRootForGroup(groupKey, parts, jobs);
+        const status = mergedGroupStatus(parts);
+        const scopeLine = mergedServicesLine(parts);
+        const isMulti = parts.length > 1;
+        const urgency = mergedUrgency(parts, root);
+        const phone = root.contactPhone || parts.find(p => p.contactPhone)?.contactPhone;
+        const email = root.contactEmail || parts.find(p => p.contactEmail)?.contactEmail;
 
-                {(job.contactPhone || job.contactEmail) && (
-                    <View style={{ flexDirection: 'row', marginTop: 8, alignItems: 'center' }}>
-                        <IconButton icon="phone-outline" size={14} style={{ margin: 0 }} iconColor="#6366F1" />
-                        <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: 'bold' }}>{job.contactPhone || 'N/A'}</Text>
-                        <IconButton icon="email-outline" size={14} style={{ margin: 0, marginLeft: 8 }} iconColor="#94A3B8" />
-                        <Text variant="labelSmall" style={{ color: '#64748B', flex: 1 }} numberOfLines={1}>{job.contactEmail || 'N/A'}</Text>
-                    </View>
-                )}
-
-                <Divider style={styles.orderDivider} />
-
-                <View style={styles.orderBottom}>
-                    <View style={styles.customerRow}>
-                        <Avatar.Icon 
-                            size={24} 
-                            icon={job.status === JobStatus.ASSIGNED ? 'clock-alert-outline' : 'account-outline'} 
-                            style={[
-                                styles.miniAvatar,
-                                job.status === JobStatus.ASSIGNED && { backgroundColor: '#FFFBEB' },
-                                job.status === JobStatus.INVOICE_REQUESTED && { backgroundColor: '#FFF7ED' }
-                            ]} 
-                            color={job.status === JobStatus.ASSIGNED ? '#F59E0B' : job.status === JobStatus.INVOICE_REQUESTED ? '#F97316' : '#94A3B8'}
-                        />
-                        <Text variant="labelSmall" style={[
-                            styles.customerType, 
-                            job.status === JobStatus.ASSIGNED && { color: '#F59E0B', fontWeight: 'bold' },
-                            job.status === JobStatus.INVOICE_REQUESTED && { color: '#F97316', fontWeight: 'bold' }
-                        ]}>
-                            {job.status === JobStatus.ASSIGNED ? 'NEW ASSIGNMENT' : 
-                             job.status === JobStatus.INVOICE_REQUESTED ? 'INVOICE REQUESTED' : 'ACTIVE PROJECT'}
+        return (
+            <MotiView
+                from={{ opacity: 0, translateY: 15 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 400, delay: index * 50 }}
+                reducedMotion={reducedMotion}
+            >
+                <Card
+                    style={styles.orderCard}
+                    elevation={0}
+                    onPress={() => navigation.navigate('JobDetails', { jobId: navigateJobId })}
+                >
+                    <Card.Content>
+                        <View style={styles.orderTop}>
+                            <Text variant="labelSmall" style={styles.orderId}>
+                                JOB #{root.jobNumber || '…'}
+                                {isMulti ? ` · ${parts.length} scopes for you` : ''}
+                            </Text>
+                            {urgency === Urgency.IMMEDIATE && (
+                                <Chip compact style={styles.urgentChip} textStyle={styles.urgentText}>IMMEDIATE</Chip>
+                            )}
+                        </View>
+                        {isMulti ? (
+                            <Chip compact style={styles.multiScopeChip} textStyle={styles.multiScopeChipText}>
+                                Combined request
+                            </Chip>
+                        ) : null}
+                        <Text variant="titleMedium" style={styles.orderAddress} numberOfLines={1}>{root.address}</Text>
+                        <Text variant="bodySmall" numberOfLines={3} style={styles.orderDesc}>
+                            {scopeLine || root.description}
                         </Text>
-                    </View>
-                    <Button
-                        mode="contained"
-                        compact
-                        style={[
-                            styles.quoteBtn, 
-                            job.status === JobStatus.ASSIGNED && { backgroundColor: '#F59E0B' },
-                            job.status === JobStatus.INVOICE_REQUESTED && { backgroundColor: '#F97316' }
-                        ]}
-                        labelStyle={{ fontSize: 10, fontWeight: 'bold' }}
-                        onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
-                    >
-                        {job.status === JobStatus.ASSIGNED ? 'ACCEPT JOB' : 
-                         job.status === JobStatus.INVOICE_REQUESTED ? 'SUBMIT INVOICE' : 'VIEW DETAILS'}
-                    </Button>
-                </View>
-            </Card.Content>
-        </Card>
-    ), [navigation]);
+
+                        {(phone || email) && (
+                            <View style={{ flexDirection: 'row', marginTop: 8, alignItems: 'center' }}>
+                                <IconButton icon="phone-outline" size={14} style={{ margin: 0 }} iconColor="#6366F1" />
+                                <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: 'bold' }}>{phone || 'N/A'}</Text>
+                                <IconButton icon="email-outline" size={14} style={{ margin: 0, marginLeft: 8 }} iconColor="#94A3B8" />
+                                <Text variant="labelSmall" style={{ color: '#64748B', flex: 1 }} numberOfLines={1}>{email || 'N/A'}</Text>
+                            </View>
+                        )}
+
+                        <Divider style={styles.orderDivider} />
+
+                        <View style={styles.orderBottom}>
+                            <View style={styles.customerRow}>
+                                <Avatar.Icon
+                                    size={24}
+                                    icon={status === JobStatus.ASSIGNED ? 'clock-alert-outline' : 'account-outline'}
+                                    style={[
+                                        styles.miniAvatar,
+                                        status === JobStatus.ASSIGNED && { backgroundColor: '#FFFBEB' },
+                                        status === JobStatus.INVOICE_REQUESTED && { backgroundColor: '#FFF7ED' },
+                                    ]}
+                                    color={status === JobStatus.ASSIGNED ? '#F59E0B' : status === JobStatus.INVOICE_REQUESTED ? '#F97316' : '#94A3B8'}
+                                />
+                                <Text variant="labelSmall" style={[
+                                    styles.customerType,
+                                    status === JobStatus.ASSIGNED && { color: '#F59E0B', fontWeight: 'bold' },
+                                    status === JobStatus.INVOICE_REQUESTED && { color: '#F97316', fontWeight: 'bold' },
+                                ]}>
+                                    {status === JobStatus.ASSIGNED ? 'NEW ASSIGNMENT' :
+                                        status === JobStatus.INVOICE_REQUESTED ? 'INVOICE REQUESTED' : 'ACTIVE PROJECT'}
+                                </Text>
+                            </View>
+                            <Button
+                                mode="contained"
+                                compact
+                                style={[
+                                    styles.quoteBtn,
+                                    status === JobStatus.ASSIGNED && { backgroundColor: '#F59E0B' },
+                                    status === JobStatus.INVOICE_REQUESTED && { backgroundColor: '#F97316' },
+                                ]}
+                                labelStyle={{ fontSize: 10, fontWeight: 'bold' }}
+                                onPress={() => navigation.navigate('JobDetails', { jobId: navigateJobId })}
+                            >
+                                {status === JobStatus.ASSIGNED ? 'ACCEPT JOB' :
+                                    status === JobStatus.INVOICE_REQUESTED ? 'SUBMIT INVOICE' : 'VIEW DETAILS'}
+                            </Button>
+                        </View>
+                    </Card.Content>
+                </Card>
+            </MotiView>
+        );
+    }, [navigation, jobs, reducedMotion]);
 
     const renderHeader = useCallback(() => (
         <View style={styles.headerWrapper}>
@@ -209,18 +349,31 @@ const VendorDashboard: React.FC = () => {
                 </View>
 
                 <View style={styles.profileBox}>
-                    <View style={styles.profileInfo}>
+                    <MotiView 
+                        from={{ opacity: 0, translateX: -20 }}
+                        animate={{ opacity: 1, translateX: 0 }}
+                        transition={{ type: 'timing', duration: 500 }}
+                        style={styles.profileInfo}
+                        reducedMotion={reducedMotion}
+                    >
                         <Text variant="headlineSmall" style={styles.vendorName}>{user?.name || 'QuickFix Pro'}</Text>
                         <View style={styles.ratingBox}>
                             <IconButton icon="star" iconColor="#F59E0B" size={16} style={{ margin: 0 }} />
                             <Text variant="labelLarge" style={styles.ratingText}>4.9 (128 reviews)</Text>
                         </View>
-                    </View>
-                    <Avatar.Text
-                        size={64}
-                        label={user?.name?.substring(0, 2).toUpperCase() || 'VX'}
-                        style={styles.mainAvatar}
-                    />
+                    </MotiView>
+                    <MotiView
+                        from={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ type: 'spring', delay: 100 }}
+                        reducedMotion={reducedMotion}
+                    >
+                        <Avatar.Text
+                            size={64}
+                            label={user?.name?.substring(0, 2).toUpperCase() || 'VX'}
+                            style={styles.mainAvatar}
+                        />
+                    </MotiView>
                 </View>
 
                 <Searchbar
@@ -257,8 +410,8 @@ const VendorDashboard: React.FC = () => {
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={{ flex: 1 }}>
                 <VendorList
-                    data={isLoading ? [] : activeJobs}
-                    keyExtractor={(item: Job) => item.id}
+                    data={isLoading ? [] : vendorGroupedFeed}
+                    keyExtractor={(item: VendorJobGroup) => item.groupKey}
                     renderItem={renderOrderCard}
                     estimatedItemSize={250}
                     ListHeaderComponent={() => (
@@ -284,6 +437,7 @@ const VendorDashboard: React.FC = () => {
                     </View>
                 )}
                 contentContainerStyle={styles.listContent}
+                extraData={[isLoading, vendorGroupedFeed, refreshing, messageUnreadTotal, searchQuery]}
                 />
             </View>
 
@@ -439,6 +593,16 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         paddingHorizontal: 8,
         paddingVertical: 2,
+    },
+    multiScopeChip: {
+        alignSelf: 'flex-start',
+        backgroundColor: '#EEF2FF',
+        marginBottom: 8,
+    },
+    multiScopeChipText: {
+        color: '#4338CA',
+        fontSize: 11,
+        fontWeight: '600',
     },
     orderAddress: {
         fontWeight: '900',

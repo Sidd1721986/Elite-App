@@ -28,9 +28,27 @@ public class JobsController : ControllerBase
         return false;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetJobs([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+    // Valid status values; used to reject unknown values from untrusted callers.
+    private static readonly HashSet<string> KnownStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
+        "Submitted", "Assigned", "Accepted", "ReachedOut", "ApptSet",
+        "Sale", "FollowUp", "Expired", "Completed", "InvoiceRequested", "Invoiced"
+    };
+
+    private static List<string> ParseCsvList(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
+        return raw
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToList();
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetJobs([FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] bool includeSubJobs = false)
+    {
+        // Cap page size to prevent unbounded memory loads.
+        pageSize = Math.Clamp(pageSize, 1, 200);
         var userRole = User.FindFirstValue("role");
         var userIdString = User.FindFirstValue("id");
 
@@ -44,6 +62,12 @@ public class JobsController : ControllerBase
             .Include(j => j.Customer)
             .Include(j => j.Vendor);
 
+        // Admin dashboard: include split children so one parent card can show partial assignment state.
+        if (User.IsInRole("Admin") || User.IsInRole("admin"))
+        {
+            query = query.Include(j => j.ChildJobs).ThenInclude(c => c.Vendor);
+        }
+
         if (User.IsInRole("Customer") || User.IsInRole("customer"))
         {
             query = query.Where(j => j.CustomerId == userId);
@@ -52,8 +76,15 @@ public class JobsController : ControllerBase
         {
             // Vendors see jobs assigned to them
             query = query.Where(j => j.VendorId == userId);
+            // Vendors should always see their assigned jobs even if they are sub-jobs
+            includeSubJobs = true;
         }
-        // Admin sees all
+
+        // Hide sub-jobs from main dashboard lists (Admin/Customer) unless requested
+        if (!includeSubJobs)
+        {
+            query = query.Where(j => j.ParentJobId == null);
+        }
 
         var jobs = await query
             .OrderByDescending(j => j.CreatedAt)
@@ -72,6 +103,8 @@ public class JobsController : ControllerBase
         var job = await _context.Jobs.AsNoTracking()
             .Include(j => j.Customer)
             .Include(j => j.Vendor)
+            .Include(j => j.ChildJobs)
+                .ThenInclude(c => c.Vendor)
             .FirstOrDefaultAsync(j => j.Id == id);
 
         if (job == null) return NotFound();
@@ -89,21 +122,51 @@ public class JobsController : ControllerBase
             return Unauthorized();
         }
 
-        if (!User.IsInRole("Customer") && !User.IsInRole("customer"))
-            return StatusCode(403, new { message = "Only customers can create service requests." });
+        bool isAdmin = User.IsInRole("Admin") || User.IsInRole("admin");
+        if (!User.IsInRole("Customer") && !User.IsInRole("customer") && !isAdmin)
+            return StatusCode(403, new { message = "Only customers or admins (for splitting) can create service requests." });
+
+        Guid targetCustomerId = userId;
+        if (isAdmin && request.CustomerId != null)
+        {
+            targetCustomerId = request.CustomerId.Value;
+        }
 
         if (string.IsNullOrWhiteSpace(request.Description) || 
             string.IsNullOrWhiteSpace(request.Address) || 
             string.IsNullOrWhiteSpace(request.ContactPhone) || 
-            string.IsNullOrWhiteSpace(request.ContactEmail))
+            string.IsNullOrWhiteSpace(request.ContactEmail) ||
+            request.Services == null || !request.Services.Any())
         {
-            return BadRequest(new { message = "Description, Address, ContactPhone, and ContactEmail are all mandatory fields." });
+            return BadRequest(new { message = "Services, Description, Address, ContactPhone, and ContactEmail are all mandatory fields." });
+        }
+
+        int nextJobNumber;
+        string? suffix = null;
+
+        if (request.ParentJobId != null)
+        {
+            var parentJob = await _context.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == request.ParentJobId);
+            if (parentJob == null) return BadRequest(new { message = "Parent job not found." });
+            
+            nextJobNumber = parentJob.JobNumber;
+            // Find how many sub-jobs this parent already has to determine the suffix (A, B, C...)
+            int existingKids = await _context.Jobs.CountAsync(j => j.ParentJobId == request.ParentJobId);
+            suffix = ((char)('A' + existingKids)).ToString();
+        }
+        else
+        {
+            // Manual increment for parent jobs
+            int maxJobNumber = await _context.Jobs.AnyAsync() 
+                ? await _context.Jobs.MaxAsync(j => j.JobNumber) 
+                : 1000;
+            nextJobNumber = maxJobNumber + 1;
         }
 
         var job = new Job
         {
             Id = Guid.NewGuid(),
-            CustomerId = userId,
+            CustomerId = targetCustomerId,
             Description = request.Description,
             Address = request.Address,
             Urgency = request.Urgency,
@@ -112,15 +175,39 @@ public class JobsController : ControllerBase
             Status = "Submitted",
             ContactPhone = request.ContactPhone,
             ContactEmail = request.ContactEmail,
+            ParentJobId = request.ParentJobId,
+            JobNumber = nextJobNumber,
+            JobSuffix = suffix,
+            Services = request.Services != null ? string.Join(",", request.Services) : null,
             CreatedAt = DateTime.UtcNow
         };
+
+        // Admin split: child job must be assigned immediately (otherwise it appears as a second "Submitted" request).
+        if (request.ParentJobId != null && request.VendorId.HasValue && request.VendorId.Value != Guid.Empty)
+        {
+            if (!isAdmin)
+                return StatusCode(403, new { message = "Only admins can create vendor-assigned split jobs." });
+
+            var splitVendorId = request.VendorId.Value;
+            var vendor = await _context.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == splitVendorId && u.Role == "Vendor" && u.IsApproved && u.IsActive);
+            if (vendor == null)
+                return BadRequest(new { message = "The specified vendor does not exist, is not approved, or is inactive." });
+
+            job.VendorId = splitVendorId;
+            job.Status = "Assigned";
+            job.AssignedAt = DateTime.UtcNow;
+        }
 
         _context.Jobs.Add(job);
         await _context.SaveChangesAsync();
 
-        // Reload with customer info for consistent UI display
-        var createdJob = await _context.Jobs.Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == job.Id);
-        return CreatedAtAction(nameof(GetJob), new { id = job.Id }, createdJob);
+        // Populate the Customer navigation property on the tracked entity
+        // instead of issuing a second SELECT round-trip.
+        await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
+        if (job.VendorId != null)
+            await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
+        return CreatedAtAction(nameof(GetJob), new { id = job.Id }, job);
     }
 
     [HttpPut("{id}")]
@@ -139,12 +226,75 @@ public class JobsController : ControllerBase
             return StatusCode(403, new { message = "Forbidden: You do not have permission to modify this job. It belongs to another customer." });
         }
 
-        if (request.Status != null) job.Status = request.Status;
+        // Admin: clear vendor via PUT (same contract as POST .../unassign-vendor) so older proxies/routes still hit UpdateJob.
+        if (request.ClearAssignedVendor)
+        {
+            if (!isAdmin)
+                return BadRequest(new { message = "Only admins can unassign the vendor." });
+
+            if (job.Status == "Completed" || job.Status == "Invoiced")
+                return BadRequest(new { message = $"Cannot unassign vendor for a job that is already {job.Status.ToLower()}." });
+
+            if (job.VendorId != null)
+            {
+                var prevVendor = await _context.Users.AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Id == job.VendorId);
+                var previousName = prevVendor?.Name ?? "Unknown vendor";
+
+                job.VendorId = null;
+                job.AssignedAt = null;
+                job.AcceptedAt = null;
+                job.Status = "Submitted";
+
+                _context.JobNotes.Add(new JobNote
+                {
+                    Id = Guid.NewGuid(),
+                    JobId = id,
+                    AuthorId = userId,
+                    Content = $"Vendor unassigned by admin. Previous vendor: {previousName}.",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        // Mobile unassign sends only { clearAssignedVendor: true }. Parent/shell jobs may have empty Services
+        // after splits — do not block unassign on the general "required fields" check used for full edits.
+        var isVendorUnassignOnly = isAdmin && request.ClearAssignedVendor
+            && request.Status == null
+            && request.Description == null
+            && request.Address == null
+            && request.Urgency == null
+            && request.OtherDetails == null
+            && request.Photos == null
+            && request.Services == null
+            && request.ContactPhone == null
+            && request.ContactEmail == null;
+
+        if (isVendorUnassignOnly)
+        {
+            await _context.SaveChangesAsync();
+            await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
+            await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
+            return Ok(job);
+        }
+
+        // Customers must not be able to advance the status themselves — that is the
+        // workflow of vendors and admins.  Only admins may change status via this endpoint
+        // (vendors use dedicated action endpoints like /accept, /complete-sale, etc.).
+        if (request.Status != null)
+        {
+            if (!isAdmin)
+                return BadRequest(new { message = "Job status can only be changed through dedicated workflow actions." });
+            if (!KnownStatuses.Contains(request.Status))
+                return BadRequest(new { message = $"Invalid status value '{request.Status}'." });
+            job.Status = request.Status;
+        }
         if (request.Description != null) job.Description = request.Description;
         if (request.Address != null) job.Address = request.Address;
         if (request.Urgency != null) job.Urgency = request.Urgency;
         if (request.OtherDetails != null) job.OtherDetails = request.OtherDetails;
         if (request.Photos != null) job.Photos = string.Join(",", request.Photos);
+        if (request.Services != null) job.Services = string.Join(",", request.Services);
         if (request.ContactPhone != null) job.ContactPhone = request.ContactPhone;
         if (request.ContactEmail != null) job.ContactEmail = request.ContactEmail;
 
@@ -154,21 +304,26 @@ public class JobsController : ControllerBase
         if (string.IsNullOrWhiteSpace(job.Address)) missingFields.Add("Address");
         if (string.IsNullOrWhiteSpace(job.ContactPhone)) missingFields.Add("Contact Phone");
         if (string.IsNullOrWhiteSpace(job.ContactEmail)) missingFields.Add("Contact Email");
+        // In split-assignment flow, parent jobs can legitimately have no remaining services
+        // once all scopes are delegated to child jobs.
+        var hasChildAssignments = await _context.Jobs.AsNoTracking().AnyAsync(j => j.ParentJobId == id);
+        if (string.IsNullOrWhiteSpace(job.Services) && !hasChildAssignments) missingFields.Add("Services");
 
         if (missingFields.Any())
         {
             return BadRequest(new { message = $"Cannot update job. The following fields are required: {string.Join(", ", missingFields)}" });
         }
 
-        _context.Entry(job).State = EntityState.Modified;
+        // Do NOT set EntityState.Modified explicitly — EF Core's change tracker
+        // already detects which columns changed and generates a minimal UPDATE statement.
+        // Setting Modified marks every column dirty, causing unnecessary DB writes.
         await _context.SaveChangesAsync();
-        
-        // Refresh job with customer and vendor info for consistent UI display
-        var updatedJob = await _context.Jobs
-            .Include(j => j.Customer)
-            .Include(j => j.Vendor)
-            .FirstOrDefaultAsync(j => j.Id == id);
-        return Ok(updatedJob);
+
+        // Populate navigation properties on the already-tracked entity instead of
+        // issuing a second SELECT round-trip.
+        await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
+        await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
+        return Ok(job);
     }
 
     [HttpPost("{id}/assign")]
@@ -204,6 +359,15 @@ public class JobsController : ControllerBase
             return BadRequest(new { message = $"Cannot assign vendor: Homeowner contact information is incomplete. Missing: {string.Join(", ", missingFields)}" });
         }
 
+        // Validate that the target vendor exists, is active, and is approved.
+        if (request.VendorId == Guid.Empty)
+            return BadRequest(new { message = "VendorId is required." });
+
+        var vendor = await _context.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == request.VendorId && u.Role == "Vendor" && u.IsApproved && u.IsActive);
+        if (vendor == null)
+            return BadRequest(new { message = "The specified vendor does not exist, is not approved, or is inactive." });
+
         string noteContent;
         if (job.VendorId != null && job.VendorId != request.VendorId)
         {
@@ -220,26 +384,146 @@ public class JobsController : ControllerBase
         job.AssignedAt = DateTime.UtcNow;
         job.AcceptedAt = null; // Reset acceptance for new vendor
 
-        // Add audit note
-        var note = new JobNote
+        _context.JobNotes.Add(new JobNote
+        {
+            Id = Guid.NewGuid(), JobId = id, AuthorId = adminId,
+            Content = noteContent, CreatedAt = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
+
+        // Load navigation properties on the tracked entity — avoids a second SELECT.
+        await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
+        await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
+        return Ok(job);
+    }
+
+    /// <summary>Admin-only: clears the assigned vendor and returns the job to Submitted.</summary>
+    [HttpPost("{id}/unassign-vendor")]
+    public async Task<IActionResult> UnassignVendor(Guid id)
+    {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var adminId)) return Unauthorized();
+
+        if (!User.IsInRole("Admin") && !User.IsInRole("admin"))
+            return StatusCode(403, new { message = "Forbidden: Admin access required." });
+
+        var job = await _context.Jobs.Include(j => j.Vendor).FirstOrDefaultAsync(j => j.Id == id);
+        if (job == null) return NotFound(new { message = "Job not found" });
+
+        if (job.VendorId == null)
+        {
+            await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
+            await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
+            return Ok(job);
+        }
+
+        if (job.Status == "Completed" || job.Status == "Invoiced")
+            return BadRequest(new { message = $"Cannot unassign vendor for a job that is already {job.Status.ToLower()}." });
+
+        var previousName = job.Vendor?.Name ?? "Unknown vendor";
+
+        job.VendorId = null;
+        job.Vendor = null;
+        job.Status = "Submitted";
+        job.AssignedAt = null;
+        job.AcceptedAt = null;
+
+        _context.JobNotes.Add(new JobNote
         {
             Id = Guid.NewGuid(),
             JobId = id,
             AuthorId = adminId,
-            Content = noteContent,
+            Content = $"Vendor unassigned by admin. Previous vendor: {previousName}.",
             CreatedAt = DateTime.UtcNow
-        };
-        _context.JobNotes.Add(note);
+        });
 
         await _context.SaveChangesAsync();
-        
-        // Refresh to include new vendor info
-        var updatedJob = await _context.Jobs
+
+        await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
+        await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
+        return Ok(job);
+    }
+
+    /// <summary>
+    /// Admin-only: unassigns one vendor from a split parent job by deleting that vendor's child assignments
+    /// and merging their services back to the parent scope.
+    /// </summary>
+    [HttpPost("{id}/unassign-scope-vendor")]
+    public async Task<IActionResult> UnassignVendorScope(Guid id, [FromBody] UnassignVendorScopeRequest request)
+    {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var adminId)) return Unauthorized();
+
+        if (!User.IsInRole("Admin") && !User.IsInRole("admin"))
+            return StatusCode(403, new { message = "Forbidden: Admin access required." });
+
+        if (request.VendorId == Guid.Empty)
+            return BadRequest(new { message = "VendorId is required." });
+
+        var parent = await _context.Jobs
             .Include(j => j.Customer)
             .Include(j => j.Vendor)
             .FirstOrDefaultAsync(j => j.Id == id);
 
-        return Ok(updatedJob);
+        if (parent == null) return NotFound(new { message = "Parent job not found." });
+
+        var assignedChildren = await _context.Jobs
+            .Include(j => j.Vendor)
+            .Where(j => j.ParentJobId == id && j.VendorId == request.VendorId)
+            .ToListAsync();
+
+        // Fallback: if this is a direct parent assignment (not split), reuse the existing unassign logic.
+        if (!assignedChildren.Any())
+        {
+            if (parent.VendorId == request.VendorId)
+                return await UnassignVendor(id);
+            return BadRequest(new { message = "No assignments found for this vendor on the selected job." });
+        }
+
+        if (assignedChildren.Any(j => j.Status == "Completed" || j.Status == "Invoiced"))
+            return BadRequest(new { message = "Cannot unassign a vendor with completed or invoiced scope." });
+
+        var parentServices = ParseCsvList(parent.Services);
+        foreach (var child in assignedChildren)
+        {
+            var childServices = ParseCsvList(child.Services);
+            foreach (var service in childServices)
+            {
+                if (!parentServices.Contains(service, StringComparer.OrdinalIgnoreCase))
+                    parentServices.Add(service);
+            }
+        }
+
+        parent.Services = parentServices.Any() ? string.Join(",", parentServices) : parent.Services;
+
+        var removedCount = assignedChildren.Count;
+        var previousVendorName = assignedChildren.First().Vendor?.Name ?? "Unknown vendor";
+
+        _context.Jobs.RemoveRange(assignedChildren);
+
+        var hasAnyRemainingAssignments = await _context.Jobs.AnyAsync(j => j.ParentJobId == id && j.VendorId != null && !assignedChildren.Select(c => c.Id).Contains(j.Id));
+        if (!hasAnyRemainingAssignments && parent.VendorId == null)
+            parent.Status = "Submitted";
+        else
+            parent.Status = "Assigned";
+
+        _context.JobNotes.Add(new JobNote
+        {
+            Id = Guid.NewGuid(),
+            JobId = id,
+            AuthorId = adminId,
+            Content = $"Vendor scope unassigned by admin. Vendor: {previousVendorName}. Removed assignments: {removedCount}.",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
+
+        await _context.Entry(parent).Collection(p => p.ChildJobs).LoadAsync();
+        foreach (var child in parent.ChildJobs)
+            await _context.Entry(child).Reference(c => c.Vendor).LoadAsync();
+
+        return Ok(parent);
     }
 
     [HttpPost("{id}/accept")]
@@ -252,6 +536,9 @@ public class JobsController : ControllerBase
         if (job == null) return NotFound();
 
         if (job.VendorId != userId) return Forbid();
+
+        if (job.Status != "Assigned")
+            return BadRequest(new { message = "Job must be in 'Assigned' status before accepting." });
 
         job.Status = "Accepted";
         job.AcceptedAt = DateTime.UtcNow;
@@ -270,6 +557,11 @@ public class JobsController : ControllerBase
         if (job == null) return NotFound();
         if (!CurrentUserCanAccessJob(userId, job)) return NotFound();
 
+        if (string.IsNullOrWhiteSpace(request.Content))
+            return BadRequest(new { message = "Note content cannot be empty." });
+        if (request.Content.Length > 5000)
+            return BadRequest(new { message = "Note content exceeds the maximum length of 5,000 characters." });
+
         var note = new JobNote
         {
             JobId = id,
@@ -281,7 +573,7 @@ public class JobsController : ControllerBase
         _context.JobNotes.Add(note);
         await _context.SaveChangesAsync();
 
-        return Ok(note);
+        return StatusCode(StatusCodes.Status201Created, note);
     }
 
     [HttpGet("{id}/notes")]
@@ -312,6 +604,13 @@ public class JobsController : ControllerBase
         if (job == null) return NotFound();
 
         if (job.VendorId != userId) return Forbid();
+
+        if (string.IsNullOrWhiteSpace(request.ScopeOfWork))
+            return BadRequest(new { message = "Scope of work is required." });
+        if (request.ContractAmount <= 0)
+            return BadRequest(new { message = "Contract amount must be greater than zero." });
+        if (request.WorkStartDate == default || request.WorkStartDate.Date < DateTime.UtcNow.Date)
+            return BadRequest(new { message = "A valid future work start date is required." });
 
         job.Status = "Sale";
         job.ScopeOfWork = request.ScopeOfWork;
@@ -416,6 +715,8 @@ public class JobsController : ControllerBase
 
         if (job.VendorId != userId) return Forbid();
 
+        if (job.Status != "InvoiceRequested")
+            return BadRequest(new { message = "Invoice can only be uploaded after admin requests it." });
         if (string.IsNullOrWhiteSpace(request.InvoiceDocumentUrl))
             return BadRequest(new { message = "Invoice document URL is required." });
 
@@ -498,6 +799,11 @@ public class AssignVendorRequest
     public Guid VendorId { get; set; }
 }
 
+public class UnassignVendorScopeRequest
+{
+    public Guid VendorId { get; set; }
+}
+
 public class AddNoteRequest
 {
     public string Content { get; set; } = string.Empty;
@@ -523,18 +829,28 @@ public class CreateJobRequest
     public string Urgency { get; set; } = "No rush";
     public string? OtherDetails { get; set; }
     public List<string>? Photos { get; set; }
+    public List<string>? Services { get; set; }
     public string? ContactPhone { get; set; }
     public string? ContactEmail { get; set; }
+    public Guid? CustomerId { get; set; }
+    public Guid? ParentJobId { get; set; }
+
+    /// <summary>When creating a split child (<see cref="ParentJobId"/>), admin may assign the vendor immediately.</summary>
+    public Guid? VendorId { get; set; }
 }
 
 public class UpdateJobRequest
 {
+    /// <summary>When true (admin only), clears VendorId and returns the job to Submitted.</summary>
+    public bool ClearAssignedVendor { get; set; }
+
     public string? Status { get; set; }
     public string? Description { get; set; }
     public string? Address { get; set; }
     public string? Urgency { get; set; }
     public string? OtherDetails { get; set; }
     public List<string>? Photos { get; set; }
+    public List<string>? Services { get; set; }
     public string? ContactPhone { get; set; }
     public string? ContactEmail { get; set; }
 }

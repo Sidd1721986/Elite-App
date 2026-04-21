@@ -46,7 +46,6 @@ public class Job
     [Key]
     public Guid Id { get; set; }
 
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int JobNumber { get; set; }
 
     public Guid CustomerId { get; set; }
@@ -92,6 +91,16 @@ public class Job
     // Contact enhancement
     public string? ContactPhone { get; set; }
     public string? ContactEmail { get; set; }
+
+    public Guid? ParentJobId { get; set; }
+
+    [ForeignKey("ParentJobId")]
+    public Job? ParentJob { get; set; }
+
+    public List<Job> ChildJobs { get; set; } = new();
+
+    public string? JobSuffix { get; set; }
+    public string? Services { get; set; }
 }
 
 public class JobNote

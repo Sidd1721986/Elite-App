@@ -86,6 +86,13 @@ export interface JobNote {
   createdAt: string;
 }
 
+export interface JobItem {
+  id: string;
+  title: string;
+  description: string;
+  isAssigned?: boolean;
+}
+
 export interface Job {
   id: string;
   jobNumber: number;
@@ -113,8 +120,15 @@ export interface Job {
   invoiceRequestedAt?: string;
   invoicedAt?: string;
   scheduledDate?: string;
+  items?: JobItem[];
+  parentJobId?: string;
   createdAt: string;
   notes?: JobNote[];
+  jobSuffix?: string;
+  childJobs?: Job[];
+  services?: string[];
+  vendor?: User;
+  customer?: User;
 }
 
 export interface Message {
@@ -142,11 +156,11 @@ export type RootStackParamList = {
   Login: { passwordResetOk?: boolean; initialRole?: UserRole } | undefined;
   ForgotPassword: { initialEmail?: string; initialRole?: UserRole } | undefined;
   ResetPassword: { email: string; role: string; resetToken?: string };
-  CustomerSignup: undefined;
+  UserSignup: undefined;
   VendorSignup: undefined;
   AdminDashboard: undefined;
   VendorDashboard: undefined;
-  CustomerDashboard: undefined;
+  UserDashboard: undefined;
   RoleFallback: undefined;
   JobDetails: { jobId: string };
   AssignVendor: { jobId: string };

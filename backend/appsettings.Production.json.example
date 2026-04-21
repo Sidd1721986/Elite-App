@@ -9,6 +9,9 @@
   "ConnectionStrings": {
     "DefaultConnection": "Host=YOUR_DB_HOST;Port=5432;Database=eliteapp_prod;Username=YOUR_DB_USER;Password=YOUR_DB_PASSWORD;SSL Mode=Require;Trust Server Certificate=true"
   },
+  "Database": {
+    "RunMigrations": true
+  },
   "Jwt": {
     "Key": "CHOOSE_A_LONG_SECURE_RANDOM_KEY_AT_LEAST_32_CHARACTERS"
   },

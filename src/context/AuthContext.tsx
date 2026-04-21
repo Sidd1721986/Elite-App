@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService, toApiRole } from '../services/authService';
 import { apiClient, setApiClientOnUnauthorized } from '../services/apiClient';
 import { User, UserRole, AuthContextType } from '../types/types';
@@ -19,32 +20,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, []);
 
-    // Run session check in background (timeout avoids infinite “Loading…” if storage hangs)
+    // Initial session check on app mount
     useEffect(() => {
-        let cancelled = false;
-        const timer = setTimeout(() => {
-            if (!cancelled) setIsLoading(false);
-        }, 2500);
-        checkSession()
-            .catch((error) => {
-                if (__DEV__) console.error('AuthContext: Session check failed:', error);
-            })
-            .finally(() => {
-                clearTimeout(timer);
-                if (!cancelled) setIsLoading(false);
-            });
+        let isCurrent = true;
+        
+        const initSession = async () => {
+            try {
+                // Ensure we check storage/API for existing token
+                await checkSession();
+            } finally {
+                if (isCurrent) {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        initSession();
+        
         return () => {
-            cancelled = true;
-            clearTimeout(timer);
+            isCurrent = false;
         };
     }, [checkSession]);
 
-    // On 401, clear auth so user is sent back to login
+    // On 401, clear auth so user is sent back to login.
+    // Also clear the persisted job cache so a subsequent login doesn't briefly see
+    // the previous user's jobs, and call setIsLoading(false) as a safety guard in
+    // case the 401 fires before initSession's finally block runs.
     useEffect(() => {
         setApiClientOnUnauthorized(async () => {
             await authService.logout();
             apiClient.clearCache();
+            await AsyncStorage.removeItem('@jobs_cache');
             setUser(null);
+            setIsLoading(false);
         });
     }, []);
 
@@ -98,6 +106,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const logout = useCallback(async () => {
         await authService.logout();
         apiClient.clearCache();
+        // Clear the persisted job cache so the next user to log in on this device
+        // doesn't briefly see stale data from the previous session.
+        await AsyncStorage.removeItem('@jobs_cache');
         setUser(null);
     }, []);
 

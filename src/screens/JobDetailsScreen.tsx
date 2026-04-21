@@ -31,7 +31,7 @@ const getStatusStyle = (status: string) => {
 const JobDetailsScreen: React.FC = () => {
     const route = useRoute<JobDetailsRouteProp>();
     const navigation = useNavigation();
-    const { getJobById, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, addJobPhotos } = useJobs();
+    const { getJobById, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, addJobPhotos, removeJobPhoto } = useJobs();
     const { user, getApprovedVendors } = useAuth();
     const jobId = route.params?.jobId;
 
@@ -46,6 +46,7 @@ const JobDetailsScreen: React.FC = () => {
     const [isDeletingPhoto, setIsDeletingPhoto] = React.useState<string | null>(null);
     const [isUploading, setIsUploading] = React.useState(false);
     const [uploadProgress, setUploadProgress] = React.useState(0);
+    const [isProcessing, setIsProcessing] = React.useState(false);
 
     const job = jobId ? getJobById(jobId) : undefined;
 
@@ -188,6 +189,40 @@ const JobDetailsScreen: React.FC = () => {
         }
     };
 
+    /** Camera / gallery pick for the invoice section (uploads file then submits invoice URL). */
+    const handleInvoiceImagePick = async (type: 'camera' | 'library') => {
+        const options = {
+            mediaType: 'photo' as const,
+            quality: 0.8 as const,
+        };
+        const result =
+            type === 'camera' ? await launchCamera(options) : await launchImageLibrary(options);
+
+        if (!result.assets?.[0]) return;
+
+        const asset = result.assets[0];
+        setIsUploading(true);
+        setUploadProgress(0.3);
+        try {
+            const fileToUpload = {
+                uri: asset.uri,
+                type: asset.type || 'image/jpeg',
+                name: asset.fileName || 'invoice.jpg',
+            };
+            const uploadResult = await jobService.uploadFile(fileToUpload);
+            if (uploadResult?.url) {
+                setUploadProgress(0.8);
+                await uploadInvoice(job.id, uploadResult.url);
+                setUploadProgress(1);
+            }
+        } catch (error) {
+            console.error('Invoice image upload failed:', error);
+        } finally {
+            setIsUploading(false);
+            setUploadProgress(0);
+        }
+    };
+
     const statusStyle = getStatusStyle(job.status);
 
     return (
@@ -213,7 +248,7 @@ const JobDetailsScreen: React.FC = () => {
 
                     <View style={styles.heroSection}>
                         <View style={styles.heroInfo}>
-                            <Text variant="labelSmall" style={styles.idLabel}>ORDER #{job.jobNumber || '...'}</Text>
+                            <Text variant="labelSmall" style={styles.idLabel}>ORDER #{job.jobNumber}{job.jobSuffix || ''}</Text>
                             <Text variant="headlineSmall" style={styles.addressTitle}>{job.address}</Text>
                         </View>
                         <Chip
@@ -260,7 +295,7 @@ const JobDetailsScreen: React.FC = () => {
                                             mode="contained" 
                                             style={{ flex: 1, borderRadius: 12, backgroundColor: '#6366F1' }}
                                             icon="camera"
-                                            onPress={() => handleUploadFile('camera')}
+                                            onPress={() => handleInvoiceImagePick('camera')}
                                         >
                                             Take Photo
                                         </Button>
@@ -268,7 +303,7 @@ const JobDetailsScreen: React.FC = () => {
                                             mode="contained" 
                                             style={{ flex: 1, borderRadius: 12, backgroundColor: '#0F172A' }}
                                             icon="file-image-outline"
-                                            onPress={() => handleUploadFile('library')}
+                                            onPress={() => handleInvoiceImagePick('library')}
                                         >
                                             Gallery
                                         </Button>
@@ -340,32 +375,61 @@ const JobDetailsScreen: React.FC = () => {
                 )}
 
                 <View style={styles.contentBody}>
-                    {user?.role === 'Admin' && job.status !== JobStatus.COMPLETED && job.status !== JobStatus.INVOICED && (
+                    {user?.role === 'Admin' && (!job.items || (Array.isArray(job.items) && job.items.some(i => i && !i.isAssigned))) && job.status !== JobStatus.COMPLETED && (
                         <View style={styles.section}>
-                            <Text variant="titleMedium" style={styles.sectionTitle}>
-                                {job.vendorId ? 'Change Assigned Vendor' : 'Assign to Vendor'}
-                            </Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -24, paddingHorizontal: 24 }}>
-                                {approvedVendors.map(vendor => (
-                                    <Surface key={vendor.id} style={[styles.vendorPickerCard, job.vendorId === vendor.id && { borderColor: '#6366F1', borderWidth: 2 }]} elevation={1}>
-                                        <Avatar.Text size={40} label={vendor.name?.[0] || 'V'} style={{ backgroundColor: '#EEF2FF' }} color="#6366F1" />
-                                        <Text variant="labelLarge" style={{ marginTop: 8, fontWeight: 'bold' }} numberOfLines={1}>{vendor.name || 'Vendor'}</Text>
-                                        {job.vendorId === vendor.id ? (
-                                            <Chip icon="check-circle" style={{ marginTop: 8, backgroundColor: '#EEF2FF' }} textStyle={{ color: '#6366F1', fontSize: 10 }}>Current</Chip>
-                                        ) : (
-                                            <Button
-                                                mode="contained"
-                                                compact
-                                                onPress={() => assignVendor(job.id, vendor.id!)}
-                                                style={{ marginTop: 8, borderRadius: 8 }}
-                                                labelStyle={{ fontSize: 11 }}
-                                            >
-                                                {job.vendorId ? 'Switch' : 'Assign'}
-                                            </Button>
-                                        )}
-                                    </Surface>
-                                ))}
-                            </ScrollView>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                <Text variant="titleMedium" style={[styles.sectionTitle, { marginBottom: 0 }]}>
+                                    Assign Work
+                                </Text>
+                                <Button 
+                                    mode="contained" 
+                                    compact 
+                                    onPress={() => (navigation as any).navigate('AssignVendor', { jobId: job.id })}
+                                    style={{ borderRadius: 8 }}
+                                >
+                                    Split & Assign
+                                </Button>
+                            </View>
+                            <Surface style={styles.infoCard} elevation={0}>
+                                <Text variant="bodySmall" style={{ color: '#64748B' }}>
+                                    You can split this request and assign different items to different specialized vendors.
+                                </Text>
+                            </Surface>
+                        </View>
+                    )}
+
+                    {/* Child Jobs (Assignments) list for Parent Job */}
+                    {job.childJobs && job.childJobs.length > 0 && (
+                        <View style={styles.section}>
+                            <Text variant="titleMedium" style={styles.sectionTitle}>Scope Assignments</Text>
+                            {job.childJobs.map((child) => (
+                                <Surface key={child.id} style={styles.assignmentCard} elevation={1}>
+                                    <View style={styles.assignmentTop}>
+                                        <Text variant="labelSmall" style={styles.assignmentId}>PART #{child.jobNumber}{child.jobSuffix}</Text>
+                                        <Chip compact style={[styles.statusChip, { height: 20, backgroundColor: getStatusStyle(child.status).bg }]} textStyle={{ fontSize: 9, color: getStatusStyle(child.status).color }}>
+                                            {child.status}
+                                        </Chip>
+                                    </View>
+                                    <Text variant="bodyMedium" style={styles.assignmentDesc}>{child.description}</Text>
+                                    <Divider style={{ marginVertical: 8 }} />
+                                    <View style={styles.assignmentBottom}>
+                                        <View style={styles.vendorMiniLink}>
+                                            <Avatar.Icon size={20} icon="account-hard-hat" style={{ backgroundColor: '#F1F5F9' }} color="#64748B" />
+                                            <Text variant="labelMedium" style={{ marginLeft: 8, color: '#475569' }}>
+                                                {child.vendor?.name || 'Unassigned'}
+                                            </Text>
+                                        </View>
+                                        <Button 
+                                            mode="text" 
+                                            compact 
+                                            labelStyle={{ fontSize: 11 }}
+                                            onPress={() => (navigation as any).navigate('JobDetails', { jobId: child.id })}
+                                        >
+                                            View Part
+                                        </Button>
+                                    </View>
+                                </Surface>
+                            ))}
                         </View>
                     )}
 
@@ -373,9 +437,37 @@ const JobDetailsScreen: React.FC = () => {
                         <Text variant="titleMedium" style={styles.sectionTitle}>Scope of Work</Text>
                         <Card style={styles.descriptionCard} elevation={0}>
                             <Card.Content>
-                                <Text variant="bodyLarge" style={styles.descriptionText}>
-                                    {job.description}
-                                </Text>
+                                {Array.isArray(job.items) && job.items.length > 0 ? (
+                                    <View style={{ marginBottom: 12 }}>
+                                        {job.items.map((item, idx) => item && (
+                                            <View key={item.id || idx} style={[styles.itemDetailRow, idx < job.items!.length - 1 && styles.itemSeparator]}>
+                                                <View style={styles.itemTitleRow}>
+                                                    <Text variant="titleSmall" style={styles.itemTitleText}>{item.title}</Text>
+                                                    {item.isAssigned && (
+                                                        <Chip compact style={{ height: 20, backgroundColor: '#ECFDF5' }} textStyle={{ fontSize: 9, color: '#059669' }}>Assigned</Chip>
+                                                    )}
+                                                </View>
+                                                <Text variant="bodyMedium" style={styles.itemDescriptionText}>{item.description}</Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                ) : (
+                                    <>
+                                        {job.services && job.services.length > 0 && (
+                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                                                {job.services.map(s => (
+                                                    <View key={s} style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#DDE3FF' }}>
+                                                        <Text style={{ fontSize: 11, color: '#6366F1', fontWeight: 'bold', textTransform: 'uppercase' }}>{s}</Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        )}
+                                        <Text variant="bodyLarge" style={styles.descriptionText}>
+                                            {job.description}
+                                        </Text>
+                                    </>
+                                )}
+                                
                                 {job.otherDetails && (
                                     <View style={styles.otherDetailsBox}>
                                         <Text variant="labelSmall" style={styles.subLabel}>ADDITIONAL NOTES</Text>
@@ -645,7 +737,16 @@ const JobDetailsScreen: React.FC = () => {
                             mode="contained"
                             style={[styles.mainActionBtn, { flex: 1 }]}
                             contentStyle={{ height: 56 }}
-                            onPress={() => acceptJob(job.id)}
+                            onPress={async () => {
+                                setIsProcessing(true);
+                                try {
+                                    await acceptJob(job.id);
+                                } catch (e) {
+                                    console.error(e);
+                                } finally {
+                                    setIsProcessing(false);
+                                }
+                            }}
                             loading={isProcessing}
                         >
                             Accept Order
@@ -681,11 +782,20 @@ const JobDetailsScreen: React.FC = () => {
                             contentStyle={{ height: 56 }}
                             buttonColor="#10B981"
                             icon="currency-usd"
-                            onPress={() => completeSale(job.id, {
-                                scopeOfWork: job.description,
-                                contractAmount: 1500,
-                                workStartDate: new Date().toISOString()
-                            })}
+                            onPress={async () => {
+                                setIsProcessing(true);
+                                try {
+                                    await completeSale(job.id, {
+                                        scopeOfWork: job.description,
+                                        contractAmount: 1500,
+                                        workStartDate: new Date().toISOString(),
+                                    });
+                                } catch (e) {
+                                    console.error(e);
+                                } finally {
+                                    setIsProcessing(false);
+                                }
+                            }}
                             loading={isProcessing}
                         >
                             Mark as Sale
@@ -720,11 +830,21 @@ const JobDetailsScreen: React.FC = () => {
                         contentStyle={{ height: 56 }}
                         buttonColor="#10B981"
                         icon="currency-usd"
-                        onPress={() => completeSale(job.id, {
-                            scopeOfWork: job.description,
-                            contractAmount: 1500,
-                            workStartDate: new Date().toISOString()
-                        })}
+                        onPress={async () => {
+                            setIsProcessing(true);
+                            try {
+                                await completeSale(job.id, {
+                                    scopeOfWork: job.description,
+                                    contractAmount: 1500,
+                                    workStartDate: new Date().toISOString(),
+                                });
+                            } catch (e) {
+                                console.error(e);
+                            } finally {
+                                setIsProcessing(false);
+                            }
+                        }}
+                        loading={isProcessing}
                     >
                         Submit Sale
                     </Button>
@@ -995,6 +1115,33 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: '#F1F5F9',
     },
+    itemDetailRow: {
+        paddingVertical: 12,
+    },
+    itemSeparator: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    itemTitleRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    itemTitleText: {
+        fontWeight: 'bold',
+        color: '#1E293B',
+    },
+    itemDescriptionText: {
+        color: '#475569',
+    },
+    infoCard: {
+        backgroundColor: '#F8FAFC',
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
     subLabel: {
         color: '#94A3B8',
         fontWeight: 'bold',
@@ -1041,6 +1188,39 @@ const styles = StyleSheet.create({
     mainActionBtn: {
         borderRadius: 16,
     },
+    assignmentCard: {
+        padding: 16,
+        borderRadius: 16,
+        backgroundColor: '#FFFFFF',
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+    },
+    assignmentTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    assignmentId: {
+        color: '#94A3B8',
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
+    },
+    assignmentDesc: {
+        color: '#1E293B',
+        lineHeight: 20,
+        marginBottom: 4,
+    },
+    assignmentBottom: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    vendorMiniLink: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
 });
 
-export default React.memo(JobDetailsScreen);
+export default JobDetailsScreen;

@@ -44,9 +44,12 @@ public sealed class SmtpEmailSender : IEmailSender
         using var client = new SmtpClient();
         client.Timeout = 30_000;
 
+        // StartTls (not StartTlsWhenAvailable) — fail hard if the server doesn't
+        // advertise STARTTLS rather than silently falling back to plaintext, which
+        // would send password-reset codes over an unencrypted connection.
         var secure = port == 465
             ? SecureSocketOptions.SslOnConnect
-            : SecureSocketOptions.StartTlsWhenAvailable;
+            : SecureSocketOptions.StartTls;
         try
         {
             await client.ConnectAsync(host, port, secure, cancellationToken);

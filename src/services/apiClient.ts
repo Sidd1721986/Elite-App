@@ -126,8 +126,10 @@ export const apiClient = {
         };
 
         const requestWithRetry = async (retries = 3, backoff = 1000): Promise<T> => {
+            const url = `${BASE_URL}${endpoint}`;
+            if (__DEV__) console.log(`[API-CLIENT] ${method} ${url}`);
             try {
-                const response = await fetchWithTimeout(`${BASE_URL}${endpoint}`, {
+                const response = await fetchWithTimeout(url, {
                     ...options,
                     headers,
                 }, REQUEST_TIMEOUT);

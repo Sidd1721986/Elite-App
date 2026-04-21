@@ -1,13 +1,17 @@
 import * as React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Card, Chip, ProgressBar, IconButton, Button, Surface } from 'react-native-paper';
+import { Text, Card, Chip, ProgressBar, IconButton, Button, Surface, TouchableRipple } from 'react-native-paper';
 import FastImage from 'react-native-fast-image';
+import { MotiView } from 'moti';
+import { useReducedMotion } from 'react-native-reanimated';
 import { Job, JobStatus } from '../types/types';
+import { useAuth } from '../context/AuthContext';
 
 interface JobItemProps {
     job: Job;
     onViewDetails: (jobId: string) => void;
     onModify?: (jobId: string) => void;
+    index?: number; // Added for staggered animations
 }
 
 const DEFAULT_STATUS = { progress: 0.1, color: '#64748B', bgColor: '#F1F5F9' };
@@ -29,115 +33,141 @@ function getStatusInfo(status: string) {
     return STATUS_INFO_MAP[status] ?? DEFAULT_STATUS;
 }
 
-const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify }) => {
+const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify, index = 0 }) => {
     const { progress, color, bgColor } = getStatusInfo(job.status);
+    const reducedMotion = useReducedMotion();
     const handleViewDetails = React.useCallback(() => onViewDetails(job.id), [job.id, onViewDetails]);
     const handleModify = React.useCallback(() => onModify?.(job.id), [job.id, onModify]);
+    const { user } = useAuth();
+    const [isPressed, setIsPressed] = React.useState(false);
 
     return (
-        <Card style={styles.jobCard} elevation={0}>
-            <Card.Content style={styles.content}>
-                <View style={styles.jobHeader}>
-                    <View style={styles.headerLeft}>
-                        <Text variant="labelSmall" style={styles.jobIdLabel}>JOB ID: #{job.jobNumber || '...'}</Text>
-                        <Text variant="titleMedium" style={styles.jobAddress} numberOfLines={1}>{job.address}</Text>
+        <MotiView
+            from={reducedMotion ? {} : { opacity: 0, translateY: 20 }}
+            animate={reducedMotion ? {} : { 
+                opacity: 1, 
+                translateY: 0,
+                scale: isPressed ? 0.98 : 1
+            }}
+            transition={{
+                type: 'timing',
+                duration: 400,
+                delay: reducedMotion ? 0 : index * 50, // 50ms stagger as requested
+            }}
+        >
+            <TouchableRipple
+                onPress={handleViewDetails}
+                onPressIn={() => setIsPressed(true)}
+                onPressOut={() => setIsPressed(false)}
+                rippleColor="rgba(99, 102, 241, 0.1)"
+                borderless
+                style={{ borderRadius: 20 }}
+            >
+                <Card style={styles.jobCard} elevation={0}>
+                    <Card.Content style={styles.content}>
+                        <View style={styles.jobHeader}>
+                            <View style={styles.headerLeft}>
+                                <Text variant="labelSmall" style={styles.jobIdLabel}>JOB ID: #{job.jobNumber}{job.jobSuffix || ''}</Text>
+                                <Text variant="titleMedium" style={styles.jobAddress} numberOfLines={1}>{job.address}</Text>
 
-                        {(job.contactPhone || job.contactEmail) && (
-                            <View style={styles.contactRow}>
-                                {job.contactPhone && (
-                                    <View style={styles.contactBadge}>
-                                        <IconButton icon="phone" size={12} style={styles.contactIcon} iconColor="#6366F1" />
-                                        <Text variant="labelSmall" style={styles.contactText}>{job.contactPhone}</Text>
-                                    </View>
-                                )}
-                                {job.contactEmail && (
-                                    <View style={styles.emailBadge}>
-                                        <IconButton icon="email" size={12} style={styles.contactIcon} iconColor="#94A3B8" />
-                                        <Text variant="labelSmall" style={styles.contactText} numberOfLines={1}>{job.contactEmail}</Text>
+                                {(job.contactPhone || job.contactEmail) && (
+                                    <View style={styles.contactRow}>
+                                        {job.contactPhone && (
+                                            <View style={styles.contactBadge}>
+                                                <IconButton icon="phone" size={12} style={styles.contactIcon} iconColor="#6366F1" />
+                                                <Text variant="labelSmall" style={styles.contactText}>{job.contactPhone}</Text>
+                                            </View>
+                                        )}
+                                        {job.contactEmail && (
+                                            <View style={styles.emailBadge}>
+                                                <IconButton icon="email" size={12} style={styles.contactIcon} iconColor="#94A3B8" />
+                                                <Text variant="labelSmall" style={styles.contactText} numberOfLines={1}>{job.contactEmail}</Text>
+                                            </View>
+                                        )}
                                     </View>
                                 )}
                             </View>
-                        )}
-                    </View>
-                    <Chip
-                        style={[styles.statusChip, { backgroundColor: bgColor }]}
-                        textStyle={[styles.statusText, { color: color }]}
-                        compact
-                    >
-                        {job.status}
-                    </Chip>
-                </View>
-
-                <Text variant="bodyMedium" style={styles.jobDesc} numberOfLines={2}>
-                    {job.description}
-                </Text>
-
-                <View style={styles.progressContainer}>
-                    <View style={styles.progressHeader}>
-                        <Text variant="labelSmall" style={styles.progressLabel}>Track Progress</Text>
-                        <Text variant="labelSmall" style={styles.progressValue}>{Math.round(progress * 100)}%</Text>
-                    </View>
-                    <ProgressBar
-                        progress={progress}
-                        color={color}
-                        style={styles.progressBar}
-                    />
-                </View>
-
-                {job.photos && job.photos.length > 0 && (
-                    <View style={styles.photoPreviewContainer}>
-                        <View style={styles.photoHeader}>
-                            <IconButton icon="image-multiple-outline" size={16} style={{ margin: 0 }} iconColor="#64748B" />
-                            <Text variant="labelSmall" style={styles.photoCountText}>{job.photos.length} Project Photos</Text>
+                            <Chip
+                                style={[styles.statusChip, { backgroundColor: bgColor }]}
+                                textStyle={[styles.statusText, { color: color }]}
+                                compact
+                            >
+                                {job.status}
+                            </Chip>
                         </View>
-                        <View style={styles.photoList}>
-                            {job.photos.slice(0, 5).map((uri, idx) => (
-                                <View key={uri + idx} style={styles.photoThumbnailWrapper}>
-                                    <FastImage
-                                        source={{ uri, priority: FastImage.priority.normal }}
-                                        style={styles.photoThumbnail}
-                                        resizeMode={FastImage.resizeMode.cover}
-                                    />
-                                    {idx === 4 && job.photos.length > 5 && (
-                                        <View style={styles.morePhotosOverlay}>
-                                            <Text style={styles.morePhotosText}>+{job.photos.length - 5}</Text>
-                                        </View>
-                                    )}
+
+                        <Text variant="bodyMedium" style={styles.jobDesc} numberOfLines={2}>
+                            {job.description}
+                        </Text>
+
+                        <View style={styles.progressContainer}>
+                            <View style={styles.progressHeader}>
+                                <Text variant="labelSmall" style={styles.progressLabel}>Track Progress</Text>
+                                <Text variant="labelSmall" style={styles.progressValue}>{Math.round(progress * 100)}%</Text>
+                            </View>
+                            <ProgressBar
+                                progress={progress}
+                                color={color}
+                                style={styles.progressBar}
+                            />
+                        </View>
+
+                        {job.photos && job.photos.length > 0 && (
+                            <View style={styles.photoPreviewContainer}>
+                                <View style={styles.photoHeader}>
+                                    <IconButton icon="image-multiple-outline" size={16} style={{ margin: 0 }} iconColor="#64748B" />
+                                    <Text variant="labelSmall" style={styles.photoCountText}>{job.photos.length} Project Photos</Text>
                                 </View>
-                            ))}
+                                <View style={styles.photoList}>
+                                    {job.photos.slice(0, 5).map((uri, idx) => (
+                                        <View key={uri + idx} style={styles.photoThumbnailWrapper}>
+                                            <FastImage
+                                                source={{ uri, priority: FastImage.priority.normal }}
+                                                style={styles.photoThumbnail}
+                                                resizeMode={FastImage.resizeMode.cover}
+                                            />
+                                            {idx === 4 && job.photos.length > 5 && (
+                                                <View style={styles.morePhotosOverlay}>
+                                                    <Text style={styles.morePhotosText}>+{job.photos.length - 5}</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+
+                        {job.scheduledDate && (
+                            <Surface style={styles.scheduleInfo} elevation={0}>
+                                <IconButton icon="calendar-check" size={16} iconColor="#10B981" />
+                                <Text variant="labelMedium" style={styles.scheduleText}>Scheduled: {job.scheduledDate}</Text>
+                            </Surface>
+                        )}
+
+                        <View style={styles.actions}>
+                            <Button
+                                mode="contained"
+                                onPress={handleViewDetails}
+                                style={styles.detailsBtn}
+                                contentStyle={styles.btnContent}
+                            >
+                                Details
+                            </Button>
+                            {onModify && job.status === JobStatus.SUBMITTED && user?.role !== 'Admin' && (
+                                <Button
+                                    mode="outlined"
+                                    onPress={handleModify}
+                                    style={styles.modifyBtn}
+                                    contentStyle={styles.btnContent}
+                                >
+                                    Modify
+                                </Button>
+                            )}
                         </View>
-                    </View>
-                )}
-
-                {job.scheduledDate && (
-                    <Surface style={styles.scheduleInfo} elevation={0}>
-                        <IconButton icon="calendar-check" size={16} iconColor="#10B981" />
-                        <Text variant="labelMedium" style={styles.scheduleText}>Scheduled: {job.scheduledDate}</Text>
-                    </Surface>
-                )}
-
-                <View style={styles.actions}>
-                    <Button
-                        mode="contained"
-                        onPress={handleViewDetails}
-                        style={styles.detailsBtn}
-                        contentStyle={styles.btnContent}
-                    >
-                        Details
-                    </Button>
-                    {onModify && job.status === JobStatus.SUBMITTED && (
-                        <Button
-                            mode="outlined"
-                            onPress={handleModify}
-                            style={styles.modifyBtn}
-                            contentStyle={styles.btnContent}
-                        >
-                            Modify
-                        </Button>
-                    )}
-                </View>
-            </Card.Content>
-        </Card>
+                    </Card.Content>
+                </Card>
+            </TouchableRipple>
+        </MotiView>
     );
 };
 

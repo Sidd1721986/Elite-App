@@ -3,6 +3,7 @@ using System;
 using EliteApp.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EliteApp.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260415204837_AddParentJobId")]
+    partial class AddParentJobId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -73,10 +76,10 @@ namespace EliteApp.API.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<int>("JobNumber")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer");
 
-                    b.Property<string>("JobSuffix")
-                        .HasColumnType("text");
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("JobNumber"));
 
                     b.Property<string>("OtherDetails")
                         .HasColumnType("text");
@@ -88,9 +91,6 @@ namespace EliteApp.API.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("ScopeOfWork")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Services")
                         .HasColumnType("text");
 
                     b.Property<string>("Status")
@@ -108,8 +108,6 @@ namespace EliteApp.API.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ParentJobId");
 
                     b.HasIndex("CustomerId", "CreatedAt");
 
@@ -268,17 +266,11 @@ namespace EliteApp.API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("EliteApp.API.Models.Job", "ParentJob")
-                        .WithMany("ChildJobs")
-                        .HasForeignKey("ParentJobId");
-
                     b.HasOne("EliteApp.API.Models.User", "Vendor")
                         .WithMany()
                         .HasForeignKey("VendorId");
 
                     b.Navigation("Customer");
-
-                    b.Navigation("ParentJob");
 
                     b.Navigation("Vendor");
                 });
@@ -324,8 +316,6 @@ namespace EliteApp.API.Migrations
 
             modelBuilder.Entity("EliteApp.API.Models.Job", b =>
                 {
-                    b.Navigation("ChildJobs");
-
                     b.Navigation("Notes");
                 });
 #pragma warning restore 612, 618

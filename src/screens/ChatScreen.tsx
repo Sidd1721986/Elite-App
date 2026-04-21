@@ -21,6 +21,36 @@ import { useAuth } from '../context/AuthContext';
 
 type ChatRouteProp = RouteProp<RootStackParamList, 'Chat'>;
 
+// Defined at module scope so React sees a stable component type on every render.
+// Previously this was inside ChatScreen, causing full list unmount/remount every
+// time the parent re-rendered (React treats a new function reference as a new component).
+const MessageItem = memo(({ item, isMe, otherUserName }: {
+    item: Message;
+    isMe: boolean;
+    otherUserName: string;
+}) => (
+    <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
+        {!isMe && (
+            <Avatar.Text
+                size={34}
+                label={otherUserName.substring(0, 1).toUpperCase()}
+                style={styles.avatar}
+            />
+        )}
+        <Surface style={[
+            styles.messageBubble,
+            isMe ? styles.myBubble : styles.theirBubble
+        ]} elevation={1}>
+            <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
+                {item.content}
+            </Text>
+            <Text style={[styles.timestamp, isMe ? styles.myTimestamp : styles.theirTimestamp]}>
+                {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+        </Surface>
+    </View>
+));
+
 const ChatScreen: React.FC = () => {
     const route = useRoute<ChatRouteProp>();
     const navigation = useNavigation();
@@ -58,7 +88,8 @@ const ChatScreen: React.FC = () => {
                     const id = await messageService.getDefaultAdminId();
                     setResolvedOtherUserId(id);
                 } catch (error) {
-                    console.error('Failed to resolve admin ID:', error);
+                    if (__DEV__) console.error('Failed to resolve admin ID:', error);
+                    // Release the spinner so the user isn't stuck on a blank screen.
                     setLoading(false);
                 }
             }
@@ -113,29 +144,6 @@ const ChatScreen: React.FC = () => {
             }
         };
     }, []);
-const MessageItem = memo(({ item, isMe, otherUserName }: { item: Message, isMe: boolean, otherUserName: string }) => (
-    <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
-        {!isMe && (
-            <Avatar.Text
-                size={34}
-                label={otherUserName.substring(0, 1).toUpperCase()}
-                style={styles.avatar}
-            />
-        )}
-        <Surface style={[
-            styles.messageBubble,
-            isMe ? styles.myBubble : styles.theirBubble
-        ]} elevation={1}>
-            <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
-                {item.content}
-            </Text>
-            <Text style={[styles.timestamp, isMe ? styles.myTimestamp : styles.theirTimestamp]}>
-                {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-        </Surface>
-    </View>
-));
-
     const renderMessage = useCallback(({ item }: { item: Message }) => {
         const isMe = item.senderId === user?.id || item.senderId === user?.email;
         return (

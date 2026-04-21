@@ -68,7 +68,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         if (selectedRole === UserRole.VENDOR) {
             navigation.navigate('VendorSignup');
         } else {
-            navigation.navigate('CustomerSignup');
+            navigation.navigate('UserSignup');
         }
     }, [navigation, selectedRole]);
 

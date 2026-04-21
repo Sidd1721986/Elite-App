@@ -6,16 +6,18 @@
 export const DEV_API_HOST = '';
 
 /**
- * Production HTTPS API base URL (include `/api` if your routes are under `/api`).
+ * Production HTTPS API base URL — loaded from `./env` (gitignored).
  *
- * Before App Store / Play release, set this to your deployed backend (same host as Azure App Service
- * or your API domain). For CI/CD, replace this string in the pipeline (e.g. sed) or split per env with
- * a small script — do not point release builds at `localhost`.
+ * Setup:
+ *   cp src/config/env.example.ts src/config/env.ts   # once, locally
+ *   # then fill in your real URL in env.ts
  *
- * Optional: add `react-native-config` and read `PROD_API_BASE_URL` from a root `.env` if you prefer
- * env files over editing this constant.
+ * In CI/CD (Azure DevOps, GitHub Actions), generate env.ts from a pipeline secret before
+ * the build step so the URL never lives in version control:
+ *
+ *   echo "export const PRODUCTION_API_BASE_URL = '$(PROD_API_URL)';" > src/config/env.ts
  */
-const PRODUCTION_API_BASE_URL = 'https://eliteapp-api-test.calmpond-a079cf6a.eastus2.azurecontainerapps.io/api';
+import { PRODUCTION_API_BASE_URL } from './env';
 
 function trimTrailingSlashes(url: string): string {
     return url.replace(/\/+$/, '');
