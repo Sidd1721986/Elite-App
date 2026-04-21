@@ -153,7 +153,7 @@ stages:
         pool:
           name: SelfHosted-Mac
         steps:
-          - task: AzureWebAppContainer@2
+          - task: AzureWebAppContainer@1
             displayName: Deploy container
             inputs:
               azureSubscription: $(azureSubscription)
