@@ -43,11 +43,13 @@ jobs:
 
       - name: Publish test results
         if: always()
+        continue-on-error: true
         uses: dorny/test-reporter@v1
         with:
           name: .NET Tests
           path: '**/testresults.trx'
           reporter: dotnet-trx
+          fail-on-error: false
 
       - name: Log in to ACR
         uses: azure/docker-login@v2
