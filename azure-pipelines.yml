@@ -149,7 +149,7 @@ stages:
       )
     jobs:
       - job: DeployWeb
-        timeoutInMinutes: 10
+        timeoutInMinutes: 20
         pool:
           name: SelfHosted-Mac
         steps:
