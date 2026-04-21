@@ -102,7 +102,7 @@ stages:
         displayName: Test, build Docker image, push to ACR
         timeoutInMinutes: 30
         pool:
-          name: SelfHosted-Mac
+          vmImage: ubuntu-24.04
         steps:
           - task: UseDotNet@2
             inputs:
@@ -151,7 +151,7 @@ stages:
       - job: DeployWeb
         timeoutInMinutes: 20
         pool:
-          name: SelfHosted-Mac
+          vmImage: ubuntu-24.04
         steps:
           - task: AzureWebAppContainer@1
             displayName: Deploy container
