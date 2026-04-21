@@ -1,0 +1,36 @@
+name: Health Monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  check-api:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check API health
+        id: health
+        run: |
+          URL="https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net/health"
+          STATUS=$(curl -sS -o /tmp/health_response.txt -w "%{http_code}" --max-time 15 "$URL" || echo "000")
+          BODY=$(cat /tmp/health_response.txt 2>/dev/null || echo "no response")
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "body=$BODY" >> $GITHUB_OUTPUT
+          echo "HTTP $STATUS — $URL"
+          echo "Response: $BODY"
+
+      - name: Fail if unhealthy
+        if: steps.health.outputs.status != '200'
+        run: |
+          echo "❌ API health check FAILED"
+          echo "Status: ${{ steps.health.outputs.status }}"
+          echo "Response: ${{ steps.health.outputs.body }}"
+          echo ""
+          echo "To start disaster recovery, go to:"
+          echo "https://github.com/${{ github.repository }}/actions/workflows/disaster-recovery.yml"
+          exit 1
+
+      - name: Report healthy
+        if: steps.health.outputs.status == '200'
+        run: echo "✅ API healthy — HTTP ${{ steps.health.outputs.status }}"

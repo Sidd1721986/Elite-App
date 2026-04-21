@@ -1,0 +1,265 @@
+name: Disaster Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      recovery_mode:
+        description: 'Recovery mode'
+        required: true
+        type: choice
+        options:
+          - full          # Recreate infra + restore DB + redeploy app
+          - app-only      # Redeploy latest container image (infra intact)
+          - db-restore    # Restore DB from backup only
+          - infra-only    # Recreate Azure resources only (no DB restore)
+      backup_file:
+        description: 'DB backup file name to restore (e.g. eliteapp_backup_20260421_020000.sql.gz). Leave blank to use latest.'
+        required: false
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+        default: production
+      confirm:
+        description: 'Type CONFIRM to proceed (safety check)'
+        required: true
+
+env:
+  IMAGE_NAME: eliteapp-api
+  RESOURCE_GROUP: EliteApp-${{ github.event.inputs.environment }}-RG
+
+jobs:
+  safety-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "CONFIRM" ]; then
+            echo "❌ Safety check failed. You must type CONFIRM to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmed by: ${{ github.actor }}"
+          echo "🔧 Mode: ${{ github.event.inputs.recovery_mode }}"
+          echo "🌍 Environment: ${{ github.event.inputs.environment }}"
+
+  restore-infra:
+    runs-on: ubuntu-24.04
+    needs: safety-check
+    if: |
+      github.event.inputs.recovery_mode == 'full' ||
+      github.event.inputs.recovery_mode == 'infra-only'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Recreate resource group if missing
+        run: |
+          EXISTS=$(az group exists --name "$RESOURCE_GROUP")
+          if [ "$EXISTS" = "false" ]; then
+            echo "Resource group missing — recreating..."
+            az group create --name "$RESOURCE_GROUP" --location eastus2
+          else
+            echo "Resource group exists: $RESOURCE_GROUP"
+          fi
+
+      - name: Ensure ACR exists
+        run: |
+          ACR_NAME="${{ secrets.ACR_NAME }}"
+          EXISTS=$(az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" --query name -o tsv 2>/dev/null || echo "")
+          if [ -z "$EXISTS" ]; then
+            echo "ACR missing — recreating..."
+            az acr create \
+              --name "$ACR_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --sku Basic \
+              --admin-enabled true
+          else
+            echo "ACR exists: $ACR_NAME"
+          fi
+
+      - name: Ensure Key Vault exists
+        run: |
+          KV_NAME="${{ secrets.KEY_VAULT_NAME }}"
+          EXISTS=$(az keyvault show --name "$KV_NAME" --resource-group "$RESOURCE_GROUP" --query name -o tsv 2>/dev/null || echo "")
+          if [ -z "$EXISTS" ]; then
+            echo "Key Vault missing — recreating..."
+            az keyvault create \
+              --name "$KV_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --location eastus2 \
+              --enable-soft-delete true \
+              --retention-days 90
+            # Restore secrets
+            az keyvault secret set --vault-name "$KV_NAME" --name "jwt-key" --value "${{ secrets.JWT_KEY }}"
+            az keyvault secret set --vault-name "$KV_NAME" --name "password-pepper" --value "${{ secrets.PASSWORD_PEPPER }}"
+            az keyvault secret set --vault-name "$KV_NAME" --name "db-conn-string" --value "${{ secrets.DB_CONNECTION_STRING }}"
+          else
+            echo "Key Vault exists: $KV_NAME"
+          fi
+
+      - name: Ensure App Service / Container App exists
+        run: |
+          APP_NAME="${{ secrets.AZURE_WEBAPP_NAME }}"
+          EXISTS=$(az webapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query name -o tsv 2>/dev/null || echo "")
+          if [ -z "$EXISTS" ]; then
+            echo "App Service missing — recreating via setup script..."
+            chmod +x azure-setup.sh
+            ENV="${{ github.event.inputs.environment }}" bash azure-setup.sh
+          else
+            echo "App Service exists: $APP_NAME"
+          fi
+
+  restore-database:
+    runs-on: ubuntu-24.04
+    needs: safety-check
+    if: |
+      github.event.inputs.recovery_mode == 'full' ||
+      github.event.inputs.recovery_mode == 'db-restore'
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Resolve backup file
+        run: |
+          BACKUP_FILE="${{ github.event.inputs.backup_file }}"
+          if [ -z "$BACKUP_FILE" ]; then
+            echo "No backup specified — finding latest..."
+            BACKUP_FILE=$(az storage blob list \
+              --account-name "${{ secrets.BACKUP_STORAGE_ACCOUNT }}" \
+              --container-name "db-backups" \
+              --auth-mode login \
+              --query "sort_by([], &properties.lastModified)[-1].name" \
+              --output tsv)
+            echo "Latest backup: $BACKUP_FILE"
+          fi
+          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
+
+      - name: Download backup from Azure Blob Storage
+        run: |
+          az storage blob download \
+            --account-name "${{ secrets.BACKUP_STORAGE_ACCOUNT }}" \
+            --container-name "db-backups" \
+            --name "$BACKUP_FILE" \
+            --file "$BACKUP_FILE" \
+            --auth-mode login
+          echo "Downloaded: $BACKUP_FILE ($(du -sh $BACKUP_FILE | cut -f1))"
+
+      - name: Restore database
+        env:
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          echo "⚠️  Dropping and recreating database ${{ secrets.DB_NAME }}..."
+          psql \
+            --host="${{ secrets.DB_HOST }}" \
+            --port=5432 \
+            --username="${{ secrets.DB_USERNAME }}" \
+            --dbname=postgres \
+            --no-password \
+            -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${{ secrets.DB_NAME }}' AND pid <> pg_backend_pid();"
+          psql \
+            --host="${{ secrets.DB_HOST }}" \
+            --port=5432 \
+            --username="${{ secrets.DB_USERNAME }}" \
+            --dbname=postgres \
+            --no-password \
+            -c "DROP DATABASE IF EXISTS \"${{ secrets.DB_NAME }}\";"
+          psql \
+            --host="${{ secrets.DB_HOST }}" \
+            --port=5432 \
+            --username="${{ secrets.DB_USERNAME }}" \
+            --dbname=postgres \
+            --no-password \
+            -c "CREATE DATABASE \"${{ secrets.DB_NAME }}\";"
+          echo "Restoring from $BACKUP_FILE..."
+          gunzip -c "$BACKUP_FILE" | psql \
+            --host="${{ secrets.DB_HOST }}" \
+            --port=5432 \
+            --username="${{ secrets.DB_USERNAME }}" \
+            --dbname="${{ secrets.DB_NAME }}" \
+            --no-password
+          echo "✅ Database restored from $BACKUP_FILE"
+
+  redeploy-app:
+    runs-on: ubuntu-24.04
+    needs: [safety-check, restore-infra, restore-database]
+    if: |
+      always() &&
+      needs.safety-check.result == 'success' &&
+      (needs.restore-infra.result == 'success' || needs.restore-infra.result == 'skipped') &&
+      (needs.restore-database.result == 'success' || needs.restore-database.result == 'skipped') &&
+      (
+        github.event.inputs.recovery_mode == 'full' ||
+        github.event.inputs.recovery_mode == 'app-only'
+      )
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get latest image tag from ACR
+        run: |
+          LATEST_TAG=$(az acr repository show-tags \
+            --name "${{ secrets.ACR_NAME }}" \
+            --repository "$IMAGE_NAME" \
+            --orderby time_desc \
+            --top 1 \
+            --output tsv 2>/dev/null || echo "latest")
+          echo "Deploying image tag: $LATEST_TAG"
+          echo "IMAGE_TAG=$LATEST_TAG" >> $GITHUB_ENV
+
+      - name: Deploy latest image to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          images: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+      - name: Wait for health check
+        run: |
+          set -e
+          URL="https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net/health"
+          echo "Polling $URL..."
+          for i in $(seq 1 60); do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ App is healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "❌ Health check failed after 10 minutes"
+          exit 1
+
+  notify:
+    runs-on: ubuntu-24.04
+    needs: [safety-check, restore-infra, restore-database, redeploy-app]
+    if: always()
+    steps:
+      - name: DR Summary
+        run: |
+          echo "## Disaster Recovery Summary"
+          echo "- Mode: ${{ github.event.inputs.recovery_mode }}"
+          echo "- Environment: ${{ github.event.inputs.environment }}"
+          echo "- Triggered by: ${{ github.actor }}"
+          echo "- Infra restore: ${{ needs.restore-infra.result }}"
+          echo "- DB restore: ${{ needs.restore-database.result }}"
+          echo "- App redeploy: ${{ needs.redeploy-app.result }}"
+          if [ "${{ needs.redeploy-app.result }}" = "success" ]; then
+            echo "✅ Recovery complete"
+          else
+            echo "❌ Recovery had failures — check logs above"
+            exit 1
+          fi

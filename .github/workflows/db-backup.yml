@@ -1,0 +1,83 @@
+name: Database Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 2 AM UTC daily
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: 'Override backup retention (days)'
+        required: false
+        default: '30'
+
+env:
+  BACKUP_RETENTION_DAYS: ${{ github.event.inputs.retention_days || '30' }}
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Run pg_dump via Azure Flexible Server
+        env:
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
+          BACKUP_FILE="eliteapp_backup_${TIMESTAMP}.sql.gz"
+          pg_dump \
+            --host="${{ secrets.DB_HOST }}" \
+            --port=5432 \
+            --username="${{ secrets.DB_USERNAME }}" \
+            --dbname="${{ secrets.DB_NAME }}" \
+            --no-password \
+            --format=plain \
+            --verbose \
+            | gzip > "$BACKUP_FILE"
+          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
+          echo "Backup size: $(du -sh $BACKUP_FILE | cut -f1)"
+
+      - name: Upload backup to Azure Blob Storage
+        run: |
+          az storage blob upload \
+            --account-name "${{ secrets.BACKUP_STORAGE_ACCOUNT }}" \
+            --container-name "db-backups" \
+            --name "$BACKUP_FILE" \
+            --file "$BACKUP_FILE" \
+            --auth-mode login \
+            --overwrite false
+          echo "Backup uploaded: $BACKUP_FILE"
+
+      - name: Prune old backups
+        run: |
+          CUTOFF=$(date -u -d "-${BACKUP_RETENTION_DAYS} days" +"%Y-%m-%dT%H:%M:%SZ")
+          echo "Pruning backups older than $CUTOFF"
+          az storage blob list \
+            --account-name "${{ secrets.BACKUP_STORAGE_ACCOUNT }}" \
+            --container-name "db-backups" \
+            --auth-mode login \
+            --query "[?properties.lastModified < '$CUTOFF'].name" \
+            --output tsv | while read blob; do
+              echo "Deleting: $blob"
+              az storage blob delete \
+                --account-name "${{ secrets.BACKUP_STORAGE_ACCOUNT }}" \
+                --container-name "db-backups" \
+                --name "$blob" \
+                --auth-mode login
+            done
+
+      - name: Verify backup in storage
+        run: |
+          az storage blob show \
+            --account-name "${{ secrets.BACKUP_STORAGE_ACCOUNT }}" \
+            --container-name "db-backups" \
+            --name "$BACKUP_FILE" \
+            --auth-mode login \
+            --query "{name:name, size:properties.contentLength, modified:properties.lastModified}" \
+            --output table
