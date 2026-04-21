@@ -1,5 +1,15 @@
 # Azure DevOps pipeline: build API Docker image → push to Azure Container Registry → deploy to Azure App Service (Linux, container).
 #
+# Cost-conscious defaults (no new Azure services):
+#   - One build agent runs tests + Docker (avoids a second fresh VM per commit).
+#   - Path filters: only backend/** and this file trigger CI (mobile-only commits skip API pipeline minutes).
+#   - NuGet packages.lock.json + --locked-mode: reproducible restores and better cache hits.
+#   - Post-deploy health uses polling instead of a fixed 20 s sleep.
+#
+# Optional App Service setting (no extra cost) when scaling to multiple instances:
+#   Database__RunMigrations = false
+#   Then apply migrations once per release (e.g. `dotnet ef database update` from a release job with DB access).
+#
 # Prerequisites (you create these in Azure / Azure DevOps — do not commit secrets):
 #  1) Resource group + Azure Container Registry (ACR)
 #  2) Linux App Service plan + Web App for Containers
@@ -7,7 +17,7 @@
 #       - WEBSITES_PORT = 5260  (Kestrel listens on 5260 in Program.cs)
 #       - ASPNETCORE_ENVIRONMENT = Production
 #       - Always On = On (recommended)
-#  4) App Service application settings (use Key Vault references in production). Same names as .env.prod.example:
+#  4) App Service application settings (use Key Vault references in production). Same names as appsettings.Production.json.example:
 #       - ConnectionStrings__DefaultConnection
 #       - Jwt__Key  (min 32 characters; validated at startup in Production)
 #       - PasswordReset__Pepper  (strong secret; not placeholder text)
@@ -62,12 +72,20 @@ trigger:
     include:
       - main
       - master
+  paths:
+    include:
+      - backend/**
+      - azure-pipelines.yml
 
 pr:
   branches:
     include:
       - main
       - master
+  paths:
+    include:
+      - backend/**
+      - azure-pipelines.yml
 
 variables:
   - group: EliteApp-Production
@@ -80,10 +98,11 @@ stages:
   - stage: BuildAndPush
     displayName: Build image and push to ACR
     jobs:
-      - job: UnitTests
-        displayName: Run .NET Unit Tests
+      - job: BuildTestAndPush
+        displayName: Test, build Docker image, push to ACR
+        timeoutInMinutes: 30
         pool:
-          vmImage: ubuntu-latest
+          name: SelfHosted-Mac
         steps:
           - task: UseDotNet@2
             inputs:
@@ -92,27 +111,19 @@ stages:
           - task: Cache@2
             displayName: Cache NuGet packages
             inputs:
-              key: 'nuget | "$(Agent.OS)" | **/packages.lock.json, !**/bin/**, !**/obj/**'
+              key: 'nuget | "$(Agent.OS)" | backend/packages.lock.json'
               restoreKeys: |
                 nuget | "$(Agent.OS)"
               path: $(HOME)/.nuget/packages
-          - script: dotnet restore backend/EliteApp.API.csproj
-            displayName: 'Restore dependencies'
-          - script: dotnet test backend/EliteApp.API.csproj --configuration Release --logger "trx;LogFileName=testresults.trx"
-            displayName: 'Execute tests'
-            continueOnError: true # Safe until actual test projects are added
+          - script: dotnet restore backend/EliteApp.API.csproj --locked-mode
+            displayName: Restore dependencies (locked)
+          - script: dotnet test backend/EliteApp.API.csproj --configuration Release --no-restore --logger "trx;LogFileName=testresults.trx"
+            displayName: Execute tests
           - task: PublishTestResults@2
             condition: succeededOrFailed()
             inputs:
               testResultsFormat: 'VSTest'
               testResultsFiles: '**/testresults.trx'
-
-      - job: Docker
-        dependsOn: UnitTests
-        displayName: Build and push image
-        pool:
-          vmImage: ubuntu-latest
-        steps:
           - task: Docker@2
             displayName: Build and push
             inputs:
@@ -123,21 +134,46 @@ stages:
               containerRegistry: $(dockerRegistryServiceConnection)
               tags: |
                 $(Build.BuildId)
-                latest
 
   - stage: Deploy
     displayName: Deploy to Azure App Service
     dependsOn: BuildAndPush
-    condition: succeeded()
+    # Only deploy from main/master — PRs must NOT trigger production deployments.
+    condition: |
+      and(
+        succeeded(),
+        or(
+          eq(variables['Build.SourceBranch'], 'refs/heads/main'),
+          eq(variables['Build.SourceBranch'], 'refs/heads/master')
+        )
+      )
     jobs:
       - job: DeployWeb
+        timeoutInMinutes: 10
         pool:
-          vmImage: ubuntu-latest
+          name: SelfHosted-Mac
         steps:
-          - task: AzureWebAppContainer@1
+          - task: AzureWebAppContainer@2
             displayName: Deploy container
             inputs:
               azureSubscription: $(azureSubscription)
               appName: $(webAppName)
               containers: $(acrLoginServer)/$(imageRepository):$(Build.BuildId)
 
+          - script: |
+              set -e
+              URL="https://$(webAppName).azurewebsites.net/health"
+              echo "Polling $URL for readiness..."
+              for i in $(seq 1 36); do
+                STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+                echo "Attempt $i: HTTP $STATUS"
+                if [ "$STATUS" = "200" ]; then
+                  echo "Health check OK"
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "Health check failed after waiting for ready state"
+              exit 1
+            displayName: Post-deploy health check
+            retryCountOnTaskFailure: 3
