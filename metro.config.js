@@ -1,3 +1,4 @@
+const path = require('path');
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
 /**
@@ -12,6 +13,15 @@ const config = {
     blockList: [
       /.*[/\\](ios[/\\]Pods|ios[/\\]build|ios[/\\]DerivedData|android[/\\]build|android[/\\]\.gradle|backend|node_modules[/\\]\.cache|\.git)[/\\].*/,
     ],
+    resolveRequest: (context, moduleName, platform) => {
+      if (moduleName === 'expo-linear-gradient') {
+        return {
+          type: 'sourceFile',
+          filePath: path.resolve(__dirname, 'src/shims/expo-linear-gradient.js'),
+        };
+      }
+      return context.resolveRequest(context, moduleName, platform);
+    },
   },
 };
 

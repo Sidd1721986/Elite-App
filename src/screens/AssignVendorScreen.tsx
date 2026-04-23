@@ -60,70 +60,113 @@ type AssignedVendorGroup = {
     scopeLabels: string[];
 };
 
-const VendorItem = memo(({ item, onAssign, isLoading, assignedData }: { item: User, onAssign: (vendorId: string) => void, isLoading: boolean, assignedData?: { scope: string, services: string[] } }) => (
-    <Card style={[styles.vendorCard, assignedData && { borderColor: '#6366F1', borderWidth: 1.5 }]} elevation={1}>
-        <Card.Content style={styles.cardInnerContent}>
-            <View style={styles.vendorMainRow}>
-                <Avatar.Text
-                    size={48}
-                    label={(item.name || item.email || 'V').substring(0, 2).toUpperCase()}
-                    style={styles.avatar}
-                />
-                <View style={styles.vendorDetails}>
-                    <View style={styles.nameRow}>
-                        <Text variant="titleMedium" style={styles.vendorName} numberOfLines={1}>{item.name || 'Vendor'}</Text>
-                        {assignedData && (
-                            <Chip 
-                                icon="check-circle" 
-                                style={styles.currentChip} 
-                                textStyle={styles.currentChipText}
-                                compact
-                            >
-                                ASSIGNED
-                            </Chip>
-                        )}
-                    </View>
-                    
-                    <Text variant="labelSmall" style={styles.vendorEmail} numberOfLines={1}>
-                        {(assignedData && assignedData.scope) ? `Scope: ${assignedData.scope}` : item.email}
-                    </Text>
+const VendorItem = memo(({ item, onAssign, isLoading, assignedData }: { item: User, onAssign: (vendorId: string) => void, isLoading: boolean, assignedData?: { scope: string, services: string[] } }) => {
+    const isAssigned = Boolean(assignedData);
+    const initials = (item.name || item.email || 'V').substring(0, 2).toUpperCase();
 
-                    {assignedData && assignedData.services && assignedData.services.length > 0 && (
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                            {assignedData.services.map(s => (
-                                <View key={s} style={{ backgroundColor: '#F0F9FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: '#BAE6FD' }}>
-                                    <Text style={{ fontSize: 9, color: '#0369A1', fontWeight: 'bold', textTransform: 'uppercase' }}>{s}</Text>
-                                </View>
-                            ))}
+    return (
+        <View style={[styles.vendorCard, isAssigned && styles.vendorCardAssigned]}>
+            {/* Left accent bar — only visible when assigned */}
+            {isAssigned && <View style={styles.vendorCardAccent} />}
+
+            <View style={styles.vendorCardInner}>
+                {/* ── Top row: avatar · name/email · badge ── */}
+                <View style={styles.vcTopRow}>
+                    <Avatar.Text
+                        size={46}
+                        label={initials}
+                        style={[styles.vcAvatar, isAssigned && styles.vcAvatarAssigned]}
+                        color={isAssigned ? '#4F46E5' : '#64748B'}
+                    />
+
+                    <View style={styles.vcNameBlock}>
+                        <Text style={styles.vcName} numberOfLines={1}>
+                            {item.name || 'Vendor'}
+                        </Text>
+                        <Text style={styles.vcEmail} numberOfLines={1}>
+                            {item.email}
+                        </Text>
+                    </View>
+
+                    {isAssigned && (
+                        <View style={styles.vcAssignedBadge}>
+                            <Text style={styles.vcAssignedBadgeText}>✓  Assigned</Text>
                         </View>
                     )}
-
-                    <View style={styles.ratingRow}>
-                        <IconButton icon="star" iconColor="#F59E0B" size={14} style={{ margin: 0, padding: 0 }} />
-                        <Text variant="labelSmall" style={styles.ratingText}>4.9 • Verified Partner</Text>
-                    </View>
                 </View>
 
-                <Button 
-                    mode="contained" 
-                    onPress={() => onAssign(item.id!)}
-                    loading={isLoading}
-                    disabled={isLoading}
-                    style={styles.assignBtn}
-                    labelStyle={{ fontSize: 11, fontWeight: 'bold' }}
-                    contentStyle={{ height: 36 }}
-                >
-                    {assignedData ? 'Add' : 'Assign'}
-                </Button>
+                {/* ── Scope line (only when assigned) ── */}
+                {assignedData?.scope ? (
+                    <View style={styles.vcScopeRow}>
+                        <Text style={styles.vcScopeText} numberOfLines={2}>
+                            {assignedData.scope}
+                        </Text>
+                    </View>
+                ) : null}
+
+                {/* ── Service chips ── */}
+                {assignedData?.services && assignedData.services.length > 0 && (
+                    <View style={styles.vcChipsRow}>
+                        {assignedData.services.map(s => (
+                            <View key={s} style={styles.vcServiceChip}>
+                                <Text style={styles.vcServiceChipText}>{s.toUpperCase()}</Text>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                {/* ── Bottom row: rating · action button ── */}
+                <View style={styles.vcBottomRow}>
+                    <View style={styles.vcRatingRow}>
+                        <Text style={styles.vcStar}>★</Text>
+                        <Text style={styles.vcRatingText}>4.9 · Verified Partner</Text>
+                    </View>
+
+                    {!isAssigned && (
+                        <TouchableOpacity
+                            onPress={() => onAssign(item.id!)}
+                            disabled={isLoading}
+                            style={styles.vcBtn}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={styles.vcBtnText}>Assign</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
-        </Card.Content>
-    </Card>
-));
+        </View>
+    );
+});
+
+function AssignmentPhotoThumbnails({ urls }: { urls?: string[] | null }) {
+    if (!urls?.length) return null;
+    return (
+        <View style={styles.assignmentPhotoRow}>
+            <View style={styles.assignmentPhotoLabelRow}>
+                <IconButton icon="image-move" size={14} iconColor="#7C3AED" style={{ margin: 0, padding: 0, marginRight: 2 }} />
+                <Text variant="labelSmall" style={styles.assignmentPhotoLabel}>
+                    Assigned Photos ({urls.length})
+                </Text>
+            </View>
+            <View style={styles.assignmentPhotoGrid}>
+                {urls.map(uri => (
+                    <View key={uri} style={styles.assignmentPhotoThumbWrapper}>
+                        <FastImage source={{ uri }} style={styles.assignmentPhotoThumb} />
+                        <View style={styles.assignmentPhotoMovedBadge}>
+                            <IconButton icon="check" size={10} iconColor="#FFFFFF" style={{ margin: 0, padding: 0 }} />
+                        </View>
+                    </View>
+                ))}
+            </View>
+        </View>
+    );
+}
 
 const AssignVendorScreen: React.FC = () => {
     const route = useRoute<AssignVendorRouteProp>();
     const navigation = useNavigation();
     const jobId = route.params?.jobId;
+    const reassignMode = route.params?.reassignMode === true;
     const { getApprovedVendors } = useAuth();
     const { jobs, partialAssign, getJobById, finalizeAssignment, unassignVendor, unassignVendorScope, refreshJobs } = useJobs();
 
@@ -135,7 +178,11 @@ const AssignVendorScreen: React.FC = () => {
     const [selectedItemIds, setSelectedItemIds] = React.useState<string[]>([]);
     const [selectedPhotoUrls, setSelectedPhotoUrls] = React.useState<string[]>([]);
     const [selectedServiceNames, setSelectedServiceNames] = React.useState<string[]>([]);
-    const [sessionAssignments, setSessionAssignments] = React.useState<Record<string, { scope: string, services: string[] }>>({});
+    const [sessionAssignments, setSessionAssignments] = React.useState<
+        Record<string, { scope: string; services: string[]; photoUrls?: string[] }>
+    >({});
+    /** Photos removed from the Target Job card and moved to a vendor in this session. */
+    const [assignedOutPhotoUrls, setAssignedOutPhotoUrls] = React.useState<Set<string>>(new Set());
     const [isFinalizing, setIsFinalizing] = React.useState(false);
     const navigationTimeoutRef = React.useRef<any>(null);
     
@@ -155,6 +202,16 @@ const AssignVendorScreen: React.FC = () => {
     const job = useMemo(
         () => mergeAssignJob(jobFromContext, remoteJob),
         [jobFromContext, remoteJob],
+    );
+
+    /**
+     * Photos still on the Target Job card.
+     * Filters out photos that have already been moved to a vendor this session
+     * so the UI updates instantly without waiting for the next API round-trip.
+     */
+    const displayPhotos = useMemo(
+        () => (job?.photos || []).filter(url => !assignedOutPhotoUrls.has(url)),
+        [job?.photos, assignedOutPhotoUrls],
     );
 
     const loadJobDetail = useCallback(async () => {
@@ -293,11 +350,6 @@ const AssignVendorScreen: React.FC = () => {
         getApprovedVendors().then(setVendors);
     }, [getApprovedVendors]);
 
-    const filteredVendors = useMemo(() => vendors.filter(v =>
-        (v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        v.email?.toLowerCase().includes(searchQuery.toLowerCase())) && v.id
-    ), [vendors, searchQuery]);
-
     const activeAssignmentsByVendor = useMemo<Record<string, { scope: string, services: string[] }>>(() => {
         const persisted = assignedVendorGroups.reduce((acc, group) => {
             acc[group.vendorId] = {
@@ -312,6 +364,13 @@ const AssignVendorScreen: React.FC = () => {
             ...sessionAssignments,
         };
     }, [assignedVendorGroups, sessionAssignments]);
+
+    const filteredVendors = useMemo(() => vendors.filter(v =>
+        v.id &&
+        !activeAssignmentsByVendor[v.id] &&
+        (v.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.email?.toLowerCase().includes(searchQuery.toLowerCase()))
+    ), [vendors, searchQuery, activeAssignmentsByVendor]);
 
     /** Session-only vendors (not yet merged into assignedVendorGroups from API). */
     const sessionOnlyVendorIds = useMemo(
@@ -332,6 +391,16 @@ const AssignVendorScreen: React.FC = () => {
         const scopeLabel = group.services.length > 0
             ? group.services.join(', ')
             : group.scopeLabels.join(', ');
+
+        // Collect photos that will be returned to the Target Job card on unassign.
+        // We gather them now (in the closure) so they are available after the async call.
+        const gid = String(group.vendorId);
+        const photosToRestore = Array.from(new Set([
+            ...(sessionAssignments[gid]?.photoUrls || []),
+            ...splitAssignments
+                .filter(a => a.vendorId && String(a.vendorId) === gid)
+                .flatMap(a => a.photos || []),
+        ])).filter(Boolean);
 
         Alert.alert(
             "Unassign Vendor",
@@ -358,8 +427,18 @@ const AssignVendorScreen: React.FC = () => {
                                 delete next[group.vendorId];
                                 return next;
                             });
+
+                            // Restore photos back to the Target Job card immediately (optimistic).
+                            if (photosToRestore.length > 0) {
+                                setAssignedOutPhotoUrls(prev => {
+                                    const next = new Set(prev);
+                                    photosToRestore.forEach(url => next.delete(url));
+                                    return next;
+                                });
+                            }
+
                             setSelectedServiceNames([]);
-                            setSnackbarMessage('Vendor unassigned and scope restored.');
+                            setSnackbarMessage('Vendor unassigned — photos returned to job card.');
                             setSnackbarVisible(true);
                             await loadJobDetail();
                         } catch (error: any) {
@@ -372,7 +451,7 @@ const AssignVendorScreen: React.FC = () => {
                 }
             ]
         );
-    }, [jobId, splitAssignments, unassignVendorScope, unassignVendor, loadJobDetail]);
+    }, [jobId, splitAssignments, sessionAssignments, unassignVendorScope, unassignVendor, loadJobDetail]);
 
     const handleAssign = useCallback(async (vendorId: string) => {
         if (!jobId) return;
@@ -393,28 +472,54 @@ const AssignVendorScreen: React.FC = () => {
 
         setIsLoading(true);
         try {
+            // Capture selected photos before clearing so we can track them as moved-out.
+            const movedPhotos = selectedPhotoUrlsRef.current.filter(Boolean);
+
             await partialAssign(
-                jobId, 
-                vendorId, 
-                selectedItemIdsRef.current, 
-                selectedPhotoUrlsRef.current, 
+                jobId,
+                vendorId,
+                selectedItemIdsRef.current,
+                selectedPhotoUrlsRef.current,
                 currentScope,
                 selectedServiceNamesRef.current
             );
+
+            // Optimistically remove the selected photos from the Target Job card BEFORE
+            // the API refetch so the UI updates instantly (no stale-flash of old photos).
+            if (movedPhotos.length > 0) {
+                setAssignedOutPhotoUrls(prev => {
+                    const next = new Set(prev);
+                    movedPhotos.forEach(url => next.add(url));
+                    return next;
+                });
+            }
+
             await loadJobDetail();
             setSnackbarMessage(`Assigned for: ${currentScope}`);
             setSnackbarVisible(true);
-            
-            // Add to session assignments to update UI feedback
+
+            // Add to session assignments to update UI feedback (shows photos in vendor card)
             setSessionAssignments(prev => {
-                const existing = prev[vendorId] || { scope: '', services: [] };
+                const existing = prev[vendorId] || { scope: '', services: [], photoUrls: [] };
                 const updatedScope = existing.scope ? `${existing.scope}, ${currentScope}` : currentScope;
                 const updatedServices = Array.from(new Set([...existing.services, ...selectedServiceNamesRef.current]));
-                return { ...prev, [vendorId]: { scope: updatedScope, services: updatedServices } };
+                const updatedPhotos =
+                    movedPhotos.length > 0
+                        ? Array.from(new Set([...(existing.photoUrls || []), ...movedPhotos]))
+                        : existing.photoUrls;
+                return {
+                    ...prev,
+                    [vendorId]: {
+                        scope: updatedScope,
+                        services: updatedServices,
+                        ...(updatedPhotos && updatedPhotos.length > 0 ? { photoUrls: updatedPhotos } : {}),
+                    },
+                };
             });
-            
+
             // Clear current selection to prepare for next split
             setSelectedServiceNames([]);
+            setSelectedPhotoUrls([]);
             if (hasItems) {
                 setSelectedItemIds([]);
             }
@@ -524,63 +629,67 @@ const AssignVendorScreen: React.FC = () => {
                                         Assignment details
                                     </Text>
                                     {partsForVendor.length > 0 ? (
-                                        partsForVendor.map(part => (
-                                            <View key={part.id} style={styles.assignmentPartRow}>
-                                                <Text variant="labelMedium" style={styles.assignmentPartLabel}>
-                                                    #{part.jobNumber}
-                                                    {part.jobSuffix || ''}
-                                                    {part.status ? ` · ${part.status}` : ''}
-                                                </Text>
-                                                {Array.isArray(part.services) && part.services.length > 0 ? (
-                                                    <View style={styles.detailServiceChips}>
-                                                        {part.services.map(s => (
-                                                            <Chip key={s} compact style={styles.detailServiceChip} textStyle={styles.detailServiceChipText}>
-                                                                {s}
-                                                            </Chip>
-                                                        ))}
-                                                    </View>
-                                                ) : null}
-                                                {part.description ? (
-                                                    <Text variant="bodySmall" style={styles.assignmentPartDesc} numberOfLines={4}>
-                                                        {part.description}
+                                        partsForVendor.map(part => {
+                                            const partServiceNames = (part.services || []).map(s => s.toLowerCase());
+                                            const extraDesc = part.description &&
+                                                !partServiceNames.includes(part.description.trim().toLowerCase())
+                                                ? part.description : null;
+                                            return (
+                                                <View key={part.id} style={styles.assignmentPartRow}>
+                                                    <Text style={styles.assignmentPartLabel}>
+                                                        #{part.jobNumber}{part.jobSuffix || ''}
+                                                        {part.status ? `  ·  ${part.status}` : ''}
                                                     </Text>
-                                                ) : null}
-                                            </View>
-                                        ))
+                                                    {Array.isArray(part.services) && part.services.length > 0 && (
+                                                        <View style={styles.detailServiceChips}>
+                                                            {part.services.map(s => (
+                                                                <View key={s} style={styles.detailServiceChip}>
+                                                                    <Text style={styles.detailServiceChipText}>{s}</Text>
+                                                                </View>
+                                                            ))}
+                                                        </View>
+                                                    )}
+                                                    <AssignmentPhotoThumbnails urls={part.photos} />
+                                                    {extraDesc ? (
+                                                        <Text variant="bodySmall" style={styles.assignmentPartDesc} numberOfLines={4}>
+                                                            {extraDesc}
+                                                        </Text>
+                                                    ) : null}
+                                                </View>
+                                            );
+                                        })
                                     ) : isParentDirect && job ? (
                                         <View style={styles.assignmentPartRow}>
-                                            <Text variant="labelMedium" style={styles.assignmentPartLabel}>
-                                                Job #{job.jobNumber} (main request)
+                                            <Text style={styles.assignmentPartLabel}>
+                                                Job #{job.jobNumber}  ·  Main request
                                             </Text>
-                                            {group.services.length > 0 ? (
+                                            {group.services.length > 0 && (
                                                 <View style={styles.detailServiceChips}>
                                                     {group.services.map(s => (
-                                                        <Chip key={s} compact style={styles.detailServiceChip} textStyle={styles.detailServiceChipText}>
-                                                            {s}
-                                                        </Chip>
+                                                        <View key={s} style={styles.detailServiceChip}>
+                                                            <Text style={styles.detailServiceChipText}>{s}</Text>
+                                                        </View>
                                                     ))}
                                                 </View>
-                                            ) : null}
-                                            {job.description ? (
-                                                <Text variant="bodySmall" style={styles.assignmentPartDesc} numberOfLines={4}>
-                                                    {job.description}
-                                                </Text>
-                                            ) : null}
+                                            )}
+                                            <AssignmentPhotoThumbnails urls={job.photos} />
                                         </View>
                                     ) : (
                                         <View style={styles.assignmentPartRow}>
-                                            {group.services.length > 0 ? (
+                                            {group.services.length > 0 && (
                                                 <View style={styles.detailServiceChips}>
                                                     {group.services.map(s => (
-                                                        <Chip key={s} compact style={styles.detailServiceChip} textStyle={styles.detailServiceChipText}>
-                                                            {s}
-                                                        </Chip>
+                                                        <View key={s} style={styles.detailServiceChip}>
+                                                            <Text style={styles.detailServiceChipText}>{s}</Text>
+                                                        </View>
                                                     ))}
                                                 </View>
-                                            ) : null}
-                                            <Text variant="bodySmall" style={styles.assignmentPartDesc}>
-                                                {group.scopeLabels.join(' · ') || 'Scope on file'}
-                                            </Text>
+                                            )}
+                                            {group.scopeLabels.length > 0 && (
+                                                <Text variant="bodySmall" style={styles.assignmentPartDesc}>
+                                                    {group.scopeLabels.join(' · ')}
+                                                </Text>
+                                            )}
                                         </View>
                                     )}
                                 </Surface>
@@ -642,6 +751,7 @@ const AssignVendorScreen: React.FC = () => {
                                             ))}
                                         </View>
                                     ) : null}
+                                    <AssignmentPhotoThumbnails urls={data?.photoUrls} />
                                     {data?.scope ? (
                                         <Text variant="bodySmall" style={styles.assignmentPartDesc}>
                                             {data.scope}
@@ -745,31 +855,57 @@ const AssignVendorScreen: React.FC = () => {
                     ) : null}
 
                     <Divider style={{ marginVertical: 12 }} />
-                    
-                    <Text variant="labelMedium" style={styles.selectionTitle}>Select Photos to Send (Optional)</Text>
+
+                    <View style={styles.photoSectionHeader}>
+                        <IconButton icon="image-move" size={16} iconColor="#7C3AED" style={{ margin: 0, padding: 0, marginRight: 4 }} />
+                        <Text variant="labelMedium" style={styles.selectionTitle}>
+                            Assign Photos to Vendor
+                        </Text>
+                        {selectedPhotoUrls.length > 0 && (
+                            <View style={styles.photoSelectionBadge}>
+                                <Text style={styles.photoSelectionBadgeText}>
+                                    {selectedPhotoUrls.length} will move to vendor ↗
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                    <Text variant="bodySmall" style={styles.photoSectionHint}>
+                        Selected photos are removed from this card and placed in the vendor's assignment.
+                    </Text>
                     <View style={styles.photoGrid}>
-                        {job?.photos && job.photos.length > 0 ? (
-                            job.photos.map((url, index) => (
-                                <TouchableOpacity 
-                                    key={index}
+                        {displayPhotos.length > 0 ? (
+                            displayPhotos.map((url, index) => (
+                                <TouchableOpacity
+                                    key={`${url}-${index}`}
                                     style={[
-                                        styles.photoItem, 
+                                        styles.photoItem,
                                         selectedPhotoUrls.includes(url) && styles.photoItemSelected
                                     ]}
                                     onPress={() => togglePhoto(url)}
+                                    activeOpacity={0.8}
                                 >
                                     <FastImage source={{ uri: url }} style={styles.photoImage} />
-                                    <View style={styles.photoOverlay}>
-                                        <Checkbox 
+                                    <View style={[
+                                        styles.photoOverlay,
+                                        selectedPhotoUrls.includes(url) && styles.photoOverlaySelected
+                                    ]}>
+                                        <Checkbox
                                             status={selectedPhotoUrls.includes(url) ? 'checked' : 'unchecked'}
                                             color="#6366F1"
                                         />
                                     </View>
                                 </TouchableOpacity>
                             ))
+                        ) : (job?.photos && job.photos.length > 0 ? (
+                            <View style={styles.allPhotosMovedBox}>
+                                <IconButton icon="check-circle-outline" size={28} iconColor="#10B981" style={{ margin: 0 }} />
+                                <Text variant="bodySmall" style={styles.allPhotosMovedText}>
+                                    All photos have been assigned to vendors
+                                </Text>
+                            </View>
                         ) : (
-                            <Text variant="bodySmall" style={{ color: '#94A3B8' }}>No photos available</Text>
-                        )}
+                            <Text variant="bodySmall" style={{ color: '#94A3B8' }}>No photos attached to this job</Text>
+                        ))}
                     </View>
                 </Surface>
             </View>
@@ -790,6 +926,8 @@ const AssignVendorScreen: React.FC = () => {
         job,
         selectedItemIds,
         selectedPhotoUrls,
+        displayPhotos,
+        assignedOutPhotoUrls,
         searchQuery,
         toggleItem,
         togglePhoto,
@@ -829,7 +967,7 @@ const AssignVendorScreen: React.FC = () => {
             <View style={styles.header}>
                 <IconButton icon="chevron-left" size={24} onPress={() => navigation.goBack()} />
                 <Text variant="titleLarge" style={styles.title}>
-                    {showExistingAssignmentsPanel ? 'Reassign Vendor' : 'Assign Vendor'}
+                    {reassignMode ? 'Reassign Vendor' : 'Assign Vendor'}
                 </Text>
                 <View style={styles.headerSpacer} />
             </View>
@@ -869,12 +1007,21 @@ const AssignVendorScreen: React.FC = () => {
 
             {/* Sticky Footer for Final Action */}
             <Surface style={styles.footer} elevation={4}>
+                {/* Vendor-visibility notice */}
+                <View style={styles.vendorGateNotice}>
+                    <IconButton icon="eye-off-outline" size={14} iconColor="#7C3AED" style={{ margin: 0, padding: 0, marginRight: 4 }} />
+                    <Text style={styles.vendorGateText}>
+                        Vendors cannot see staged assignments until you tap{' '}
+                        <Text style={{ fontWeight: '800' }}>Mark Fully Assigned</Text>
+                    </Text>
+                </View>
+
                 <View style={styles.footerContent}>
                     <View style={styles.footerTextWrap}>
                         <Text variant="labelSmall" style={styles.footerLabel}>SESSION SUMMARY</Text>
                         <Text variant="titleSmall" style={styles.footerSummary}>
                             {Object.keys(activeAssignmentsByVendor).length}{' '}
-                            {Object.keys(activeAssignmentsByVendor).length === 1 ? 'vendor' : 'vendors'} assigned
+                            {Object.keys(activeAssignmentsByVendor).length === 1 ? 'vendor' : 'vendors'} staged
                         </Text>
                         {hasRemainingTargetWork && (
                             <Text variant="labelSmall" style={styles.footerWarning}>
@@ -884,14 +1031,15 @@ const AssignVendorScreen: React.FC = () => {
                             </Text>
                         )}
                     </View>
-                    <Button 
-                        mode="contained" 
+                    <Button
+                        mode="contained"
                         onPress={handleFinalize}
                         loading={isFinalizing}
                         disabled={isLoading || isFinalizing}
                         style={styles.finalizeBtn}
                         contentStyle={styles.finalizeBtnContent}
                         buttonColor="#1E293B"
+                        icon="send-check"
                     >
                         Mark Fully Assigned
                     </Button>
@@ -993,21 +1141,27 @@ const styles = StyleSheet.create({
     },
     existingVendorChip: {
         backgroundColor: '#E0E7FF',
-        height: 26,
+        alignSelf: 'center',
+        marginLeft: 8,
     },
     existingVendorChipText: {
-        fontSize: 10,
+        fontSize: 11,
+        lineHeight: 14,
         color: '#3730A3',
         fontWeight: '700',
+        marginVertical: 0,
     },
     sessionVendorChip: {
         backgroundColor: '#FEF3C7',
-        height: 26,
+        alignSelf: 'center',
+        marginLeft: 8,
     },
     sessionVendorChipText: {
-        fontSize: 10,
+        fontSize: 11,
+        lineHeight: 14,
         color: '#92400E',
         fontWeight: '700',
+        marginVertical: 0,
     },
     assignmentDetailPanel: {
         backgroundColor: '#FFFFFF',
@@ -1024,31 +1178,82 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     },
     assignmentPartRow: {
-        marginBottom: 12,
+        marginBottom: 4,
         paddingBottom: 12,
         borderBottomWidth: 1,
         borderBottomColor: '#F1F5F9',
     },
     assignmentPartLabel: {
+        fontSize: 13,
         color: '#312E81',
         fontWeight: '700',
-        marginBottom: 6,
+        marginBottom: 0,
     },
     detailServiceChips: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 6,
+        marginTop: 6,
+        marginBottom: 8,
+    },
+    assignmentPhotoRow: {
+        marginTop: 8,
+        marginBottom: 4,
+        backgroundColor: '#F5F3FF',
+        borderRadius: 10,
+        padding: 8,
+        borderWidth: 1,
+        borderColor: '#DDD6FE',
+    },
+    assignmentPhotoLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
         marginBottom: 6,
     },
+    assignmentPhotoLabel: {
+        color: '#6D28D9',
+        fontWeight: '700',
+        fontSize: 11,
+    },
+    assignmentPhotoGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    assignmentPhotoThumbWrapper: {
+        position: 'relative',
+    },
+    assignmentPhotoThumb: {
+        width: 64,
+        height: 64,
+        borderRadius: 8,
+        borderWidth: 2,
+        borderColor: '#7C3AED',
+        backgroundColor: '#F1F5F9',
+    },
+    assignmentPhotoMovedBadge: {
+        position: 'absolute',
+        top: -6,
+        right: -6,
+        backgroundColor: '#10B981',
+        borderRadius: 10,
+        width: 18,
+        height: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     detailServiceChip: {
-        backgroundColor: '#F0F9FF',
-        borderColor: '#BAE6FD',
-        height: 28,
+        backgroundColor: '#EEF2FF',
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderWidth: 1,
+        borderColor: '#C7D2FE',
     },
     detailServiceChipText: {
         fontSize: 11,
-        color: '#0369A1',
-        fontWeight: '600',
+        color: '#4338CA',
+        fontWeight: '700',
     },
     assignmentPartDesc: {
         color: '#475569',
@@ -1107,6 +1312,42 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginVertical: 4,
     },
+    photoSectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    photoSelectionBadge: {
+        marginLeft: 8,
+        backgroundColor: '#EDE9FE',
+        borderRadius: 10,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderWidth: 1,
+        borderColor: '#C4B5FD',
+    },
+    photoSelectionBadgeText: {
+        fontSize: 10,
+        color: '#6D28D9',
+        fontWeight: '700',
+    },
+    photoSectionHint: {
+        color: '#94A3B8',
+        fontSize: 11,
+        marginBottom: 10,
+        fontStyle: 'italic',
+    },
+    allPhotosMovedBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+        gap: 8,
+    },
+    allPhotosMovedText: {
+        color: '#10B981',
+        fontWeight: '600',
+    },
     photoGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -1132,6 +1373,11 @@ const styles = StyleSheet.create({
         top: -8,
         right: -8,
         transform: [{ scale: 0.8 }],
+        backgroundColor: 'rgba(255,255,255,0.6)',
+        borderRadius: 12,
+    },
+    photoOverlaySelected: {
+        backgroundColor: 'rgba(99,102,241,0.15)',
     },
     searchSection: {
         marginBottom: 12,
@@ -1142,55 +1388,142 @@ const styles = StyleSheet.create({
         color: '#1E293B',
         marginBottom: 8,
     },
+    /* ─── Vendor card (VendorItem) ─────────────────────── */
     vendorCard: {
         marginBottom: 12,
         backgroundColor: '#FFFFFF',
         borderRadius: 16,
         borderWidth: 1,
         borderColor: '#E2E8F0',
+        flexDirection: 'row',
+        overflow: 'hidden',
+        // shadow
+        shadowColor: '#94A3B8',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+        elevation: 2,
     },
+    vendorCardAssigned: {
+        backgroundColor: '#FAFAFF',
+        borderColor: '#C7D2FE',
+    },
+    vendorCardAccent: {
+        width: 4,
+        backgroundColor: '#6366F1',
+        borderTopLeftRadius: 16,
+        borderBottomLeftRadius: 16,
+    },
+    vendorCardInner: {
+        flex: 1,
+        padding: 14,
+        gap: 10,
+    },
+    vcTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    vcAvatar: {
+        backgroundColor: '#F1F5F9',
+    },
+    vcAvatarAssigned: {
+        backgroundColor: '#EEF2FF',
+    },
+    vcNameBlock: {
+        flex: 1,
+    },
+    vcName: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#1E293B',
+        marginBottom: 2,
+    },
+    vcEmail: {
+        fontSize: 12,
+        color: '#64748B',
+    },
+    vcAssignedBadge: {
+        backgroundColor: '#F0FDF4',
+        borderRadius: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderWidth: 1,
+        borderColor: '#BBF7D0',
+    },
+    vcAssignedBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#15803D',
+    },
+    vcScopeRow: {
+        backgroundColor: '#EEF2FF',
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+    },
+    vcScopeText: {
+        fontSize: 12,
+        color: '#4338CA',
+        fontWeight: '600',
+    },
+    vcChipsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+    },
+    vcServiceChip: {
+        backgroundColor: '#F0F9FF',
+        borderRadius: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderWidth: 1,
+        borderColor: '#BAE6FD',
+    },
+    vcServiceChipText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#0369A1',
+        letterSpacing: 0.4,
+    },
+    vcBottomRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: 2,
+    },
+    vcRatingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    vcStar: {
+        fontSize: 13,
+        color: '#F59E0B',
+    },
+    vcRatingText: {
+        fontSize: 12,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    vcBtn: {
+        backgroundColor: '#4F46E5',
+        borderRadius: 10,
+        paddingHorizontal: 18,
+        paddingVertical: 8,
+    },
+    vcBtnText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#FFFFFF',
+    },
+    /* ─── (legacy aliases kept for existing-panel cards) ─ */
     cardInnerContent: {
         padding: 12,
     },
     vendorMainRow: {
         flexDirection: 'row',
         alignItems: 'center',
-    },
-    avatar: {
-        backgroundColor: '#EEF2FF',
-    },
-    vendorDetails: {
-        flex: 1,
-        marginLeft: 12,
-        justifyContent: 'center',
-    },
-    nameRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 2,
-    },
-    vendorName: {
-        fontWeight: 'bold',
-        color: '#1E293B',
-        fontSize: 15,
-        flex: 1,
-        marginRight: 4,
-    },
-    vendorEmail: {
-        color: '#64748B',
-        fontSize: 12,
-        marginBottom: 2,
-    },
-    ratingRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginLeft: -8,
-    },
-    ratingText: {
-        color: '#64748B',
-        fontSize: 11,
-        fontWeight: '500',
     },
     assignBtn: {
         borderRadius: 8,
@@ -1215,7 +1548,7 @@ const styles = StyleSheet.create({
     currentChipText: {
         color: '#6366F1',
         fontSize: 10,
-        fontWeight: 'bold',
+        fontWeight: 'bold' as const,
     },
     footer: {
         position: 'absolute',
@@ -1226,8 +1559,25 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: '#E2E8F0',
         paddingHorizontal: 20,
-        paddingTop: 12,
+        paddingTop: 10,
         paddingBottom: Platform.OS === 'ios' ? 34 : 16, // SafeArea padding
+    },
+    vendorGateNotice: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F5F3FF',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 5,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#DDD6FE',
+    },
+    vendorGateText: {
+        flex: 1,
+        fontSize: 11,
+        color: '#5B21B6',
+        lineHeight: 15,
     },
     footerContent: {
         flexDirection: 'row',

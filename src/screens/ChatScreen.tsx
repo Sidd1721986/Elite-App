@@ -1,6 +1,9 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { FlashList } from '@shopify/flash-list';
+
+/** FlashList v2 typings omit `estimatedItemSize`; keep for layout performance. */
+const FlashListCompat = FlashList as any;
 import {
     View,
     StyleSheet,
@@ -10,14 +13,22 @@ import {
     TextInput,
     TouchableOpacity,
     ActivityIndicator,
-    Alert
+    Alert,
+    Linking,
+    Pressable,
 } from 'react-native';
-import { Text, Avatar, IconButton, Surface, useTheme, Button } from 'react-native-paper';
+import { Text, Avatar, IconButton, Surface, useTheme, Button, Menu } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, RouteProp, useIsFocused } from '@react-navigation/native';
+import FastImage from 'react-native-fast-image';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { RootStackParamList, Message } from '../types/types';
 import { messageService } from '../services/messageService';
+import { jobService } from '../services/jobService';
 import { useAuth } from '../context/AuthContext';
+import { parseChatMessageContent } from '../utils/chatMessageContent';
+import { SUPPORT_URL } from '../config/appConfig';
+import { openExternalUrl } from '../utils/openExternalUrl';
 
 type ChatRouteProp = RouteProp<RootStackParamList, 'Chat'>;
 
@@ -28,28 +39,53 @@ const MessageItem = memo(({ item, isMe, otherUserName }: {
     item: Message;
     isMe: boolean;
     otherUserName: string;
-}) => (
-    <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
-        {!isMe && (
-            <Avatar.Text
-                size={34}
-                label={otherUserName.substring(0, 1).toUpperCase()}
-                style={styles.avatar}
-            />
-        )}
-        <Surface style={[
-            styles.messageBubble,
-            isMe ? styles.myBubble : styles.theirBubble
-        ]} elevation={1}>
-            <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
-                {item.content}
-            </Text>
-            <Text style={[styles.timestamp, isMe ? styles.myTimestamp : styles.theirTimestamp]}>
-                {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-        </Surface>
-    </View>
-));
+}) => {
+    const parsed = parseChatMessageContent(item.content);
+    const openImage = () => {
+        if (parsed.kind !== 'image') return;
+        Linking.openURL(parsed.url).catch(() => {
+            Alert.alert('Unable to open', 'This image link could not be opened.');
+        });
+    };
+    return (
+        <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
+            {!isMe && (
+                <Avatar.Text
+                    size={34}
+                    label={otherUserName.substring(0, 1).toUpperCase()}
+                    style={styles.avatar}
+                />
+            )}
+            <Surface style={[
+                styles.messageBubble,
+                isMe ? styles.myBubble : styles.theirBubble,
+                parsed.kind === 'image' && styles.messageBubbleImage,
+            ]} elevation={1}>
+                {parsed.kind === 'image' ? (
+                    <Pressable onPress={openImage} accessibilityRole="imagebutton" accessibilityLabel="Open shared photo">
+                        <FastImage
+                            source={{ uri: parsed.url, priority: FastImage.priority.normal }}
+                            style={styles.messageImage}
+                            resizeMode={FastImage.resizeMode.cover}
+                            onError={() => {
+                                // Image failed to load — FastImage will show blank;
+                                // the Pressable still lets the user open the URL directly.
+                                if (__DEV__) console.warn('Chat image failed to load:', parsed.url);
+                            }}
+                        />
+                    </Pressable>
+                ) : (
+                    <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
+                        {parsed.text}
+                    </Text>
+                )}
+                <Text style={[styles.timestamp, isMe ? styles.myTimestamp : styles.theirTimestamp]}>
+                    {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+            </Surface>
+        </View>
+    );
+});
 
 const ChatScreen: React.FC = () => {
     const route = useRoute<ChatRouteProp>();
@@ -63,9 +99,13 @@ const ChatScreen: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
+    const [imageSending, setImageSending] = useState(false);
+    const [attachMenuVisible, setAttachMenuVisible] = useState(false);
+    const [headerMenuVisible, setHeaderMenuVisible] = useState(false);
     const [loading, setLoading] = useState(true);
     const flatListRef = useRef<any>(null);
-    const scrollTimeoutRef = useRef<any>(null);
+    /** Array of pending scroll timeouts — cleared on unmount to prevent setState-after-unmount. */
+    const scrollTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
     const [resolvedOtherUserId, setResolvedOtherUserId] = useState(otherUserId === 'admin' ? '' : otherUserId);
 
@@ -118,18 +158,59 @@ const ChatScreen: React.FC = () => {
         };
     }, [loadMessages, resolvedOtherUserId, isFocused]);
 
+    const scheduleScrollToBottom = useCallback(() => {
+        const t = setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+        scrollTimeoutsRef.current.push(t);
+    }, []);
+
+    const pickAndSendImage = useCallback(async (source: 'camera' | 'library') => {
+        if (!resolvedOtherUserId || imageSending || sending) return;
+        setAttachMenuVisible(false);
+        const options = { mediaType: 'photo' as const, quality: 0.8 as const };
+        let result;
+        try {
+            result = source === 'camera'
+                ? await launchCamera(options)
+                : await launchImageLibrary(options);
+        } catch (e) {
+            // Native picker threw (e.g. permission denied at OS level on Android)
+            if (__DEV__) console.warn('Image picker failed to open:', e);
+            Alert.alert('Permission Denied', 'Please allow camera or photo access in Settings.');
+            return;
+        }
+        if (result.didCancel || !result.assets?.[0]?.uri) return;
+        const asset = result.assets[0];
+        setImageSending(true);
+        try {
+            const fileToUpload = {
+                uri: asset.uri!,
+                type: asset.type || 'image/jpeg',
+                name: asset.fileName || 'chat.jpg',
+            };
+            const uploadResult = await jobService.uploadFile(fileToUpload);
+            if (!uploadResult?.url) throw new Error('Upload failed');
+            const newMessage = await messageService.sendImageMessage(resolvedOtherUserId, uploadResult.url);
+            setMessages(prev => [...prev, newMessage]);
+            scheduleScrollToBottom();
+        } catch (e) {
+            if (__DEV__) console.error('Chat image send failed:', e);
+            Alert.alert('Error', 'Could not send photo. Please try again.');
+        } finally {
+            setImageSending(false);
+        }
+    }, [resolvedOtherUserId, imageSending, sending, scheduleScrollToBottom]);
+
     const handleSendMessage = async () => {
-        if (!inputText.trim() || sending || !resolvedOtherUserId) return;
+        if (!inputText.trim() || sending || imageSending || !resolvedOtherUserId) return;
 
         setSending(true);
         try {
             const newMessage = await messageService.sendMessage(resolvedOtherUserId, inputText.trim());
             setMessages(prev => [...prev, newMessage]);
             setInputText('');
-            // Scroll to bottom
-            scrollTimeoutRef.current = setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-            }, 100);
+            scheduleScrollToBottom();
         } catch (error) {
             Alert.alert('Error', 'Failed to send message');
         } finally {
@@ -139,9 +220,8 @@ const ChatScreen: React.FC = () => {
 
     useEffect(() => {
         return () => {
-            if (scrollTimeoutRef.current) {
-                clearTimeout(scrollTimeoutRef.current);
-            }
+            scrollTimeoutsRef.current.forEach(clearTimeout);
+            scrollTimeoutsRef.current = [];
         };
     }, []);
     const renderMessage = useCallback(({ item }: { item: Message }) => {
@@ -175,7 +255,37 @@ const ChatScreen: React.FC = () => {
                     <Text variant="titleMedium" style={styles.headerName}>{otherUserName}</Text>
                     <Text variant="labelSmall" style={styles.headerStatus}>Online</Text>
                 </View>
-                <IconButton icon="dots-vertical" />
+                <Menu
+                    visible={headerMenuVisible}
+                    onDismiss={() => setHeaderMenuVisible(false)}
+                    anchor={
+                        <IconButton
+                            icon="dots-vertical"
+                            accessibilityLabel="Chat options"
+                            onPress={() => setHeaderMenuVisible(true)}
+                        />
+                    }
+                >
+                    <Menu.Item
+                        leadingIcon="shield-alert-outline"
+                        title="Safety & reporting"
+                        onPress={() => {
+                            setHeaderMenuVisible(false);
+                            void openExternalUrl(SUPPORT_URL);
+                        }}
+                    />
+                    <Menu.Item
+                        leadingIcon="information-outline"
+                        title="About this chat"
+                        onPress={() => {
+                            setHeaderMenuVisible(false);
+                            Alert.alert(
+                                'Job-related messaging',
+                                'Messages are for coordinating work between customers, vendors, and administrators. Harassment, threats, spam, or illegal content may result in account action. Report concerns from the support page (Profile → Contact Support).',
+                            );
+                        }}
+                    />
+                </Menu>
             </Surface>
 
             {/* Glowing Decorations (Behind) */}
@@ -188,13 +298,13 @@ const ChatScreen: React.FC = () => {
                 </View>
             ) : (
                 <View style={{ flex: 1 }}>
-                    <FlashList
+                    <FlashListCompat
                         ref={flatListRef}
                         data={messages}
                         renderItem={renderMessage}
-                        keyExtractor={item => item.id}
+                        keyExtractor={(item: Message) => item.id}
                         contentContainerStyle={styles.listContent}
-                        estimatedItemSize={80}
+                        estimatedItemSize={100}
                     />
                 </View>
             )}
@@ -204,6 +314,40 @@ const ChatScreen: React.FC = () => {
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             >
                 <Surface style={styles.inputContainer} elevation={4}>
+                    <Menu
+                        visible={attachMenuVisible}
+                        onDismiss={() => setAttachMenuVisible(false)}
+                        anchor={
+                            <View style={styles.attachAnchorWrap}>
+                                <IconButton
+                                    icon="image-outline"
+                                    iconColor="#6366F1"
+                                    size={22}
+                                    style={styles.attachButton}
+                                    accessibilityLabel="Add photo to chat"
+                                    onPress={() => setAttachMenuVisible(true)}
+                                    disabled={
+                                        !resolvedOtherUserId || sending || imageSending || loading
+                                    }
+                                />
+                            </View>
+                        }
+                    >
+                        <Menu.Item
+                            leadingIcon="camera"
+                            title="Take photo"
+                            onPress={() => {
+                                void pickAndSendImage('camera');
+                            }}
+                        />
+                        <Menu.Item
+                            leadingIcon="image-multiple"
+                            title="Choose from gallery"
+                            onPress={() => {
+                                void pickAndSendImage('library');
+                            }}
+                        />
+                    </Menu>
                     <TextInput
                         style={styles.input}
                         placeholder="Type a message..."
@@ -211,11 +355,12 @@ const ChatScreen: React.FC = () => {
                         value={inputText}
                         onChangeText={setInputText}
                         multiline
+                        editable={!imageSending}
                     />
                     <TouchableOpacity
-                        style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+                        style={[styles.sendButton, (!inputText.trim() || imageSending) && styles.sendButtonDisabled]}
                         onPress={handleSendMessage}
-                        disabled={!inputText.trim() || sending}
+                        disabled={!inputText.trim() || sending || imageSending}
                     >
                         <IconButton
                             icon="send"
@@ -298,6 +443,15 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         minWidth: 80,
     },
+    messageBubbleImage: {
+        padding: 8,
+    },
+    messageImage: {
+        width: 200,
+        height: 160,
+        borderRadius: 12,
+        backgroundColor: '#E2E8F0',
+    },
     myBubble: {
         backgroundColor: '#6366F1',
         borderBottomRightRadius: 4,
@@ -331,12 +485,21 @@ const styles = StyleSheet.create({
     },
     inputContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
+        alignItems: 'flex-end',
+        paddingHorizontal: 8,
         paddingVertical: 12,
         backgroundColor: 'white',
         borderTopWidth: 1,
         borderColor: '#E2E8F0',
+    },
+    attachAnchorWrap: {
+        backgroundColor: '#EEF2FF',
+        borderRadius: 22,
+        marginRight: 4,
+        overflow: 'hidden',
+    },
+    attachButton: {
+        margin: 0,
     },
     input: {
         flex: 1,

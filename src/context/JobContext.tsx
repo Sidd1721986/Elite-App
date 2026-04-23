@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { createContext, useState, useContext, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Job, User } from '../types/types';
+import { Job, JobStatus, User } from '../types/types';
 import { jobService } from '../services/jobService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { InteractionManager } from 'react-native';
@@ -91,8 +91,31 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             try {
                 const remoteJobs = await jobService.getJobs();
                 if (isMounted.current) {
-                    const jobsArray = Array.isArray(remoteJobs) ? remoteJobs : (remoteJobs && typeof remoteJobs === 'object' ? [remoteJobs] : []);
-                    const normalized = jobsArray.map(normalizeJob);
+                    const jobsArray = Array.isArray(remoteJobs)
+                        ? remoteJobs
+                        : remoteJobs && typeof remoteJobs === 'object'
+                        ? [remoteJobs]
+                        : [];
+
+                    // Flatten: backends often embed child jobs inside the parent's
+                    // `childJobs` array rather than returning them as separate list
+                    // entries. We hoist them to the top level so every consumer
+                    // (admin progress tracker, getJobById, etc.) always sees the
+                    // child's live status directly.
+                    const seen = new Set<string>();
+                    const flat: any[] = [];
+                    const enqueue = (j: any) => {
+                        if (!j?.id || seen.has(String(j.id))) return;
+                        seen.add(String(j.id));
+                        flat.push(j);
+                        // Recurse into nested children
+                        if (Array.isArray(j.childJobs)) {
+                            j.childJobs.forEach((c: any) => enqueue(c));
+                        }
+                    };
+                    jobsArray.forEach(enqueue);
+
+                    const normalized = flat.map(normalizeJob);
                     setJobs(normalized);
                     setError(null);
                 }
@@ -194,10 +217,12 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         try {
             if (isFullReassign) {
-                // 1. Just swap the vendor on the EXISTING job
-                const updatedJob = await jobService.updateJob(jobId, { 
+                // 1. Just swap the vendor on the EXISTING job.
+                // Use PartiallyAssigned so the new vendor does NOT see it yet — only
+                // when the admin clicks "Mark Fully Assigned" does it flip to Assigned.
+                const updatedJob = await jobService.updateJob(jobId, {
                     vendorId: vendorId,
-                    status: 'Assigned', // Ensure it stays/becomes assigned
+                    status: JobStatus.PARTIALLY_ASSIGNED,
                     description: manualDescription || originalJob.description,
                     services: selectedServices.length > 0 ? selectedServices : originalJob.services
                 });
@@ -207,15 +232,16 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return;
             }
 
-            // 2. Partial Split Logic (Creating a new sub-job)
+            // 2. Partial Split Logic (Creating a new sub-job).
+            // Status is PartiallyAssigned — vendor cannot see it until admin finalises.
             const assignedItems = originalItems.filter(item => selectedItemIds.includes(item.id));
-            
+
             const subJobData = {
                 ...originalJob,
-                id: undefined, 
-                jobNumber: undefined, 
+                id: undefined,
+                jobNumber: undefined,
                 vendorId: vendorId,
-                status: 'Assigned',
+                status: JobStatus.PARTIALLY_ASSIGNED,
                 services: selectedServices.length > 0 ? selectedServices : (isSelectingAllServices ? originalServices : []),
                 description: manualDescription || (assignedItems.length > 0 ? assignedItems.map(i => i.description).join('\n') : originalJob.description),
                 photos: selectedPhotoUrls.length > 0 ? selectedPhotoUrls : (originalJob.photos || []),
@@ -234,11 +260,22 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
             
             const remainingServices = originalServices.filter(s => !selectedServices.includes(s));
-            
-            const updatedParent = await jobService.updateJob(jobId, { 
+
+            const movedPhotoSet = new Set(selectedPhotoUrls);
+            const remainingPhotos =
+                selectedPhotoUrls.length > 0
+                    ? (originalJob.photos || []).filter(url => !movedPhotoSet.has(url))
+                    : undefined;
+
+            const parentUpdate: Record<string, unknown> = {
                 items: updatedOriginalItems,
-                services: remainingServices
-            });
+                services: remainingServices,
+            };
+            if (remainingPhotos !== undefined) {
+                parentUpdate.photos = remainingPhotos;
+            }
+
+            const updatedParent = await jobService.updateJob(jobId, parentUpdate);
             const normalizedParent = normalizeJob(updatedParent);
             // Keep split child on the parent for admin UI until the next full refresh (PUT may not return ChildJobs).
             const parentWithChildren: Job = {
@@ -271,16 +308,55 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         try {
-            // Mark the parent job as Assigned to move it out of the requests list
-            const updatedJob = await jobService.updateJob(jobId, { status: 'Assigned' });
-            const normalized = normalizeJob(updatedJob);
-            setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
+            // Try the atomic finalize endpoint first (backend promotes parent + all
+            // PartiallyAssigned children to Assigned in a single transaction).
+            let normalizedParent: Job;
+            let normalizedChildren: Job[] = [];
+
+            try {
+                const result = await jobService.finalizeJob(jobId);
+                normalizedParent = normalizeJob(result.parent);
+                normalizedChildren = (result.children || []).map(normalizeJob);
+            } catch {
+                // Fallback: backend doesn't have the finalize endpoint yet.
+                // Promote staging children individually then update the parent.
+                const stagingChildren = jobs.filter(
+                    j =>
+                        j.parentJobId != null &&
+                        String(j.parentJobId) === String(jobId) &&
+                        j.status === JobStatus.PARTIALLY_ASSIGNED,
+                );
+
+                normalizedChildren = await Promise.all(
+                    stagingChildren.map(child =>
+                        jobService
+                            .updateJob(child.id!, { status: JobStatus.ASSIGNED })
+                            .then(normalizeJob),
+                    ),
+                );
+
+                const parentUpdate =
+                    currentJob.status === JobStatus.PARTIALLY_ASSIGNED
+                        ? { status: JobStatus.ASSIGNED }
+                        : { status: JobStatus.ASSIGNED };
+                const updatedParent = await jobService.updateJob(jobId, parentUpdate);
+                normalizedParent = normalizeJob(updatedParent);
+            }
+
+            // Merge all updated jobs into state at once.
+            const updatedMap = new Map<string, Job>();
+            updatedMap.set(normalizedParent.id!, normalizedParent);
+            normalizedChildren.forEach(c => { if (c.id) updatedMap.set(c.id, c); });
+
+            setJobs(prevJobs =>
+                prevJobs.map(j => (j.id && updatedMap.has(j.id) ? updatedMap.get(j.id)! : j)),
+            );
             setError(null);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to finalize assignment');
             throw err;
         }
-    }, [jobsMap]);
+    }, [jobsMap, jobs]);
 
     const unassignVendor = useCallback(async (jobId: string) => {
         const previous = jobsMap.get(jobId);

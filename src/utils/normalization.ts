@@ -27,6 +27,7 @@ export const normalizeJob = (job: any): Job => {
     if (!job || typeof job !== 'object') {
         return {
             id: '',
+            jobNumber: 0,
             customerId: '',
             address: '',
             description: '',
@@ -46,6 +47,7 @@ export const normalizeJob = (job: any): Job => {
     return {
         ...job,
         id: (job.id || job.Id)?.toString() || '',
+        jobNumber: Number(job.jobNumber ?? job.JobNumber ?? 0) || 0,
         customerId: job.customerId || job.CustomerId || '',
         vendorId: job.vendorId || job.VendorId,
         address: job.address || job.Address || '',

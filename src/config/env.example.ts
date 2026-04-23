@@ -13,3 +13,8 @@
 
 export const PRODUCTION_API_BASE_URL =
     'https://YOUR_API_HOST/api'; // e.g. https://api.example.com/api
+
+// Legal pages for store listings are derived in appConfig.ts:
+//   privacy → strip trailing /api from base + /privacy
+//   support → ... + /support
+//   terms   → ... + /terms

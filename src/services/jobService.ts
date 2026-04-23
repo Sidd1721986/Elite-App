@@ -31,6 +31,16 @@ export const jobService = {
         return apiClient.post<Job>(`/jobs/${parentJobId}/unassign-scope-vendor`, { vendorId });
     },
 
+    /**
+     * Atomically promotes the parent job and all of its PartiallyAssigned children
+     * to 'Assigned', making them visible to vendors for the first time.
+     * Backend: POST /jobs/{id}/finalize
+     * Expected response: { parent: Job; children: Job[] }
+     */
+    async finalizeJob(jobId: string): Promise<{ parent: Job; children: Job[] }> {
+        return apiClient.post<{ parent: Job; children: Job[] }>(`/jobs/${jobId}/finalize`, {});
+    },
+
     async acceptJob(jobId: string): Promise<Job> {
         return apiClient.post<Job>(`/jobs/${jobId}/accept`, {});
     },

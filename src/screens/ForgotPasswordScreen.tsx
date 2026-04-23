@@ -245,7 +245,7 @@ const ForgotPasswordScreen: React.FC = () => {
                             )}
 
                             {!isCodeSent && (
-                                <Button mode="text" onPress={() => navigation.goBack()} textColor="#64748B">
+                                <Button mode="text" onPress={() => navigation.canGoBack() ? navigation.goBack() : (navigation as any).navigate('Login')} textColor="#64748B">
                                     Back to sign in
                                 </Button>
                             )}
@@ -284,6 +284,8 @@ const styles = StyleSheet.create({
     snackbar: { backgroundColor: '#1E293B', borderRadius: 12 },
     methodToggle: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
     methodBtn: { flex: 0.48, borderRadius: 12 },
+    primaryBtn: { marginTop: 8, borderRadius: 12, paddingVertical: 4 },
+    primaryBtnContent: { paddingVertical: 4 },
 });
 
 export default React.memo(ForgotPasswordScreen);

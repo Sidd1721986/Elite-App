@@ -1,8 +1,10 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Text, IconButton, Surface, Divider } from 'react-native-paper';
+import { Text, IconButton, Surface, Divider, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { TERMS_OF_SERVICE_URL, SUPPORT_URL } from '../config/appConfig';
+import { openExternalUrl } from '../utils/openExternalUrl';
 
 const TermsOfServiceScreen: React.FC = () => {
     const navigation = useNavigation();
@@ -22,51 +24,48 @@ const TermsOfServiceScreen: React.FC = () => {
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <Surface style={styles.contentCard} elevation={1}>
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>1. Acceptance of Terms</Text>
-                    <Text variant="bodyMedium" style={styles.bodyText}>
-                        By accessing or using the Elite Home Services mobile application, you agree to be bound by these Terms of Service. If you do not agree to all of these terms, do not use the application.
+                    <Text variant="titleMedium" style={styles.lead}>
+                        Official terms are hosted online so they match app store submissions and can be
+                        updated when our practices change.
                     </Text>
-
                     <Divider style={styles.divider} />
 
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>2. User Accounts</Text>
+                    <Text variant="headlineSmall" style={styles.sectionTitle}>Summary</Text>
                     <Text variant="bodyMedium" style={styles.bodyText}>
-                        To use certain features of the app, you must register for an account. You agree to provide accurate information and are responsible for maintaining the confidentiality of your account credentials.
-                    </Text>
-                    <Text variant="bodyMedium" style={styles.bulletItem}>• Customers: Responsible for providing accurate service locations and descriptions.</Text>
-                    <Text variant="bodyMedium" style={styles.bulletItem}>• Vendors: Responsible for maintaining professional standards and accurate project updates.</Text>
-                    <Text variant="bodyMedium" style={styles.bulletItem}>• Admins: Responsible for system oversight and dispute resolution.</Text>
-
-                    <Divider style={styles.divider} />
-
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>3. Service Marketplace</Text>
-                    <Text variant="bodyMedium" style={styles.bodyText}>
-                        Elite Home Services acts as a platform to connect Customers with independent Vendors. We do not provide the physical home services ourselves and are not responsible for the workmanship of third-party vendors, although we facilitate verification and communication.
+                        By using Elite Services you agree to these terms. The Service connects
+                        customers with independent vendors; vendors are not our employees. Use
+                        messaging and job features lawfully and respectfully. Payment and invoicing
+                        arrangements are primarily between the parties unless we state otherwise for
+                        a specific feature. You may deactivate your account in the app where that
+                        option is available.
                     </Text>
 
-                    <Divider style={styles.divider} />
-
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>4. Payments & Invoicing</Text>
                     <Text variant="bodyMedium" style={styles.bodyText}>
-                        Services booked through the app are subject to the agreed-upon contract amount. Vendors are responsible for submitting accurate invoices, and Customers agree to pay for services rendered in a timely manner.
+                        Open the link below for the complete Terms of Service, including disclaimers,
+                        limitation of liability, and contact information.
                     </Text>
 
-                    <Divider style={styles.divider} />
-
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>5. Limitation of Liability</Text>
-                    <Text variant="bodyMedium" style={styles.bodyText}>
-                        To the maximum extent permitted by law, Elite Home Services shall not be liable for any indirect, incidental, special, or consequential damages resulting from your use of the service or the conduct of any user on the platform.
-                    </Text>
-
-                    <Divider style={styles.divider} />
-
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>6. Termination</Text>
-                    <Text variant="bodyMedium" style={styles.bodyText}>
-                        We reserve the right to suspend or terminate your account at our sole discretion, without notice, for conduct that we believe violates these Terms or is harmful to other users or the business interests of Elite Home Services.
-                    </Text>
+                    <Button
+                        mode="contained"
+                        icon="open-in-new"
+                        onPress={() => void openExternalUrl(TERMS_OF_SERVICE_URL)}
+                        style={styles.button}
+                    >
+                        Open full terms of service
+                    </Button>
+                    <Button
+                        mode="outlined"
+                        icon="lifebuoy"
+                        onPress={() => void openExternalUrl(SUPPORT_URL)}
+                        style={styles.button}
+                    >
+                        Support
+                    </Button>
                 </Surface>
-                
-                <Text variant="labelSmall" style={styles.footerText}>Last Updated: April 2024</Text>
+
+                <Text variant="labelSmall" style={styles.footerText}>
+                    Configure your production base URL in src/config/env.ts for these links to resolve.
+                </Text>
             </ScrollView>
         </SafeAreaView>
     );
@@ -100,6 +99,11 @@ const styles = StyleSheet.create({
         padding: 24,
         marginBottom: 20,
     },
+    lead: {
+        color: '#1E293B',
+        fontWeight: '700',
+        marginBottom: 8,
+    },
     sectionTitle: {
         color: '#1E293B',
         fontWeight: '800',
@@ -111,21 +115,18 @@ const styles = StyleSheet.create({
         lineHeight: 22,
         marginBottom: 16,
     },
-    bulletItem: {
-        color: '#475569',
-        lineHeight: 22,
-        marginLeft: 8,
-        marginBottom: 4,
-    },
     divider: {
-        marginVertical: 20,
+        marginVertical: 16,
         backgroundColor: '#F1F5F9',
+    },
+    button: {
+        marginTop: 8,
     },
     footerText: {
         textAlign: 'center',
         color: '#94A3B8',
         marginBottom: 40,
-    }
+    },
 });
 
 export default TermsOfServiceScreen;

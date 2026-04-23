@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import {
     Text,
     Avatar,
@@ -20,9 +20,33 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 type NavigationProp = StackNavigationProp<RootStackParamList, 'AccountDetails'>;
 
 const AccountDetailsScreen: React.FC = () => {
-    const { user } = useAuth();
+    const { user, deleteAccount } = useAuth();
 
     const navigation = useNavigation<NavigationProp>();
+
+    const confirmDeactivateAccount = () => {
+        Alert.alert(
+            'Deactivate account',
+            'Your account will be deactivated and you will be signed out. Some records may be retained where required by law or for legitimate business purposes (see the privacy policy).',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Deactivate',
+                    style: 'destructive',
+                    onPress: () => {
+                        void (async () => {
+                            const result = await deleteAccount();
+                            if (result === true) {
+                                Alert.alert('Account deactivated', 'You have been signed out.');
+                            } else {
+                                Alert.alert('Could not deactivate', typeof result === 'string' ? result : 'Please try again or contact support.');
+                            }
+                        })();
+                    },
+                },
+            ],
+        );
+    };
 
     if (!user) return null;
 
@@ -31,7 +55,7 @@ const AccountDetailsScreen: React.FC = () => {
             <View style={styles.header}>
                 <IconButton
                     icon="arrow-left"
-                    onPress={() => navigation.goBack()}
+                    onPress={() => navigation.canGoBack() ? navigation.goBack() : (navigation as any).navigate('UserDashboard')}
                     containerColor="#FFFFFF"
                     iconColor="#6366F1"
                 />
@@ -120,6 +144,19 @@ const AccountDetailsScreen: React.FC = () => {
                             title="Contact Support"
                             onPress={() => navigation.navigate('ContactSupport')}
                             left={props => <List.Icon {...props} icon="help-circle-outline" />}
+                            right={props => <List.Icon {...props} icon="chevron-right" />}
+                        />
+                    </List.Section>
+
+                    <Divider style={styles.divider} />
+
+                    <List.Section style={styles.listSection}>
+                        <List.Subheader style={{ fontWeight: 'bold', color: '#64748B' }}>ACCOUNT</List.Subheader>
+                        <List.Item
+                            title="Deactivate account"
+                            description="Sign out and disable login for this account"
+                            onPress={confirmDeactivateAccount}
+                            left={props => <List.Icon {...props} icon="account-remove-outline" color="#B91C1C" />}
                             right={props => <List.Icon {...props} icon="chevron-right" />}
                         />
                     </List.Section>

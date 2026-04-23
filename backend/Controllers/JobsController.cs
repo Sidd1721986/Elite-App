@@ -44,6 +44,27 @@ public class JobsController : ControllerBase
             .ToList();
     }
 
+    /// <summary>Statuses from which an admin may force-close a vendor-assigned job to Completed (e.g. vendor forgot to tap complete).</summary>
+    private static bool IsAdminForceCompleteFromStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return false;
+        var s = status.Trim();
+        if (s.Equals("Completed", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Invoiced", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("InvoiceRequested", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Submitted", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Assigned", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Expired", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return s.Equals("Sale", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("FollowUp", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Follow Up", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Accepted", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("ReachedOut", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("ApptSet", StringComparison.OrdinalIgnoreCase);
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetJobs([FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] bool includeSubJobs = false)
     {
@@ -485,6 +506,7 @@ public class JobsController : ControllerBase
             return BadRequest(new { message = "Cannot unassign a vendor with completed or invoiced scope." });
 
         var parentServices = ParseCsvList(parent.Services);
+        var parentPhotos = ParseCsvList(parent.Photos);
         foreach (var child in assignedChildren)
         {
             var childServices = ParseCsvList(child.Services);
@@ -493,9 +515,16 @@ public class JobsController : ControllerBase
                 if (!parentServices.Contains(service, StringComparer.OrdinalIgnoreCase))
                     parentServices.Add(service);
             }
+
+            foreach (var photo in ParseCsvList(child.Photos))
+            {
+                if (!parentPhotos.Contains(photo, StringComparer.Ordinal))
+                    parentPhotos.Add(photo);
+            }
         }
 
         parent.Services = parentServices.Any() ? string.Join(",", parentServices) : parent.Services;
+        parent.Photos = parentPhotos.Any() ? string.Join(",", parentPhotos) : null;
 
         var removedCount = assignedChildren.Count;
         var previousVendorName = assignedChildren.First().Vendor?.Name ?? "Unknown vendor";
@@ -659,10 +688,31 @@ public class JobsController : ControllerBase
         var userIdString = User.FindFirstValue("id");
         if (!Guid.TryParse(userIdString, out var userId)) return Unauthorized();
 
+        var isAdmin = User.IsInRole("Admin") || User.IsInRole("admin");
+
         var job = await _context.Jobs.FindAsync(id);
         if (job == null) return NotFound();
 
-        if (job.VendorId != userId) return Forbid();
+        if (isAdmin)
+        {
+            if (job.VendorId == null)
+                return BadRequest(new { message = "Cannot mark complete: this job has no assigned vendor." });
+            if (!IsAdminForceCompleteFromStatus(job.Status))
+                return BadRequest(new { message = $"Cannot mark complete from status '{job.Status}'. Use the normal workflow when possible." });
+
+            _context.JobNotes.Add(new JobNote
+            {
+                Id = Guid.NewGuid(),
+                JobId = id,
+                AuthorId = userId,
+                Content = "Job marked complete by admin (vendor had not finalized in the app).",
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            if (job.VendorId != userId) return Forbid();
+        }
 
         job.Status = "Completed";
         if (request.CompletedPhotos != null && request.CompletedPhotos.Any())

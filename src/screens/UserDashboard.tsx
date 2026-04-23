@@ -2,6 +2,8 @@ import * as React from 'react';
 import { useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, Platform, RefreshControl, ScrollView, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
+
+const FlashListCompat = FlashList as any;
 import FastImage from 'react-native-fast-image';
 import {
     Text, Card, Button, Avatar, Divider, Surface,
@@ -316,12 +318,11 @@ const UserDashboard: React.FC = () => {
                     </View>
                 </View>
 
-                <MotiView 
-                    from={{ opacity: 0, translateX: -20 }}
+                <MotiView
+                    from={reducedMotion ? { opacity: 1, translateX: 0 } : { opacity: 0, translateX: -20 }}
                     animate={{ opacity: 1, translateX: 0 }}
-                    transition={{ type: 'timing', duration: 600 }}
+                    transition={{ type: 'timing', duration: reducedMotion ? 0 : 600 }}
                     style={styles.welcomeSection}
-                    reducedMotion={reducedMotion}
                 >
                     <Text variant="headlineSmall" style={styles.welcomeText}>Hello, {user?.name?.split(' ')[0] || 'Member'}</Text>
                     <Text variant="labelMedium" style={styles.headerSubtitle}>Ready to fix something today?</Text>
@@ -358,20 +359,18 @@ const UserDashboard: React.FC = () => {
 
     const renderActiveTab = () => (
         <View style={{ flex: 1 }}>
-            <FlashList
+            <FlashListCompat
                 data={isLoading ? [] : activeJobs}
-                keyExtractor={item => item.id}
+                keyExtractor={(item: Job) => item.id}
                 renderItem={renderJobItem}
                 estimatedItemSize={250}
                 ListHeaderComponent={() => (
                     <View style={styles.tabHeader}>
-                <MotiView 
-                    from={{ opacity: 0, scale: 0.9 }}
+                <MotiView
+                    from={reducedMotion ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ type: 'spring', delay: 200 }}
-                    style={styles.bannerSurface} 
-                    elevation={3}
-                    reducedMotion={reducedMotion}
+                    transition={{ type: 'spring', delay: reducedMotion ? 0 : 200 }}
+                    style={styles.bannerSurface}
                 >
                     <View style={styles.bannerTextContainer}>
                         {!isCustomer && (
@@ -937,6 +936,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
     },
     bannerTextContainer: {
         flex: 1,

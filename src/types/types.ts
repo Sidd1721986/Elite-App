@@ -53,6 +53,13 @@ export interface AuthContextType {
 
 export enum JobStatus {
   SUBMITTED = 'Submitted',
+  /**
+   * Admin has begun splitting/assigning the job but has NOT yet clicked
+   * "Mark Fully Assigned". Child jobs in this state are INVISIBLE to vendors.
+   * The parent job remains Submitted so the admin can keep editing.
+   * When the admin finalises, all PartiallyAssigned children + parent become Assigned.
+   */
+  PARTIALLY_ASSIGNED = 'PartiallyAssigned',
   ASSIGNED = 'Assigned',
   ACCEPTED = 'Accepted',
   REACHED_OUT = 'ReachedOut',
@@ -127,8 +134,6 @@ export interface Job {
   jobSuffix?: string;
   childJobs?: Job[];
   services?: string[];
-  vendor?: User;
-  customer?: User;
 }
 
 export interface Message {
@@ -163,7 +168,7 @@ export type RootStackParamList = {
   UserDashboard: undefined;
   RoleFallback: undefined;
   JobDetails: { jobId: string };
-  AssignVendor: { jobId: string };
+  AssignVendor: { jobId: string; reassignMode?: boolean };
   Chat: { otherUserId: string; otherUserName: string };
   Profile: undefined;
   AccountDetails: undefined;

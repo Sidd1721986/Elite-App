@@ -11,12 +11,13 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, User, Job, JobStatus, Conversation } from '../types/types';
 import { messageService } from '../services/messageService';
+import { formatChatPreview } from '../utils/chatMessageContent';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useJobs } from '../context/JobContext'; // Assuming useJobs is imported from here
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
-type AdminDashboardDataItem = 
+type AdminDashboardDataItem =
     | { type: 'section_inbox' }
     | { type: 'section_header', title: string, count: number, sectionKey: string, chipColor: string, chipText: string }
     | { type: 'job_request', data: Job }
@@ -24,9 +25,71 @@ type AdminDashboardDataItem =
     | { type: 'active_project', data: Job }
     | { type: 'verified_vendor', data: User }
     | { type: 'completed_job', data: Job }
-    | { type: 'empty', title: string, icon: string };
+    | { type: 'empty', title: string, icon: string }
+    | { type: 'show_more_requests', hidden: number }
+    | { type: 'show_more_inprogress', hidden: number };
 
 const AdminList = FlashList as any;
+
+// ─── Vendor progress pipeline ─────────────────────────────────────────────────
+/** Ordered steps a vendor takes from assignment to job completion. */
+const VENDOR_PIPELINE = [
+    { status: JobStatus.ASSIGNED,     label: 'Assigned',    short: 'Asgn',  icon: 'account-check-outline',      color: '#6366F1' },
+    { status: JobStatus.ACCEPTED,     label: 'Accepted',    short: 'Accpt', icon: 'handshake-outline',           color: '#10B981' },
+    { status: JobStatus.REACHED_OUT,  label: 'Reached Out', short: 'Call',  icon: 'phone-forward-outline',       color: '#F59E0B' },
+    { status: JobStatus.APPT_SET,     label: 'Appt Set',    short: 'Appt',  icon: 'calendar-check-outline',      color: '#8B5CF6' },
+    { status: JobStatus.SALE,         label: 'Sale',        short: 'Sale',  icon: 'cash-check',                  color: '#059669' },
+    { status: JobStatus.FOLLOW_UP,    label: 'Follow Up',   short: 'FU',    icon: 'message-reply-text-outline',  color: '#F97316' },
+] as const;
+
+function getPipelineIndex(status: string): number {
+    return VENDOR_PIPELINE.findIndex(s => s.status === status);
+}
+
+/** Horizontal dot-and-line progress bar showing the vendor's current step. */
+const StatusPipeline = React.memo(({ currentStatus }: { currentStatus: string }) => {
+    const currentIdx = getPipelineIndex(currentStatus);
+    const step = currentIdx >= 0 ? VENDOR_PIPELINE[currentIdx] : null;
+    return (
+        <View>
+            <View style={pipelineStyles.track}>
+                {VENDOR_PIPELINE.map((s, idx) => {
+                    const done    = idx < currentIdx;
+                    const current = idx === currentIdx;
+                    const dotBg   = done ? '#10B981' : current ? s.color : '#E2E8F0';
+                    return (
+                        <React.Fragment key={s.status}>
+                            {idx > 0 && (
+                                <View style={[
+                                    pipelineStyles.line,
+                                    { backgroundColor: idx <= currentIdx ? (done ? '#10B981' : s.color) : '#E2E8F0' },
+                                ]} />
+                            )}
+                            <View style={[
+                                pipelineStyles.dot,
+                                { backgroundColor: dotBg, width: current ? 12 : 8, height: current ? 12 : 8, borderRadius: 6 },
+                                current && { shadowColor: s.color, shadowOpacity: 0.6, shadowRadius: 4, elevation: 3 },
+                            ]} />
+                        </React.Fragment>
+                    );
+                })}
+            </View>
+            {step && (
+                <Text style={[pipelineStyles.label, { color: step.color }]}>
+                    {step.label.toUpperCase()}
+                </Text>
+            )}
+        </View>
+    );
+});
+
+const pipelineStyles = StyleSheet.create({
+    track:  { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 2 },
+    line:   { flex: 1, height: 2, marginHorizontal: 2 },
+    dot:    { borderRadius: 6 },
+    label:  { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, marginTop: 3 },
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 const AdminDashboard: React.FC = () => {
     const { width: windowWidth } = useWindowDimensions();
@@ -43,6 +106,11 @@ const AdminDashboard: React.FC = () => {
     const [settingsMenuVisible, setSettingsMenuVisible] = React.useState(false);
     const [conversations, setConversations] = React.useState<Conversation[]>([]);
     const [searchQuery, setSearchQuery] = React.useState('');
+    const [vendorSearch, setVendorSearch] = React.useState('');
+    const [inProgressSearch, setInProgressSearch] = React.useState('');
+    const [showAllRequests, setShowAllRequests] = React.useState(false);
+    const [showAllInProgress, setShowAllInProgress] = React.useState(false);
+    const SECTION_PREVIEW = 3;
 
     const fetchData = useCallback(async () => {
         setRefreshing(true);
@@ -84,8 +152,12 @@ const AdminDashboard: React.FC = () => {
 
     useFocusEffect(
         useCallback(() => {
+            // Always fetch fresh job statuses when admin returns to this screen
+            // so vendor progress (Accepted → Reached Out → Appt Set …) is visible
+            // without requiring a manual pull-to-refresh.
             void refreshInbox();
-        }, [refreshInbox]),
+            void refreshJobs();
+        }, [refreshInbox, refreshJobs]),
     );
 
     const jobsDeduped = useMemo(() => {
@@ -130,36 +202,161 @@ const AdminDashboard: React.FC = () => {
         );
     }, [jobsDeduped, searchQuery]);
 
-    const submittedJobs = useMemo(() => filteredJobs.filter(j => j.status === JobStatus.SUBMITTED), [filteredJobs]);
+    /** Vendor list filtered by the inline search bar in the Verified Vendors section. */
+    const filteredApprovedVendors = useMemo(() => {
+        if (!vendorSearch.trim()) return approvedVendors;
+        const q = vendorSearch.toLowerCase().trim();
+        return approvedVendors.filter(v =>
+            v.name?.toLowerCase().includes(q) ||
+            v.email?.toLowerCase().includes(q) ||
+            v.phone?.includes(q)
+        );
+    }, [approvedVendors, vendorSearch]);
 
-    // In-flight work after assignment (excludes new requests = Submitted, and closed = Completed / Invoiced / Expired)
-    const activeProjects = useMemo(() => filteredJobs.filter(j =>
-        j.status === JobStatus.ASSIGNED ||
-        j.status === JobStatus.ACCEPTED ||
-        j.status === JobStatus.REACHED_OUT ||
-        j.status === JobStatus.APPT_SET ||
-        j.status === JobStatus.FOLLOW_UP ||
-        j.status === JobStatus.SALE
+    /** In Progress list filtered by the inline search bar in that section. */
+    /**
+     * "Job Requests" section — jobs the admin still needs to action.
+     * Includes:
+     *  - Submitted: brand-new customer request, not yet touched by admin.
+     *  - PartiallyAssigned: admin is mid-way through splitting/reassigning the job
+     *    (vendors cannot see it yet — they only see it after "Mark Fully Assigned").
+     */
+    const submittedJobs = useMemo(() => filteredJobs.filter(j =>
+        j.status === JobStatus.SUBMITTED ||
+        j.status === JobStatus.PARTIALLY_ASSIGNED
     ), [filteredJobs]);
-    const completedJobs = useMemo(
-        () => filteredJobs.filter(j => j.status === JobStatus.COMPLETED || j.status === JobStatus.INVOICED),
-        [filteredJobs],
+
+    const ACTIVE_STATUSES = useMemo(() => new Set<string>([
+        JobStatus.ASSIGNED, JobStatus.ACCEPTED, JobStatus.REACHED_OUT,
+        JobStatus.APPT_SET, JobStatus.SALE, JobStatus.FOLLOW_UP,
+    ]), []);
+
+    const DONE_STATUSES = useMemo(() => new Set<string>([
+        JobStatus.COMPLETED, JobStatus.INVOICE_REQUESTED, JobStatus.INVOICED,
+    ]), []);
+
+    /**
+     * Collects active child jobs for a given parent, looking in TWO places:
+     *  1. The flat `jobsDeduped` list — populated after JobContext flattens the API response.
+     *  2. The parent's own `childJobs` array — present immediately after the API returns
+     *     nested data, before the flat list catches up.
+     *
+     * This dual-source approach means the pipeline is always up-to-date regardless
+     * of whether the backend sends children flat or nested.
+     */
+    const collectActiveChildren = useCallback(
+        (parentJob: Job, statusSet: Set<string>): Job[] => {
+            const seen = new Set<string>();
+            const result: Job[] = [];
+
+            const add = (child: any) => {
+                if (!child?.id || seen.has(String(child.id))) return;
+                if (!statusSet.has(child.status)) return;
+                seen.add(String(child.id));
+                result.push({
+                    ...child,
+                    // Inherit address + customer from parent so the card shows
+                    // the original customer request context, not the sub-job stub.
+                    address:  child.address  || parentJob.address,
+                    customer: child.customer || parentJob.customer,
+                    contacts: child.contacts?.length ? child.contacts : parentJob.contacts,
+                });
+            };
+
+            // Source 1 — flat list
+            jobsDeduped
+                .filter(j => j.parentJobId && String(j.parentJobId) === String(parentJob.id))
+                .forEach(add);
+
+            // Source 2 — nested in parent (backend embeds childJobs)
+            (parentJob.childJobs || []).forEach(add);
+
+            return result;
+        },
+        [jobsDeduped],
     );
 
+    /**
+     * "In Progress" — live vendor work, one card per vendor scope.
+     * For split jobs we show each child with its own live status pipeline
+     * instead of the frozen parent, which stays "Assigned" forever.
+     */
+    const activeProjects = useMemo(() => {
+        const result: Job[] = [];
+        const suppressedParentIds = new Set<string>();
+
+        filteredJobs.forEach(parentJob => {
+            const activeChildren = collectActiveChildren(parentJob, ACTIVE_STATUSES);
+            if (activeChildren.length > 0) {
+                suppressedParentIds.add(String(parentJob.id));
+                result.push(...activeChildren);
+            }
+        });
+
+        // Parent/direct jobs in active states not covered by children
+        filteredJobs
+            .filter(j => ACTIVE_STATUSES.has(j.status) && !suppressedParentIds.has(String(j.id)))
+            .forEach(j => result.push(j));
+
+        return result.sort(
+            (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+        );
+    }, [filteredJobs, collectActiveChildren, ACTIVE_STATUSES]);
+
+    /** In Progress list filtered by the inline search bar. Must come AFTER activeProjects. */
+    const filteredActiveProjects = useMemo(() => {
+        if (!inProgressSearch.trim()) return activeProjects;
+        const q = inProgressSearch.toLowerCase().trim();
+        return activeProjects.filter(j =>
+            j.address?.toLowerCase().includes(q) ||
+            j.customer?.name?.toLowerCase().includes(q) ||
+            j.vendor?.name?.toLowerCase().includes(q) ||
+            j.jobNumber?.toString().includes(q) ||
+            (j.services || []).some(s => s.toLowerCase().includes(q))
+        );
+    }, [activeProjects, inProgressSearch]);
+
+    /**
+     * "Completed" — only after vendor taps Mark Complete.
+     * Same dual-source child lookup so split completions surface correctly.
+     */
+    const completedJobs = useMemo(() => {
+        const result: Job[] = [];
+        const suppressedParentIds = new Set<string>();
+
+        filteredJobs.forEach(parentJob => {
+            const doneChildren = collectActiveChildren(parentJob, DONE_STATUSES);
+            if (doneChildren.length > 0) {
+                suppressedParentIds.add(String(parentJob.id));
+                result.push(...doneChildren);
+            }
+        });
+
+        filteredJobs
+            .filter(j => DONE_STATUSES.has(j.status) && !suppressedParentIds.has(String(j.id)))
+            .forEach(j => result.push(j));
+
+        return result.sort(
+            (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+        );
+    }, [filteredJobs, collectActiveChildren, DONE_STATUSES]);
+
     const scrollViewRef = React.useRef<any>(null);
-    const sectionYRef = React.useRef<Record<string, number>>({});
-    // sectionY state removed — scrollToSection reads sectionYRef directly
+    // Keeps a live reference to listData so scrollToSection can find
+    // the index of any section header without causing circular deps.
+    const listDataRef = React.useRef<AdminDashboardDataItem[]>([]);
 
     const scrollToSection = useCallback((key: string) => {
-        const y = sectionYRef.current[key];
-        if (scrollViewRef.current != null && typeof y === 'number' && y >= 0) {
-            scrollViewRef.current.scrollTo({ y: Math.max(0, y - 16), animated: true });
+        const idx = listDataRef.current.findIndex(
+            item => item.type === 'section_header' && (item as any).sectionKey === key
+        );
+        if (idx >= 0 && scrollViewRef.current) {
+            scrollViewRef.current.scrollToIndex({ index: idx, animated: true, viewOffset: 8 });
         }
     }, []);
 
-    const updateSectionY = useCallback((key: string, y: number) => {
-        sectionYRef.current = { ...sectionYRef.current, [key]: y };
-    }, []);
+    // No-op kept for backward compat with any renderItem that calls it.
+    const updateSectionY = useCallback((_key: string, _y: number) => {}, []);
 
     const getTimelineBarColor = useCallback((createdAt: string): string => {
         if (!createdAt) return '#22C55E';
@@ -228,7 +425,7 @@ const AdminDashboard: React.FC = () => {
     const stats = useMemo(() => [
         { label: 'Pending Vendors', value: pendingVendors.length.toString(), icon: 'account-clock', color: '#F59E0B', sectionKey: 'vendorVerification' },
         { label: 'Assign vendors', value: submittedJobs.length.toString(), icon: 'account-plus-outline', color: '#6366F1', sectionKey: 'jobRequests' },
-        { label: 'Active projects', value: activeProjects.length.toString(), icon: 'progress-wrench', color: '#10B981', sectionKey: 'activeProjects' },
+        { label: 'In Progress', value: activeProjects.length.toString(), icon: 'progress-wrench', color: '#10B981', sectionKey: 'activeProjects' },
         { label: 'Completed', value: completedJobs.length.toString(), icon: 'check-decagram', color: '#8B5CF6', sectionKey: 'completedJobs' },
     ], [pendingVendors.length, submittedJobs.length, activeProjects.length, completedJobs.length]);
 
@@ -271,12 +468,11 @@ const AdminDashboard: React.FC = () => {
                     </View>
                 </View>
 
-                <MotiView 
-                    from={{ opacity: 0, scale: 0.95 }}
+                <MotiView
+                    from={reducedMotion ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ type: 'timing', duration: 400 }}
+                    transition={{ type: 'timing', duration: reducedMotion ? 0 : 400 }}
                     style={styles.profileBox}
-                    reducedMotion={reducedMotion}
                 >
                     <Avatar.Icon size={64} icon="shield-crown-outline" style={styles.mainAvatar} color="#FFFFFF" />
                     <View style={styles.profileText}>
@@ -300,11 +496,14 @@ const AdminDashboard: React.FC = () => {
                     {stats.map((stat, index) => (
                         <MotiView
                             key={index}
-                            from={{ opacity: 0, translateY: 10 }}
+                            from={reducedMotion ? { opacity: 1, translateY: 0 } : { opacity: 0, translateY: 10 }}
                             animate={{ opacity: 1, translateY: 0 }}
-                            transition={{ type: 'timing', duration: 400, delay: 100 + index * 50 }}
+                            transition={{
+                                type: 'timing',
+                                duration: 400,
+                                delay: reducedMotion ? 0 : 100 + index * 50,
+                            }}
                             style={{ width: Math.max(0, (windowWidth - 60) / 2) }}
-                            reducedMotion={reducedMotion}
                         >
                             <Pressable
                                 onPress={() => scrollToSection((stat as any).sectionKey)}
@@ -329,12 +528,22 @@ const AdminDashboard: React.FC = () => {
         <Card style={styles.approvalCard} elevation={0}>
             <Card.Content style={styles.cardInner}>
                 <View style={styles.cardHeader}>
-                    <Avatar.Text size={40} label={(vendor.email || '??').substring(0, 2).toUpperCase()} style={styles.vendorAvatar} />
+                    <Avatar.Text
+                        size={44}
+                        label={(vendor.name || vendor.email || '??').substring(0, 2).toUpperCase()}
+                        style={styles.vendorAvatar}
+                    />
                     <View style={styles.vendorInfo}>
-                        <Text variant="titleMedium" style={styles.vendorName}>{vendor.name || 'Anonymous Vendor'}</Text>
-                        <Text variant="labelSmall" style={styles.vendorEmail}>{vendor.email}</Text>
+                        <Text variant="titleSmall" style={styles.vendorName} numberOfLines={1}>
+                            {vendor.name || 'Anonymous Vendor'}
+                        </Text>
+                        <Text variant="labelSmall" style={styles.vendorEmail} numberOfLines={1}>
+                            {vendor.email}
+                        </Text>
                     </View>
-                    <Chip style={styles.pendingChip}>PENDING</Chip>
+                    <View style={styles.pendingBadge}>
+                        <Text style={styles.pendingBadgeText}>Pending</Text>
+                    </View>
                 </View>
 
                 <Divider style={styles.cardDivider} />
@@ -386,10 +595,14 @@ const AdminDashboard: React.FC = () => {
         // Inbox Section
         data.push({ type: 'section_inbox' });
 
-        // Job Requests
+        // Job Requests — show first 3 by default; reveal rest on tap
         data.push({ type: 'section_header', title: 'Job Requests', count: submittedJobs.length, sectionKey: 'jobRequests', chipColor: '#EEF2FF', chipText: 'New' });
         if (submittedJobs.length > 0) {
-            submittedJobs.forEach(j => data.push({ type: 'job_request', data: j }));
+            const visible = showAllRequests ? submittedJobs : submittedJobs.slice(0, SECTION_PREVIEW);
+            visible.forEach(j => data.push({ type: 'job_request', data: j }));
+            if (submittedJobs.length > SECTION_PREVIEW) {
+                data.push({ type: 'show_more_requests', hidden: submittedJobs.length - SECTION_PREVIEW });
+            }
         } else {
             data.push({ type: 'empty', title: 'No new job requests.', icon: 'briefcase-check-outline' });
         }
@@ -402,18 +615,28 @@ const AdminDashboard: React.FC = () => {
             data.push({ type: 'empty', title: 'All vendors are verified.', icon: 'account-check-outline' });
         }
 
-        // Active Projects
-        data.push({ type: 'section_header', title: 'Active Projects', count: activeProjects.length, sectionKey: 'activeProjects', chipColor: '#ECFDF5', chipText: 'Total' });
-        if (activeProjects.length > 0) {
-            activeProjects.forEach(j => data.push({ type: 'active_project', data: j }));
+        // In Progress — show newest 3 first; expand on demand
+        data.push({ type: 'section_header', title: 'In Progress', count: activeProjects.length, sectionKey: 'activeProjects', chipColor: '#ECFDF5', chipText: 'Live' });
+        if (filteredActiveProjects.length > 0) {
+            const visibleIP = showAllInProgress
+                ? filteredActiveProjects
+                : filteredActiveProjects.slice(0, SECTION_PREVIEW);
+            visibleIP.forEach(j => data.push({ type: 'active_project', data: j }));
+            if (filteredActiveProjects.length > SECTION_PREVIEW) {
+                data.push({ type: 'show_more_inprogress', hidden: filteredActiveProjects.length - SECTION_PREVIEW });
+            }
+        } else if (activeProjects.length > 0) {
+            data.push({ type: 'empty', title: 'No projects match your search.', icon: 'magnify-close' });
         } else {
             data.push({ type: 'empty', title: 'No active projects found.', icon: 'progress-wrench' });
         }
 
         // Verified Vendors
         data.push({ type: 'section_header', title: 'Verified Vendors', count: approvedVendors.length, sectionKey: 'verifiedVendors', chipColor: '#EEF2FF', chipText: 'Total' });
-        if (approvedVendors.length > 0) {
-            approvedVendors.forEach(v => data.push({ type: 'verified_vendor', data: v }));
+        if (filteredApprovedVendors.length > 0) {
+            filteredApprovedVendors.forEach(v => data.push({ type: 'verified_vendor', data: v }));
+        } else if (approvedVendors.length > 0) {
+            data.push({ type: 'empty', title: 'No vendors match your search.', icon: 'account-search-outline' });
         } else {
             data.push({ type: 'empty', title: 'No verified vendors yet.', icon: 'account-outline' });
         }
@@ -427,15 +650,17 @@ const AdminDashboard: React.FC = () => {
         }
 
         return data;
-    }, [conversations, submittedJobs, pendingVendors, activeProjects, approvedVendors, completedJobs]);
+    }, [conversations, submittedJobs, pendingVendors, activeProjects, filteredActiveProjects, approvedVendors, filteredApprovedVendors, completedJobs, showAllRequests, showAllInProgress]);
+
+    // Keep the ref in sync so scrollToSection always has the latest indices.
+    listDataRef.current = listData;
 
     const renderItem = useCallback(({ item, index }: { item: AdminDashboardDataItem, index: number }) => {
         const wrapInMoti = (content: React.ReactNode) => (
             <MotiView
-                from={{ opacity: 0, translateY: 10 }}
+                from={reducedMotion ? { opacity: 1, translateY: 0 } : { opacity: 0, translateY: 10 }}
                 animate={{ opacity: 1, translateY: 0 }}
-                transition={{ type: 'timing', duration: 300, delay: index * 50 }}
-                reducedMotion={reducedMotion}
+                transition={{ type: 'timing', duration: 300, delay: reducedMotion ? 0 : index * 50 }}
             >
                 {content}
             </MotiView>
@@ -446,6 +671,7 @@ const AdminDashboard: React.FC = () => {
                 return wrapInMoti(
                     <View style={styles.messagesSection}>
                         <Surface style={styles.messagesPanel} elevation={0}>
+                            <View style={styles.messagesPanelInner}>
                             <View style={styles.messagesPanelHeader}>
                                 <View style={styles.messagesPanelTitleBlock}>
                                     <View style={styles.messagesPanelTitleRow}>
@@ -488,7 +714,7 @@ const AdminDashboard: React.FC = () => {
                                                             <Text style={styles.messageListTime} numberOfLines={1}>{timeStr}</Text>
                                                         </View>
                                                     </View>
-                                                    <Text variant="bodySmall" style={[styles.messageListPreview, unread > 0 && styles.messageListPreviewUnread]} numberOfLines={2}>{c.latestMessage || 'No preview'}</Text>
+                                                    <Text variant="bodySmall" style={[styles.messageListPreview, unread > 0 && styles.messageListPreviewUnread]} numberOfLines={2}>{formatChatPreview(c.latestMessage || '') || 'No preview'}</Text>
                                                 </View>
                                                 <IconButton icon="chevron-right" size={20} iconColor="#CBD5E1" style={styles.messageChevron} />
                                             </Pressable>
@@ -501,6 +727,7 @@ const AdminDashboard: React.FC = () => {
                                     <Text variant="titleSmall" style={styles.messagesEmptyTitle}>No messages yet</Text>
                                 </View>
                             )}
+                            </View>
                         </Surface>
                     </View>
                 );
@@ -511,17 +738,55 @@ const AdminDashboard: React.FC = () => {
                             <Text variant="titleLarge" style={styles.sectionTitle}>{item.title}</Text>
                             <Chip style={{ backgroundColor: item.chipColor }}>{item.count} {item.chipText}</Chip>
                         </View>
+                        {item.sectionKey === 'verifiedVendors' && (
+                            <View style={styles.vendorSearchWrap}>
+                                <Searchbar
+                                    placeholder="Search by name, email or phone…"
+                                    value={vendorSearch}
+                                    onChangeText={setVendorSearch}
+                                    style={styles.vendorSearchBar}
+                                    inputStyle={styles.searchInput}
+                                    iconColor="#6366F1"
+                                    placeholderTextColor="#94A3B8"
+                                    elevation={0}
+                                />
+                                {vendorSearch.trim() ? (
+                                    <Text style={styles.vendorSearchCount}>
+                                        {filteredApprovedVendors.length} of {approvedVendors.length} vendors
+                                    </Text>
+                                ) : null}
+                            </View>
+                        )}
+                        {item.sectionKey === 'activeProjects' && (
+                            <View style={styles.vendorSearchWrap}>
+                                <Searchbar
+                                    placeholder="Search by address, vendor or service…"
+                                    value={inProgressSearch}
+                                    onChangeText={setInProgressSearch}
+                                    style={styles.vendorSearchBar}
+                                    inputStyle={styles.searchInput}
+                                    iconColor="#10B981"
+                                    placeholderTextColor="#94A3B8"
+                                    elevation={0}
+                                />
+                                {inProgressSearch.trim() ? (
+                                    <Text style={[styles.vendorSearchCount, { color: '#10B981' }]}>
+                                        {filteredActiveProjects.length} of {activeProjects.length} projects
+                                    </Text>
+                                ) : null}
+                            </View>
+                        )}
                     </View>
                 );
             case 'job_request':
                 const job = item.data;
                 return wrapInMoti(
                     <Card style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}>
-                        <Card.Content style={styles.cardInner}>
+                        <Card.Content style={styles.cardInnerFlush}>
                             <View style={styles.requestCardRow}>
-                                <View style={{ backgroundColor: getTimelineBarColor(job.createdAt), width: 6, borderTopLeftRadius: 24, borderBottomLeftRadius: 24 }} />
+                                <View style={{ backgroundColor: getTimelineBarColor(job.createdAt), width: 6, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 }} />
                                 <View style={styles.requestCardContent}>
-                                    <View style={styles.vendorInfo}>
+                                    <View style={[styles.vendorInfo, { marginLeft: 0, marginRight: 0 }]}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                                             <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: '900' }}>#{job.jobNumber}</Text>
                                             <Text variant="titleMedium" style={[styles.vendorName, { flex: 1 }]} numberOfLines={1}>{job.address}</Text>
@@ -574,81 +839,206 @@ const AdminDashboard: React.FC = () => {
                 );
             case 'vendor_verification':
                 return wrapInMoti(renderVendorItem({ item: item.data }));
-            case 'active_project':
+            case 'active_project': {
                 const activeJob = item.data;
+
+                // When this is a child (split) job, pull address/customer from
+                // the parent so the card shows the original customer request context.
+                const isChildJob = Boolean(activeJob.parentJobId);
+                const parentJob = isChildJob
+                    ? jobsDeduped.find(j => String(j.id) === String(activeJob.parentJobId))
+                    : null;
+                const displayAddress  = parentJob?.address  ?? activeJob.address;
+                const displayCustomer = parentJob?.customer ?? activeJob.customer;
+                const displayJobNum   = parentJob
+                    ? `${parentJob.jobNumber}${activeJob.jobSuffix ?? ''}`
+                    : String(activeJob.jobNumber ?? '');
+
+                // Use this job's OWN status (child's status is the live one)
+                const pipelineIdx = getPipelineIndex(activeJob.status);
+                const currentStep = pipelineIdx >= 0 ? VENDOR_PIPELINE[pipelineIdx] : null;
+
+                // Vendor: child jobs carry vendorId directly; fall back to nested object
+                const vendorName =
+                    activeJob.vendor?.name ||
+                    activeJob.childJobs?.find((c: any) => c?.vendor?.name)?.vendor?.name ||
+                    null;
+
+                // Navigate to the actual job (child or parent)
+                const detailJobId = activeJob.id;
+                // Reassign: always open the ROOT job in reassign mode
+                const rootJobId = parentJob?.id ?? activeJob.id;
+
                 return wrapInMoti(
-                    <Card style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: activeJob.id })}>
+                    <Card style={styles.inProgressCard} elevation={0}>
                         <Card.Content style={styles.cardInner}>
-                            <View style={styles.cardHeader}>
-                                <Avatar.Icon size={40} icon="hammer-wrench" style={{ backgroundColor: '#ECFDF5' }} color="#10B981" />
-                                <View style={styles.vendorInfo}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                                        <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: '900' }}>#{activeJob.jobNumber}</Text>
-                                        <Text variant="titleMedium" style={[styles.vendorName, { flex: 1 }]} numberOfLines={1}>{activeJob.address}</Text>
+                            {/* ── Scope label for split jobs ── */}
+                            {isChildJob && (
+                                <View style={styles.splitScopeBanner}>
+                                    <IconButton icon="call-split" size={12} iconColor="#7C3AED" style={{ margin: 0, padding: 0, marginRight: 2 }} />
+                                    <Text style={styles.splitScopeText}>
+                                        Scope {activeJob.jobSuffix || ''} · {(activeJob.services || []).join(', ') || 'Split assignment'}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* ── Top row: job number + address + status badge ── */}
+                            <View style={styles.inProgressTopRow}>
+                                <View style={[
+                                    styles.inProgressIconWrap,
+                                    { backgroundColor: (currentStep?.color ?? '#6366F1') + '18' },
+                                ]}>
+                                    <IconButton
+                                        icon={currentStep?.icon ?? 'progress-wrench'}
+                                        size={18}
+                                        iconColor={currentStep?.color ?? '#6366F1'}
+                                        style={{ margin: 0, padding: 0 }}
+                                    />
+                                </View>
+                                <View style={{ flex: 1, marginLeft: 10 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <Text style={styles.inProgressJobNum}>#{displayJobNum}</Text>
+                                        <Text variant="titleSmall" style={styles.inProgressAddress} numberOfLines={1}>
+                                            {displayAddress}
+                                        </Text>
                                     </View>
-                                    <Text variant="labelSmall" style={{ color: '#94A3B8' }}>{activeJob.customer?.name || 'Homeowner'} • {(activeJob.status || 'SUBMITTED').toUpperCase()}</Text>
-                                    {activeJob.services && activeJob.services.length > 0 && (
-                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                                            {activeJob.services.map(s => (
-                                                <View key={s} style={{ backgroundColor: '#ECFDF5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                                                    <Text style={{ fontSize: 9, color: '#10B981', fontWeight: 'bold' }}>{s.toUpperCase()}</Text>
-                                                </View>
-                                            ))}
+                                    <Text variant="labelSmall" style={styles.inProgressCustomer}>
+                                        {displayCustomer?.name || 'Homeowner'}
+                                    </Text>
+                                    {vendorName && (
+                                        <View style={styles.inProgressVendorRow}>
+                                            <Avatar.Text
+                                                size={16}
+                                                label={vendorName.substring(0, 2).toUpperCase()}
+                                                style={styles.inProgressVendorAvatar}
+                                                labelStyle={{ fontSize: 7 }}
+                                                color="#4338CA"
+                                            />
+                                            <Text style={styles.inProgressVendorName}>{vendorName}</Text>
                                         </View>
                                     )}
                                 </View>
-                                <View style={styles.activeProjectActions}>
-                                    <Button 
-                                        mode="outlined" 
-                                        compact 
-                                        onPress={() => navigation.navigate('AssignVendor', { jobId: activeJob.id })}
-                                        style={styles.reassignBtn}
-                                        labelStyle={{ fontSize: 11 }}
-                                        icon="account-sync"
-                                    >
-                                        Change
-                                    </Button>
-                                    <IconButton icon="chevron-right" onPress={() => navigation.navigate('JobDetails', { jobId: activeJob.id })} />
+                            </View>
+
+                            {/* ── Progress pipeline — shows vendor's real current step ── */}
+                            <StatusPipeline currentStatus={activeJob.status} />
+
+                            {/* ── Service chips ── */}
+                            {activeJob.services && activeJob.services.length > 0 && (
+                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                                    {activeJob.services.map((s: string) => (
+                                        <View key={s} style={styles.inProgressServiceChip}>
+                                            <Text style={styles.inProgressServiceChipText}>{s.toUpperCase()}</Text>
+                                        </View>
+                                    ))}
                                 </View>
+                            )}
+
+                            {/* ── Action buttons ── */}
+                            <View style={styles.inProgressActions}>
+                                <Button
+                                    mode="outlined"
+                                    compact
+                                    onPress={() => navigation.navigate('AssignVendor', { jobId: rootJobId, reassignMode: true })}
+                                    style={styles.reassignBtn}
+                                    labelStyle={{ fontSize: 11, color: '#EF4444' }}
+                                    icon="account-sync"
+                                    textColor="#EF4444"
+                                >
+                                    Reassign
+                                </Button>
+                                <Button
+                                    mode="outlined"
+                                    compact
+                                    onPress={() => navigation.navigate('JobDetails', { jobId: detailJobId })}
+                                    style={styles.viewDetailsBtn}
+                                    labelStyle={{ fontSize: 11 }}
+                                    icon="eye-outline"
+                                >
+                                    View Details
+                                </Button>
                             </View>
                         </Card.Content>
                     </Card>
                 );
+            }
             case 'verified_vendor':
                 const vVendor = item.data;
                 return wrapInMoti(
                     <Card style={styles.approvalCard} elevation={0}>
                         <Card.Content style={styles.cardInner}>
                             <View style={styles.cardHeader}>
-                                <Avatar.Text size={40} label={(vVendor.email || '??').substring(0, 2).toUpperCase()} style={{ backgroundColor: '#F0FDF4' }} color="#15803D" />
+                                <Avatar.Text
+                                    size={44}
+                                    label={(vVendor.name || vVendor.email || '??').substring(0, 2).toUpperCase()}
+                                    style={{ backgroundColor: '#F0FDF4' }}
+                                    color="#15803D"
+                                />
                                 <View style={styles.vendorInfo}>
-                                    <Text variant="titleMedium" style={styles.vendorName}>{vVendor.name || 'Anonymous Vendor'}</Text>
-                                    <Text variant="labelSmall" style={styles.vendorEmail}>{vVendor.email}</Text>
+                                    <Text variant="titleSmall" style={styles.vendorName} numberOfLines={1}>
+                                        {vVendor.name || 'Anonymous Vendor'}
+                                    </Text>
+                                    <Text variant="labelSmall" style={styles.vendorEmail} numberOfLines={1}>
+                                        {vVendor.email}
+                                    </Text>
                                 </View>
-                                <Chip icon="check-decagram" style={{ backgroundColor: '#F0FDF4' }} textStyle={{ color: '#15803D' }}>VERIFIED</Chip>
+                                <View style={styles.verifiedBadge}>
+                                    <Text style={styles.verifiedBadgeText}>✓  Verified</Text>
+                                </View>
                             </View>
                             <View style={styles.cardActions}>
-                                <Button mode="outlined" onPress={() => handleRemoveVendor(vVendor.id || '')} style={styles.denyBtn} textColor="#EF4444" icon="trash-can-outline">Remove Vendor</Button>
+                                <Button
+                                    mode="outlined"
+                                    onPress={() => handleRemoveVendor(vVendor.id || '')}
+                                    style={styles.denyBtn}
+                                    textColor="#EF4444"
+                                    icon="trash-can-outline"
+                                    compact
+                                >
+                                    Remove Vendor
+                                </Button>
                             </View>
                         </Card.Content>
                     </Card>
                 );
-            case 'completed_job':
+            case 'completed_job': {
                 const compJob = item.data;
+                const isInvoiced = compJob.status === JobStatus.INVOICED;
+                const isInvoiceRequested = compJob.status === JobStatus.INVOICE_REQUESTED;
+                const compVendorName =
+                    compJob.vendor?.name ||
+                    compJob.childJobs?.find((c: any) => c?.vendor?.name)?.vendor?.name ||
+                    null;
+                const compStatusLabel = isInvoiced
+                    ? 'Invoiced'
+                    : isInvoiceRequested
+                    ? 'Invoice Requested'
+                    : 'Completed';
+                const compStatusColor = isInvoiced ? '#0EA5E9' : isInvoiceRequested ? '#8B5CF6' : '#059669';
+                const compStatusIcon  = isInvoiced ? 'file-check-outline' : isInvoiceRequested ? 'receipt-outline' : 'check-decagram';
+
                 return wrapInMoti(
                     <Card style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: compJob.id })}>
                         <Card.Content style={styles.cardInner}>
                             <View style={styles.cardHeader}>
-                                <Avatar.Icon size={40} icon="check-decagram" style={{ backgroundColor: '#ECFDF5' }} color="#059669" />
+                                <Avatar.Icon size={40} icon={compStatusIcon} style={{ backgroundColor: compStatusColor + '15' }} color={compStatusColor} />
                                 <View style={styles.vendorInfo}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                                         <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: '900' }}>#{compJob.jobNumber}</Text>
                                         <Text variant="titleMedium" style={[styles.vendorName, { flex: 1 }]} numberOfLines={1}>{compJob.address}</Text>
                                     </View>
-                                    <Text variant="labelSmall" style={{ color: '#94A3B8' }}>{compJob.customer?.name || 'Homeowner'} • {(compJob.status || '').toUpperCase()}</Text>
+                                    <Text variant="labelSmall" style={{ color: '#94A3B8' }}>
+                                        {compJob.customer?.name || 'Homeowner'}
+                                    </Text>
+                                    {compVendorName && (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                            <Avatar.Text size={14} label={compVendorName.substring(0, 2).toUpperCase()} style={{ backgroundColor: '#F0FDF4' }} color="#059669" labelStyle={{ fontSize: 6 }} />
+                                            <Text variant="labelSmall" style={{ color: '#059669', fontWeight: '700' }}>{compVendorName}</Text>
+                                        </View>
+                                    )}
                                     {compJob.services && compJob.services.length > 0 && (
                                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                                            {compJob.services.map(s => (
+                                            {compJob.services.map((s: string) => (
                                                 <View key={s} style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
                                                     <Text style={{ fontSize: 9, color: '#64748B', fontWeight: 'bold' }}>{s.toUpperCase()}</Text>
                                                 </View>
@@ -656,10 +1046,38 @@ const AdminDashboard: React.FC = () => {
                                         </View>
                                     )}
                                 </View>
-                                <IconButton icon="chevron-right" />
+                                <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                                    <View style={[styles.statusBadge, { backgroundColor: compStatusColor + '15', borderColor: compStatusColor + '50' }]}>
+                                        <Text style={[styles.statusBadgeText, { color: compStatusColor }]}>{compStatusLabel.toUpperCase()}</Text>
+                                    </View>
+                                    <IconButton icon="chevron-right" size={18} style={{ margin: 0 }} />
+                                </View>
                             </View>
                         </Card.Content>
                     </Card>
+                );
+            }
+            case 'show_more_requests':
+                return (
+                    <View style={styles.showMoreWrap}>
+                        <Pressable style={styles.showMoreBtn} onPress={() => setShowAllRequests(v => !v)}>
+                            <Text style={styles.showMoreText}>
+                                {showAllRequests ? 'Show less' : `Show ${item.hidden} more request${item.hidden !== 1 ? 's' : ''}`}
+                            </Text>
+                            <IconButton icon={showAllRequests ? 'chevron-up' : 'chevron-down'} size={16} iconColor="#6366F1" style={{ margin: 0 }} />
+                        </Pressable>
+                    </View>
+                );
+            case 'show_more_inprogress':
+                return (
+                    <View style={styles.showMoreWrap}>
+                        <Pressable style={[styles.showMoreBtn, { borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }]} onPress={() => setShowAllInProgress(v => !v)}>
+                            <Text style={[styles.showMoreText, { color: '#059669' }]}>
+                                {showAllInProgress ? 'Show less' : `Show ${item.hidden} more project${item.hidden !== 1 ? 's' : ''}`}
+                            </Text>
+                            <IconButton icon={showAllInProgress ? 'chevron-up' : 'chevron-down'} size={16} iconColor="#059669" style={{ margin: 0 }} />
+                        </Pressable>
+                    </View>
                 );
             case 'empty':
                 return wrapInMoti(
@@ -671,7 +1089,7 @@ const AdminDashboard: React.FC = () => {
             default:
                 return null;
         }
-    }, [navigation, getTimelineBarColor, handleApproval, handleRemoveVendor, updateSectionY, conversations, messageUnreadTotal]);
+    }, [navigation, getTimelineBarColor, handleApproval, handleRemoveVendor, updateSectionY, conversations, messageUnreadTotal, jobsDeduped, vendorSearch, setVendorSearch, filteredApprovedVendors, approvedVendors, inProgressSearch, setInProgressSearch, filteredActiveProjects, activeProjects, showAllRequests, setShowAllRequests, showAllInProgress, setShowAllInProgress]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -687,7 +1105,7 @@ const AdminDashboard: React.FC = () => {
                 estimatedItemSize={200}
                 ListHeaderComponent={renderHeader}
                 contentContainerStyle={styles.scrollContent}
-                extraData={[pendingVendors, approvedVendors, conversations, filteredJobs, refreshing]}
+                extraData={[pendingVendors, approvedVendors, filteredApprovedVendors, vendorSearch, filteredActiveProjects, inProgressSearch, showAllRequests, showAllInProgress, conversations, filteredJobs, refreshing]}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
                 }
@@ -837,11 +1255,54 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         marginHorizontal: 0,
         marginTop: 8,
-        marginBottom: 12,
+        marginBottom: 0,
         backgroundColor: '#FFFFFF',
         borderTopWidth: 1,
         borderBottomWidth: 1,
         borderColor: '#E2E8F0',
+    },
+    showMoreWrap: {
+        marginHorizontal: 16,
+        marginBottom: 8,
+    },
+    showMoreBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#C7D2FE',
+        backgroundColor: '#EEF2FF',
+        gap: 2,
+    },
+    showMoreText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#4F46E5',
+    },
+    vendorSearchWrap: {
+        paddingHorizontal: 24,
+        paddingTop: 12,
+        paddingBottom: 4,
+        backgroundColor: '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E2E8F0',
+        marginBottom: 12,
+    },
+    vendorSearchBar: {
+        borderRadius: 12,
+        backgroundColor: '#F8FAFC',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        height: 44,
+    },
+    vendorSearchCount: {
+        fontSize: 11,
+        color: '#6366F1',
+        fontWeight: '700',
+        marginTop: 6,
+        marginLeft: 4,
     },
     sectionChip: {
         backgroundColor: '#EEF2FF',
@@ -854,27 +1315,32 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     approvalCard: {
-        marginHorizontal: 12,
-        marginBottom: 16,
+        marginHorizontal: 16,
+        marginBottom: 12,
         backgroundColor: '#FFFFFF',
-        borderRadius: 24,
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#F1F5F9',
+        borderColor: '#E2E8F0',
     },
     cardInner: {
+        padding: 16,
+    },
+    /** Use on cards where content must bleed to the card edge (e.g. the coloured left bar on job-request cards). */
+    cardInnerFlush: {
         padding: 0,
     },
     cardHeader: {
         flexDirection: 'row',
-        alignItems: 'flex-start', // Align to top
-        padding: 16,
+        alignItems: 'center',
+        marginBottom: 0,
     },
     vendorAvatar: {
         backgroundColor: '#EEF2FF',
     },
     vendorInfo: {
         flex: 1,
-        marginHorizontal: 12, // Space between icon and buttons
+        marginLeft: 12,
+        marginRight: 8,
     },
     vendorName: {
         fontWeight: 'bold',
@@ -883,9 +1349,37 @@ const styles = StyleSheet.create({
     vendorEmail: {
         color: '#94A3B8',
     },
+    verifiedBadge: {
+        backgroundColor: '#F0FDF4',
+        borderRadius: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderWidth: 1,
+        borderColor: '#BBF7D0',
+        alignSelf: 'center',
+    },
+    verifiedBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#15803D',
+    },
     pendingChip: {
         backgroundColor: '#FFFBEB',
         height: 24,
+    },
+    pendingBadge: {
+        backgroundColor: '#FFFBEB',
+        borderRadius: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderWidth: 1,
+        borderColor: '#FDE68A',
+        alignSelf: 'center',
+    },
+    pendingBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#92400E',
     },
     cardDivider: {
         backgroundColor: '#F1F5F9',
@@ -902,15 +1396,16 @@ const styles = StyleSheet.create({
     cardActions: {
         flexDirection: 'row',
         gap: 8,
+        marginTop: 12,
     },
     approveBtn: {
         flex: 1,
-        borderRadius: 12,
+        borderRadius: 10,
         backgroundColor: '#10B981',
     },
     denyBtn: {
         flex: 1,
-        borderRadius: 12,
+        borderRadius: 10,
         borderColor: '#EF4444',
     },
     emptyBox: {
@@ -930,32 +1425,33 @@ const styles = StyleSheet.create({
     requestCardRow: {
         flexDirection: 'row',
         alignItems: 'stretch',
-        minHeight: 100,
+        minHeight: 80,
+        overflow: 'hidden',
+        borderRadius: 16,
     },
     timelineBar: {
         width: 6,
-        borderRadius: 3,
-        borderTopLeftRadius: 24,
-        borderBottomLeftRadius: 24,
+        borderTopLeftRadius: 16,
+        borderBottomLeftRadius: 16,
     },
     requestCardContent: {
         flex: 1,
         flexDirection: 'row',
         paddingVertical: 14,
-        paddingLeft: 12,
-        paddingRight: 16,
+        paddingLeft: 14,
+        paddingRight: 14,
         alignItems: 'center',
+        gap: 10,
     },
     actionColumn: {
-        width: 100,
-        alignItems: 'flex-end',
+        alignItems: 'center',
         justifyContent: 'center',
+        flexShrink: 0,
     },
     jobActionBtn: {
         borderRadius: 10,
         backgroundColor: '#6366F1',
         elevation: 0,
-        width: '100%',
     },
     partialAssignNotice: {
         marginTop: 8,
@@ -987,6 +1483,9 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         borderWidth: 1,
         borderColor: '#E2E8F0',
+    },
+    messagesPanelInner: {
+        borderRadius: 16,
         overflow: 'hidden',
     },
     messagesPanelHeader: {
@@ -1055,7 +1554,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 14,
         paddingLeft: 16,
-        paddingRight: 4,
+        paddingRight: 12,
         backgroundColor: '#FFFFFF',
     },
     messageListRowPressed: {
@@ -1077,7 +1576,6 @@ const styles = StyleSheet.create({
         flex: 1,
         minWidth: 0,
         marginLeft: 14,
-        paddingRight: 8,
     },
     messageListTopLine: {
         flexDirection: 'row',
@@ -1093,7 +1591,6 @@ const styles = StyleSheet.create({
         color: '#1E293B',
         fontSize: 15,
         letterSpacing: -0.2,
-        paddingRight: 8,
     },
     messageListNameUnread: {
         fontWeight: '800',
@@ -1140,7 +1637,9 @@ const styles = StyleSheet.create({
     },
     messageChevron: {
         margin: 0,
+        marginLeft: 4,
         alignSelf: 'center',
+        flexShrink: 0,
     },
     messagesEmptyInner: {
         alignItems: 'center',
@@ -1166,7 +1665,109 @@ const styles = StyleSheet.create({
     },
     reassignBtn: {
         borderRadius: 10,
-        borderColor: '#6366F1',
+        borderColor: '#FCA5A5',
+        flex: 1,
+    },
+    // ── In-Progress card ──────────────────────────────────────────────────────
+    inProgressCard: {
+        marginBottom: 12,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        overflow: 'hidden',
+    },
+    inProgressTopRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    inProgressIconWrap: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        marginRight: 12,
+    },
+    inProgressJobNum: {
+        color: '#6366F1',
+        fontWeight: '900',
+        fontSize: 11,
+    },
+    inProgressAddress: {
+        fontWeight: '700',
+        color: '#1E293B',
+        flex: 1,
+    },
+    inProgressCustomer: {
+        color: '#94A3B8',
+        marginTop: 2,
+    },
+    inProgressVendorRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginTop: 3,
+    },
+    inProgressVendorAvatar: {
+        backgroundColor: '#EEF2FF',
+    },
+    inProgressVendorName: {
+        fontSize: 11,
+        color: '#4338CA',
+        fontWeight: '700',
+    },
+    inProgressServiceChip: {
+        backgroundColor: '#ECFDF5',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    inProgressServiceChipText: {
+        fontSize: 9,
+        color: '#10B981',
+        fontWeight: '700',
+    },
+    inProgressActions: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 12,
+    },
+    viewDetailsBtn: {
+        borderRadius: 10,
+        flex: 1,
+    },
+    // ── Split-scope banner (shown on child-job cards) ─────────────────────────
+    splitScopeBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F5F3FF',
+        borderRadius: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginBottom: 8,
+        alignSelf: 'flex-start',
+    },
+    splitScopeText: {
+        fontSize: 10,
+        color: '#7C3AED',
+        fontWeight: '700',
+        letterSpacing: 0.2,
+    },
+    // ── Status badge (used in both In-Progress and Completed cards) ───────────
+    statusBadge: {
+        borderRadius: 8,
+        borderWidth: 1,
+        paddingHorizontal: 7,
+        paddingVertical: 3,
+        alignSelf: 'flex-start',
+        flexShrink: 0,
+    },
+    statusBadgeText: {
+        fontSize: 9,
+        fontWeight: '800',
+        letterSpacing: 0.3,
     },
 });
 

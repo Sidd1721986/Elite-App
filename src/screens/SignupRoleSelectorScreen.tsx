@@ -6,7 +6,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
 import AppLogo from '../components/AppLogo';
 
-type RoleSelectorNavigationProp = StackNavigationProp<RootStackParamList, 'SignupRoleSelector'>;
+type RoleSelectorNavigationProp = StackNavigationProp<RootStackParamList>;
 
 interface Props {
     navigation: RoleSelectorNavigationProp;

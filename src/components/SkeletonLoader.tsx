@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import { MotiView } from 'moti';
 import { useReducedMotion } from 'react-native-reanimated';
-import { Skeleton } from 'moti/build/skeleton/native';
+import { Skeleton } from 'moti/skeleton';
 
 const { width } = Dimensions.get('window');
 
@@ -21,11 +21,10 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({ type = 'job-card
     if (type === 'stat-card') {
         return (
             <MotiView
-                from={{ opacity: 0.5 }}
+                from={reducedMotion ? { opacity: 1 } : { opacity: 0.5 }}
                 animate={{ opacity: 1 }}
-                transition={{ loop: true, duration: 1000, type: 'timing' }}
+                transition={reducedMotion ? { type: 'timing', duration: 0 } : { loop: true, duration: 1000, type: 'timing' }}
                 style={styles.statCard}
-                reducedMotion={reducedMotion}
             >
                 <Skeleton colorMode={colorMode} width="60%" height={20} />
                 <View style={{ height: 10 }} />
@@ -37,11 +36,10 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({ type = 'job-card
     // Default: job-card
     return (
         <MotiView
-            from={{ opacity: 0.5, translateY: 10 }}
+            from={reducedMotion ? { opacity: 1, translateY: 0 } : { opacity: 0.5, translateY: 10 }}
             animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 500 }}
+            transition={{ type: 'timing', duration: reducedMotion ? 0 : 500 }}
             style={styles.jobCard}
-            reducedMotion={reducedMotion}
         >
             <View style={styles.row}>
                 <Skeleton colorMode={colorMode} radius="round" width={50} height={50} />

@@ -133,4 +133,20 @@ dependencies {
     }
 }
 
+// Play Store policy: do not ship release binaries signed with the debug key.
+def releaseKeystorePropertiesFile = rootProject.file("keystore.properties")
+tasks.configureEach { task ->
+    if (task.name == "bundleRelease" || task.name == "assembleRelease") {
+        task.doFirst {
+            def allowInsecure = project.findProperty("allowInsecureReleaseSigning") == "true"
+            if (!allowInsecure && !releaseKeystorePropertiesFile.exists()) {
+                throw new GradleException(
+                    "Release build requires android/keystore.properties (see docs/MOBILE_RELEASE_GUIDE.md). " +
+                    "For local experiments only, pass -PallowInsecureReleaseSigning=true — never upload those artifacts to Google Play."
+                )
+            }
+        }
+    }
+}
+
 apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"

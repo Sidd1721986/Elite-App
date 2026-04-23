@@ -45,6 +45,8 @@ keytool -genkey -v -keystore elite-production.jks -alias elite-app -keyalg RSA -
 1. Upload `elite-production.jks` to **Pipelines -> Library -> Secure files**.
 2. Go to **Variable groups -> EliteApp-Production** and add the keystore passwords and alias.
 
+3. **Gradle:** Release builds (`assembleRelease`, `bundleRelease`) require `android/keystore.properties` (see `android/keystore.properties.example`). For a **local** unsigned experiment only, you may pass `-PallowInsecureReleaseSigning=true` — **never** upload those artifacts to Google Play.
+
 ---
 
 ## 🍎 Part 2: iOS Deployment (App Store)

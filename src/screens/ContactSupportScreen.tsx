@@ -1,23 +1,13 @@
 import React from 'react';
-import { ScrollView, StyleSheet, View, Linking } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text, IconButton, Surface, Button, List } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { SUPPORT_URL } from '../config/appConfig';
+import { openExternalUrl } from '../utils/openExternalUrl';
 
 const ContactSupportScreen: React.FC = () => {
     const navigation = useNavigation();
-    
-    // Replace with your actual support info
-    const supportEmail = "support@elite.com";
-    const supportPhone = "+1-800-ELITE-01";
-
-    const handleEmail = () => {
-        Linking.openURL(`mailto:${supportEmail}?subject=Support Request - Elite App`);
-    };
-
-    const handlePhone = () => {
-        Linking.openURL(`tel:${supportPhone}`);
-    };
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -28,7 +18,7 @@ const ContactSupportScreen: React.FC = () => {
                     containerColor="#FFFFFF"
                     iconColor="#6366F1"
                 />
-                <Text variant="titleLarge" style={styles.headerTitle}>Help & Support</Text>
+                <Text variant="titleLarge" style={styles.headerTitle}>Help &amp; Support</Text>
                 <View style={{ width: 48 }} />
             </View>
 
@@ -36,42 +26,62 @@ const ContactSupportScreen: React.FC = () => {
                 <Surface style={styles.promoCard} elevation={2}>
                     <IconButton icon="message-question-outline" iconColor="#6366F1" size={48} style={styles.promoIcon} />
                     <Text variant="headlineSmall" style={styles.promoTitle}>How can we help?</Text>
-                    <Text variant="bodyMedium" style={styles.promoSubtitle}>Our support team is here to assist you with any questions or issues.</Text>
+                    <Text variant="bodyMedium" style={styles.promoSubtitle}>
+                        Account issues, job questions, and safety reports all go through the same
+                        support channel so we can respond consistently.
+                    </Text>
                 </Surface>
 
-                <View style={styles.actionGrid}>
-                    <Surface style={styles.actionCard} elevation={1}>
-                        <IconButton icon="email-outline" iconColor="#6366F1" size={32} />
-                        <Text variant="titleMedium" style={styles.actionLabel}>Email us</Text>
-                        <Text variant="labelSmall" style={styles.actionValue}>{supportEmail}</Text>
-                        <Button mode="contained" onPress={handleEmail} style={styles.actionBtn}>Send Email</Button>
-                    </Surface>
-
-                    <Surface style={styles.actionCard} elevation={1}>
-                        <IconButton icon="phone-outline" iconColor="#6366F1" size={32} />
-                        <Text variant="titleMedium" style={styles.actionLabel}>Call us</Text>
-                        <Text variant="labelSmall" style={styles.actionValue}>{supportPhone}</Text>
-                        <Button mode="outlined" onPress={handlePhone} style={styles.actionBtn}>Call Now</Button>
-                    </Surface>
-                </View>
+                <Surface style={styles.primaryCard} elevation={1}>
+                    <Text variant="titleMedium" style={styles.cardTitle}>Contact &amp; safety reporting</Text>
+                    <Text variant="bodyMedium" style={styles.cardBody}>
+                        Open our support page in your browser. It includes our support email and
+                        guidance for reporting misuse of chat or job features.
+                    </Text>
+                    <Button
+                        mode="contained"
+                        icon="open-in-new"
+                        onPress={() => void openExternalUrl(SUPPORT_URL)}
+                        style={styles.primaryBtn}
+                    >
+                        Open support page
+                    </Button>
+                </Surface>
 
                 <Surface style={styles.faqSection} elevation={0}>
-                    <Text variant="titleLarge" style={styles.faqTitle}>Frequently Asked Questions</Text>
-                    
+                    <Text variant="titleLarge" style={styles.faqTitle}>Common topics</Text>
+
                     <List.AccordionGroup>
-                        <List.Accordion title="How do I book a job?" id="1">
-                            <List.Item title="Simply tap the '+' or 'New Request' button on dashboard." titleNumberOfLines={3} />
+                        <List.Accordion title="How do I request a service?" id="1">
+                            <List.Item
+                                title="Use the new request or add flow on your home dashboard to describe the work you need."
+                                titleNumberOfLines={4}
+                            />
                         </List.Accordion>
-                        <List.Accordion title="Is my payment secure?" id="2">
-                            <List.Item title="We use bank-level encryption for all payments." titleNumberOfLines={3} />
+                        <List.Accordion title="How are payments handled?" id="2">
+                            <List.Item
+                                title="The app helps coordinate jobs and invoicing status. Unless we clearly offer in-app payment for a transaction, payment terms are between you and the other party (for example customer and vendor)."
+                                titleNumberOfLines={6}
+                            />
                         </List.Accordion>
-                        <List.Accordion title="How do I change my role?" id="3">
-                            <List.Item title="Roles are fixed upon signup. Contact support for manual changes." titleNumberOfLines={3} />
+                        <List.Accordion title="How do I deactivate my account?" id="3">
+                            <List.Item
+                                title="Signed-in users can use Account details → Deactivate account. This marks your account inactive; some records may be kept where required by law."
+                                titleNumberOfLines={5}
+                            />
+                        </List.Accordion>
+                        <List.Accordion title="Someone behaved inappropriately in chat" id="4">
+                            <List.Item
+                                title="Use the support page and email us with a short description and job context. We review reports under our Terms of Service."
+                                titleNumberOfLines={5}
+                            />
                         </List.Accordion>
                     </List.AccordionGroup>
                 </Surface>
 
-                <Text variant="labelSmall" style={styles.footerText}>Response Time: Usually under 24 hours</Text>
+                <Text variant="labelSmall" style={styles.footerText}>
+                    Response times vary; we aim to reply within a few business days.
+                </Text>
             </ScrollView>
         </SafeAreaView>
     );
@@ -122,29 +132,23 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 20,
     },
-    actionGrid: {
-        flexDirection: 'row',
-        gap: 16,
-        marginBottom: 32,
-    },
-    actionCard: {
-        flex: 1,
+    primaryCard: {
         backgroundColor: '#FFFFFF',
         borderRadius: 20,
-        padding: 16,
-        alignItems: 'center',
+        padding: 20,
+        marginBottom: 28,
     },
-    actionLabel: {
-        fontWeight: 'bold',
+    cardTitle: {
+        fontWeight: '800',
         color: '#1E293B',
-        marginBottom: 4,
+        marginBottom: 8,
     },
-    actionValue: {
+    cardBody: {
         color: '#64748B',
         marginBottom: 16,
+        lineHeight: 20,
     },
-    actionBtn: {
-        width: '100%',
+    primaryBtn: {
         borderRadius: 12,
     },
     faqSection: {
@@ -161,7 +165,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         color: '#94A3B8',
         marginBottom: 40,
-    }
+    },
 });
 
 export default ContactSupportScreen;

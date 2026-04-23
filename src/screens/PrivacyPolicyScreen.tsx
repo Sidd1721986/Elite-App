@@ -1,8 +1,10 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Text, IconButton, Surface, Divider } from 'react-native-paper';
+import { Text, IconButton, Surface, Divider, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PRIVACY_POLICY_URL, SUPPORT_URL } from '../config/appConfig';
+import { openExternalUrl } from '../utils/openExternalUrl';
 
 const PrivacyPolicyScreen: React.FC = () => {
     const navigation = useNavigation();
@@ -22,45 +24,46 @@ const PrivacyPolicyScreen: React.FC = () => {
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <Surface style={styles.contentCard} elevation={1}>
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>1. Introduction</Text>
-                    <Text variant="bodyMedium" style={styles.bodyText}>
-                        Elite Home Services ("we," "us," or "our") respects your privacy and is committed to protecting your personal data. This privacy policy informs you about how we look after your personal data when you use our mobile application and tells you about your privacy rights.
+                    <Text variant="titleMedium" style={styles.lead}>
+                        The official privacy policy is published on our website so it always matches
+                        what we submit to the App Store and Google Play.
                     </Text>
-
                     <Divider style={styles.divider} />
-
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>2. Data We Collect</Text>
                     <Text variant="bodyMedium" style={styles.bodyText}>
-                        We may collect, use, store and transfer different kinds of personal data about you which we have grouped together as follows:
+                        We collect account details (name, email, phone, address), job and assignment
+                        information, in-app messages and attachments you send in connection with jobs,
+                        and photos or files you upload. We use this data to run the platform, connect
+                        customers and vendors, and provide support. You can deactivate your account
+                        from Account details when signed in; some records may be retained where the law
+                        requires.
                     </Text>
-                    <Text variant="bodyMedium" style={styles.bulletItem}>• Identity Data: Includes first name, last name, and role.</Text>
-                    <Text variant="bodyMedium" style={styles.bulletItem}>• Contact Data: Includes email address, phone number, and physical address.</Text>
-                    <Text variant="bodyMedium" style={styles.bulletItem}>• Technical Data: Includes internet protocol (IP) address, your login data, and device information.</Text>
-                    <Text variant="bodyMedium" style={styles.bulletItem}>• Media Data: Includes photos and images you upload for job documentation or profile settings.</Text>
-
-                    <Divider style={styles.divider} />
-
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>3. How We Use Your Data</Text>
                     <Text variant="bodyMedium" style={styles.bodyText}>
-                        We use your data to provide, maintain, and improve our services, including processing your service requests, connecting customers with verified vendors, and sharing job-site photos between authorized users (Customers, Vendors, and Administrators) for work verification.
+                        The full policy covers retention, security, international transfers, and your
+                        choices. Open the link below for the complete text (same URL used in store
+                        listings).
                     </Text>
-
-                    <Divider style={styles.divider} />
-
-                    <Text variant="headlineSmall" style={styles.sectionTitle}>4. Contact Us</Text>
-                    <Text variant="bodyMedium" style={styles.bodyText}>
-                        If you have any questions about this privacy policy or our privacy practices, please contact us at:
-                    </Text>
-                    
-                    <Surface style={styles.contactPlaceholder} elevation={0}>
-                        <Text variant="labelLarge" style={styles.placeholderLabel}>Elite Home Services</Text>
-                        <Text variant="bodyMedium" style={styles.placeholderText}>Email: support@elitehomeservices.com</Text>
-                        <Text variant="bodyMedium" style={styles.placeholderText}>Phone: (Contact details pending)</Text>
-                        <Text variant="bodyMedium" style={styles.placeholderText}>Address: Legal disclosure pending</Text>
-                    </Surface>
+                    <Button
+                        mode="contained"
+                        icon="open-in-new"
+                        onPress={() => void openExternalUrl(PRIVACY_POLICY_URL)}
+                        style={styles.button}
+                    >
+                        Open full privacy policy
+                    </Button>
+                    <Button
+                        mode="outlined"
+                        icon="lifebuoy"
+                        onPress={() => void openExternalUrl(SUPPORT_URL)}
+                        style={styles.button}
+                    >
+                        Support &amp; safety reporting
+                    </Button>
                 </Surface>
-                
-                <Text variant="labelSmall" style={styles.footerText}>Last Updated: April 2024</Text>
+
+                <Text variant="labelSmall" style={styles.footerText}>
+                    If a link does not open, check that your production API URL is configured in
+                    src/config/env.ts (see env.example.ts).
+                </Text>
             </ScrollView>
         </SafeAreaView>
     );
@@ -94,50 +97,28 @@ const styles = StyleSheet.create({
         padding: 24,
         marginBottom: 20,
     },
-    sectionTitle: {
+    lead: {
         color: '#1E293B',
-        fontWeight: '800',
-        fontSize: 18,
-        marginBottom: 12,
+        fontWeight: '700',
+        marginBottom: 8,
     },
     bodyText: {
         color: '#475569',
         lineHeight: 22,
         marginBottom: 16,
     },
-    bulletItem: {
-        color: '#475569',
-        lineHeight: 22,
-        marginLeft: 8,
-        marginBottom: 4,
-    },
     divider: {
-        marginVertical: 20,
+        marginVertical: 16,
         backgroundColor: '#F1F5F9',
     },
-    contactPlaceholder: {
-        marginTop: 12,
-        padding: 16,
-        backgroundColor: '#F8FAFC',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-        borderStyle: 'dashed',
-    },
-    placeholderLabel: {
-        color: '#6366F1',
-        fontWeight: 'bold',
-        marginBottom: 8,
-    },
-    placeholderText: {
-        color: '#64748B',
-        marginBottom: 4,
+    button: {
+        marginTop: 8,
     },
     footerText: {
         textAlign: 'center',
         color: '#94A3B8',
         marginBottom: 40,
-    }
+    },
 });
 
 export default PrivacyPolicyScreen;

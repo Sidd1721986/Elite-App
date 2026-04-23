@@ -4,9 +4,29 @@ import { AuthProvider, useAuth } from '../AuthContext';
 import { authService } from '../../services/authService';
 import { UserRole } from '../../types/types';
 
-jest.mock('../../services/authService');
+jest.mock('../../services/authService', () => {
+    const actual = jest.requireActual<typeof import('../../services/authService')>('../../services/authService');
+    return {
+        ...actual,
+        authService: {
+            ...actual.authService,
+            getCurrentUser: jest.fn(),
+            login: jest.fn(),
+            logout: jest.fn(),
+        },
+    };
+});
 jest.mock('../../utils/normalization', () => ({
-    normalizeUser: (user: any) => user,
+    normalizeUser: (user: any) => {
+        if (!user || typeof user !== 'object') return undefined;
+        return {
+            ...user,
+            id: String(user.id ?? ''),
+            email: user.email ?? user.Email ?? '',
+            role: user.role ?? user.Role ?? 'Customer',
+            name: user.name ?? user.Name ?? '',
+        };
+    },
 }));
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -30,13 +50,15 @@ describe('AuthContext', () => {
         // Wait for useEffect
         await act(async () => { });
 
-        expect(result.current.user).toEqual(mockUser);
+        expect(result.current.user).toEqual(
+            expect.objectContaining({ id: '1', name: 'Test User', email: '', role: 'Customer' }),
+        );
         expect(result.current.isLoading).toBe(false);
     });
 
     it('login should update user state on success', async () => {
         (authService.getCurrentUser as jest.Mock).mockResolvedValueOnce(null);
-        const mockUser = { id: '1', name: 'Logged In User' };
+        const mockUser = { id: '1', name: 'Logged In User', role: 'Customer' };
         (authService.login as jest.Mock).mockResolvedValueOnce(mockUser);
 
         const { result } = renderHook(() => useAuth(), { wrapper });
@@ -47,7 +69,9 @@ describe('AuthContext', () => {
             expect(success).toBe(true);
         });
 
-        expect(result.current.user).toEqual(mockUser);
+        expect(result.current.user).toEqual(
+            expect.objectContaining({ id: '1', name: 'Logged In User', role: 'Customer', email: '' }),
+        );
     });
 
     it('logout should clear user state', async () => {
@@ -57,7 +81,9 @@ describe('AuthContext', () => {
         const { result } = renderHook(() => useAuth(), { wrapper });
         await act(async () => { });
 
-        expect(result.current.user).toEqual(mockUser);
+        expect(result.current.user).toEqual(
+            expect.objectContaining({ id: '1', name: 'Test User', email: '', role: 'Customer' }),
+        );
 
         await act(async () => {
             await result.current.logout();

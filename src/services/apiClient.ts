@@ -74,6 +74,11 @@ export function setApiClientAuthToken(token: string | null) {
     inMemoryAuthToken = token;
 }
 
+/** Clears the cached token so the next request reloads from SecureStorage (tests, logout edge cases). */
+export function clearApiClientInMemoryToken() {
+    inMemoryAuthToken = undefined;
+}
+
 async function getAuthToken(): Promise<string | null> {
     if (typeof inMemoryAuthToken !== 'undefined') {
         return inMemoryAuthToken;

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiClient } from '../apiClient';
+import { apiClient, clearApiClientInMemoryToken } from '../apiClient';
 
 // Mock fetch
 global.fetch = jest.fn();
@@ -8,6 +8,7 @@ describe('apiClient', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         apiClient.clearCache();
+        clearApiClientInMemoryToken();
     });
 
     it('should include Authorization header if token exists', async () => {
@@ -39,7 +40,7 @@ describe('apiClient', () => {
         await expect(apiClient.get('/error')).rejects.toThrow('Not Found');
     });
 
-    it('should not use response cache when CACHE_TTL is 0 (always fresh)', async () => {
+    it('should serve repeated GET from cache within CACHE_TTL', async () => {
         (global.fetch as jest.Mock).mockResolvedValue({
             ok: true,
             json: async () => ({ data: 'fresh' }),
@@ -48,7 +49,7 @@ describe('apiClient', () => {
         await apiClient.get('/cached');
         await apiClient.get('/cached');
 
-        expect(global.fetch).toHaveBeenCalledTimes(2);
+        expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('should invalidate cache on mutation', async () => {

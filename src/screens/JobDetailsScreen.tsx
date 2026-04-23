@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View, ScrollView, StyleSheet, Linking } from 'react-native';
+import { View, ScrollView, StyleSheet, Linking, Alert } from 'react-native';
 import FastImage from 'react-native-fast-image';
 import { Text, Card, Button, Avatar, Divider, List, Chip, Surface, IconButton, ProgressBar, TextInput, Menu, Portal } from 'react-native-paper';
 import { useJobs } from '../context/JobContext';
@@ -12,6 +12,24 @@ import { RootStackParamList, JobStatus, Urgency, User } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type JobDetailsRouteProp = RouteProp<RootStackParamList, 'JobDetails'>;
+
+/** Admin may force Completed when a vendor is assigned but has not finalized (matches server rules). */
+function adminMayMarkVendorJobComplete(job: { vendorId?: string; status?: string }): boolean {
+    if (!job?.vendorId) return false;
+    const s = (job.status || '').trim().toLowerCase().replace(/\s+/g, '');
+    if (!s) return false;
+    const blocked = new Set([
+        'completed',
+        'invoiced',
+        'invoicerequested',
+        'submitted',
+        'assigned',
+        'expired',
+    ]);
+    if (blocked.has(s)) return false;
+    const eligible = new Set(['sale', 'followup', 'accepted', 'reachedout', 'apptset']);
+    return eligible.has(s);
+}
 
 const getStatusStyle = (status: string) => {
     switch (status) {
@@ -55,6 +73,13 @@ const JobDetailsScreen: React.FC = () => {
             getApprovedVendors().then(setApprovedVendors);
         }
     }, [user, getApprovedVendors]);
+
+    React.useEffect(() => {
+        if (user?.role === 'Vendor') {
+            setShowAddPhotoMenu(false);
+            setShowPhotoInput(false);
+        }
+    }, [user?.role]);
 
     const fetchNotes = React.useCallback(async () => {
         if (!jobId) return;
@@ -108,6 +133,7 @@ const JobDetailsScreen: React.FC = () => {
     };
 
     const handlePhotoUpload = async (type: 'camera' | 'library') => {
+        if (user?.role === 'Vendor') return;
         setShowAddPhotoMenu(false);
         const options = {
             mediaType: 'photo' as const,
@@ -146,6 +172,7 @@ const JobDetailsScreen: React.FC = () => {
     };
 
     const handleDeletePhoto = async (photoUrl: string) => {
+        if (user?.role === 'Vendor') return;
         setIsDeletingPhoto(photoUrl);
         try {
             await removeJobPhoto(job.id, photoUrl);
@@ -481,7 +508,7 @@ const JobDetailsScreen: React.FC = () => {
                     <View style={styles.section}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                             <Text variant="titleMedium" style={[styles.sectionTitle, { marginBottom: 0 }]}>Request Photos</Text>
-                            {(user?.role === 'Vendor' || user?.role === 'Customer') && (
+                            {user?.role !== 'Vendor' && (
                                 <Menu
                                     visible={showAddPhotoMenu}
                                     onDismiss={() => setShowAddPhotoMenu(false)}
@@ -511,7 +538,7 @@ const JobDetailsScreen: React.FC = () => {
                                     <Text variant="labelSmall" style={{ marginTop: 4, textAlign: 'center', color: '#64748B' }}>Sharing photo...</Text>
                                 </View>
                             )}
-                            {showPhotoInput && !isUploading && (
+                            {showPhotoInput && !isUploading && user?.role !== 'Vendor' && (
                                 <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 12 }}>
                                     <TextInput
                                         placeholder="Paste image URL here..."
@@ -551,15 +578,17 @@ const JobDetailsScreen: React.FC = () => {
                                                 style={styles.photoThumbnail} 
                                                 resizeMode={FastImage.resizeMode.cover}
                                             />
-                                            <IconButton
-                                                icon="close-circle"
-                                                size={20}
-                                                iconColor="#EF4444"
-                                                style={styles.deletePhotoBtn}
-                                                onPress={() => handleDeletePhoto(uri)}
-                                                loading={isDeletingPhoto === uri}
-                                                disabled={!!isDeletingPhoto}
-                                            />
+                                            {user?.role !== 'Vendor' && (
+                                                <IconButton
+                                                    icon="close-circle"
+                                                    size={20}
+                                                    iconColor="#EF4444"
+                                                    style={styles.deletePhotoBtn}
+                                                    onPress={() => handleDeletePhoto(uri)}
+                                                    loading={isDeletingPhoto === uri}
+                                                    disabled={!!isDeletingPhoto}
+                                                />
+                                            )}
                                         </View>
                                     ) : null)}
                                 </ScrollView>
@@ -868,6 +897,42 @@ const JobDetailsScreen: React.FC = () => {
                         }}
                     >
                         Finalize & Complete
+                    </Button>
+                )}
+                {user?.role === 'Admin' && adminMayMarkVendorJobComplete(job) && (
+                    <Button
+                        mode="contained"
+                        style={styles.mainActionBtn}
+                        contentStyle={{ height: 56 }}
+                        buttonColor="#059669"
+                        icon="check-decagram"
+                        loading={isProcessing}
+                        onPress={() => {
+                            Alert.alert(
+                                'Mark job complete',
+                                'Move this job to Completed? Use this when the work is done but the vendor forgot to tap “Finalize & Complete”.',
+                                [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    {
+                                        text: 'Mark complete',
+                                        style: 'default',
+                                        onPress: async () => {
+                                            setIsProcessing(true);
+                                            try {
+                                                await completeJob(job.id, []);
+                                            } catch (e) {
+                                                console.error(e);
+                                                Alert.alert('Error', 'Could not mark the job complete. Please try again.');
+                                            } finally {
+                                                setIsProcessing(false);
+                                            }
+                                        },
+                                    },
+                                ],
+                            );
+                        }}
+                    >
+                        Mark complete (vendor missed)
                     </Button>
                 )}
                 {user?.role === 'Admin' && job.status === JobStatus.COMPLETED && (

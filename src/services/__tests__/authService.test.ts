@@ -2,8 +2,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '../authService';
 import { apiClient } from '../apiClient';
 import { UserRole } from '../../types/types';
+import { SecureStorage } from '../secureStorage';
 
 jest.mock('../apiClient');
+jest.mock('../secureStorage', () => ({
+    SecureStorage: {
+        setItem: jest.fn(() => Promise.resolve(true)),
+        removeItem: jest.fn(() => Promise.resolve(true)),
+        getItem: jest.fn(() => Promise.resolve(null)),
+    },
+}));
 
 describe('authService', () => {
     beforeEach(() => {
@@ -82,9 +90,9 @@ describe('authService', () => {
                 password: 'password123',
                 role: 'Customer',
             });
-            expect(AsyncStorage.setItem).toHaveBeenCalledWith('@auth_token', 'fake-token');
-            expect(AsyncStorage.setItem).toHaveBeenCalledWith('@current_user', JSON.stringify({ ...mockUser, role: UserRole.CUSTOMER }));
-            expect(result).toEqual({ ...mockUser, role: UserRole.CUSTOMER });
+            expect(SecureStorage.setItem).toHaveBeenCalledWith('auth_token', 'fake-token');
+            expect(AsyncStorage.setItem).toHaveBeenCalledWith('@current_user', JSON.stringify(mockUser));
+            expect(result).toEqual(mockUser);
         });
 
         it('should throw error if login fails', async () => {
@@ -98,7 +106,7 @@ describe('authService', () => {
     describe('logout', () => {
         it('should clear stored token and user', async () => {
             await authService.logout();
-            expect(AsyncStorage.removeItem).toHaveBeenCalledWith('@auth_token');
+            expect(SecureStorage.removeItem).toHaveBeenCalledWith('auth_token');
             expect(AsyncStorage.removeItem).toHaveBeenCalledWith('@current_user');
         });
     });

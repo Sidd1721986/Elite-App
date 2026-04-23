@@ -25,3 +25,4 @@ Never commit real secrets. Rotate anything that was ever exposed in git.
 
 - **Apple**: Privacy Nutrition Labels, accurate permission strings in `Info.plist`, signing and provisioning.
 - **Google Play**: Data safety form, signing key, target API level (see `android/app/build.gradle`).
+- **Legal URLs**: Production host must serve **`/privacy`**, **`/support`**, and **`/terms`** (see `docs/STORE-COMPLIANCE.md`); listing URLs should match the app.

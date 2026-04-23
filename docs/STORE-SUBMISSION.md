@@ -87,8 +87,9 @@ Apple accepts several device classes; you usually provide **one “primary” se
 ### Both stores
 
 - **Developer accounts:** [Apple Developer Program](https://developer.apple.com/programs/) (annual fee), [Google Play Console](https://play.google.com/console/) (one-time registration fee).
-- **Privacy policy URL** (public HTTPS) — required if you collect personal data, logins, etc.
-- **Support URL or email** (Apple often wants a contact; Play wants support).
+- **Privacy policy URL** (public HTTPS) — required if you collect personal data, logins, etc. (this project: `…/privacy` on your API site root).
+- **Terms of service URL** — recommended; this project serves **`…/terms`** from the same host.
+- **Support URL or email** (Apple often wants a contact; Play wants support). This project: **`…/support`**.
 - **Accurate description** — no misleading claims; match actual features (jobs, chat, roles, etc.).
 - **Demo account** for reviewers if login is required (Apple: App Review Information; Play: similar in testing instructions).
 - **Content rights** — fonts, images, logos, third-party APIs licensed.

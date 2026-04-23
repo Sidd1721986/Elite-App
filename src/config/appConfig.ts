@@ -42,3 +42,4 @@ export function getProductionBaseUrl(): string {
 
 export const PRIVACY_POLICY_URL = `${getProductionBaseUrl()}/privacy`;
 export const SUPPORT_URL = `${getProductionBaseUrl()}/support`;
+export const TERMS_OF_SERVICE_URL = `${getProductionBaseUrl()}/terms`;

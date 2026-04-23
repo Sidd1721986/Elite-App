@@ -175,5 +175,3 @@ const styles = StyleSheet.create({
 });
 
 export default LandingScreen;
-
-export default LandingScreen;

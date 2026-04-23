@@ -21,7 +21,9 @@
     "clean:ios": "cd ios && rm -rf build DerivedData && cd ..",
     "clean:ios:all": "cd ios && rm -rf build DerivedData Pods Podfile.lock && cd ..",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
+    "test:ci": "npm run typecheck && npm test",
     "postinstall": "cd ios && pod install && cd ..",
     "clean:deps": "node scripts/remove-node-modules.cjs && rm -f package-lock.json && npm install"
   },

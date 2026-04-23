@@ -8,6 +8,7 @@ import { UserRole } from '../types/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
 import AppLogo from '../components/AppLogo';
+import LegalConsentFooter from '../components/LegalConsentFooter';
 import { formatAddress, US_STATES } from '../utils/addressUtils';
 
 
@@ -34,6 +35,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [submitted, setSubmitted] = useState(false);
+    const [agreeLegal, setAgreeLegal] = useState(false);
     const { signup } = useAuth();
     const signupTimeoutRef = React.useRef<any>(null);
 
@@ -73,6 +75,12 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
 
         if (password !== confirmPassword) {
             setSnackbarMessage('Passwords do not match');
+            setSnackbarVisible(true);
+            return;
+        }
+
+        if (!agreeLegal) {
+            setSnackbarMessage('Please agree to the Terms of Service and Privacy Policy');
             setSnackbarVisible(true);
             return;
         }
@@ -148,7 +156,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
                                         mode="outlined"
                                         style={styles.input}
                                         returnKeyType="next"
-                                        onSubmitEditing={() => addressRef.current?.focus()}
+                                        onSubmitEditing={() => streetRef.current?.focus()}
                                         error={submitted && !name}
                                     />
 
@@ -293,6 +301,13 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
                                         returnKeyType="done"
                                         onSubmitEditing={handleSignup}
                                         error={submitted && !referralSource}
+                                    />
+
+                                    <LegalConsentFooter
+                                        agreed={agreeLegal}
+                                        onAgreedChange={setAgreeLegal}
+                                        onPrivacyPress={() => navigation.navigate('PrivacyPolicy')}
+                                        onTermsPress={() => navigation.navigate('TermsOfService')}
                                     />
 
                                     <Button

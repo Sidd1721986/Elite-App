@@ -13,7 +13,8 @@ import {
     Snackbar,
     Divider,
     Chip,
-    Menu
+    Menu,
+    List,
 } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
@@ -172,7 +173,7 @@ const ProfileScreen: React.FC = () => {
             <View style={styles.header}>
                 <IconButton
                     icon="arrow-left"
-                    onPress={() => navigation.goBack()}
+                    onPress={() => navigation.canGoBack() ? navigation.goBack() : (navigation as any).navigate('UserDashboard')}
                     containerColor="#FFFFFF"
                     iconColor="#6366F1"
                 />
@@ -514,7 +515,5 @@ const styles = StyleSheet.create({
         marginTop: 12,
     }
 });
-
-import { List } from 'react-native-paper';
 
 export default ProfileScreen;

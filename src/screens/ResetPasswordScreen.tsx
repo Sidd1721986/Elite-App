@@ -112,7 +112,7 @@ const ResetPasswordScreen: React.FC = () => {
                                 Update password
                             </Button>
 
-                            <Button mode="text" onPress={() => navigation.goBack()} textColor="#64748B">
+                            <Button mode="text" onPress={() => navigation.canGoBack() ? navigation.goBack() : (navigation as any).navigate('Login')} textColor="#64748B">
                                 Back
                             </Button>
                         </Card.Content>

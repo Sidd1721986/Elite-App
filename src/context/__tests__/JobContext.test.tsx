@@ -10,6 +10,7 @@ jest.mock('../../services/jobService');
 jest.mock('../../services/authService');
 jest.mock('../../utils/normalization', () => ({
     normalizeJob: (job: any) => job,
+    normalizeUser: (user: any) => user,
 }));
 
 // Mock InteractionManager to run immediately
@@ -28,7 +29,12 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 describe('JobContext', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.useFakeTimers({ advanceTimers: true });
         (authService.getCurrentUser as jest.Mock).mockResolvedValue({ id: '1', name: 'Test User', role: 'Admin' });
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
     it('should load jobs from AsyncStorage then from API', async () => {
@@ -40,8 +46,11 @@ describe('JobContext', () => {
 
         const { result } = renderHook(() => useJobs(), { wrapper });
 
-        // Wait for async loadJobs
+        // Wait for async loadJobs + InteractionManager + debounced cache write (800ms)
         await act(async () => { });
+        await act(async () => {
+            jest.advanceTimersByTime(1000);
+        });
 
         expect(result.current.jobs).toEqual(remoteJobs);
         expect(AsyncStorage.setItem).toHaveBeenCalledWith('@jobs_cache', JSON.stringify(remoteJobs));

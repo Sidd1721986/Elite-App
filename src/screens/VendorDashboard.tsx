@@ -150,10 +150,19 @@ const VendorDashboard: React.FC = () => {
         [filteredJobs],
     );
 
-    /** Everything the vendor should see in the feed, including new assignments they must accept. */
+    /**
+     * Everything the vendor should see in the feed, including new assignments they must accept.
+     *
+     * GATE: Jobs with status 'PartiallyAssigned' are intentionally excluded.
+     * The admin creates child jobs in that staging state while composing an assignment.
+     * Only after the admin clicks "Mark Fully Assigned" do those jobs flip to 'Assigned'
+     * and become visible here. This prevents vendors from seeing partial or in-progress
+     * work orders before the admin has confirmed the full scope.
+     */
     const vendorFeedJobs = useMemo(() => {
         const list = filteredJobs.filter(
             j =>
+                // Explicit allowlist — PartiallyAssigned is intentionally absent.
                 j.status === JobStatus.ASSIGNED ||
                 j.status === JobStatus.ACCEPTED ||
                 j.status === JobStatus.REACHED_OUT ||
@@ -207,10 +216,9 @@ const VendorDashboard: React.FC = () => {
 
         return (
             <MotiView
-                from={{ opacity: 0, translateY: 15 }}
+                from={reducedMotion ? { opacity: 1, translateY: 0 } : { opacity: 0, translateY: 15 }}
                 animate={{ opacity: 1, translateY: 0 }}
-                transition={{ type: 'timing', duration: 400, delay: index * 50 }}
-                reducedMotion={reducedMotion}
+                transition={{ type: 'timing', duration: 400, delay: reducedMotion ? 0 : index * 50 }}
             >
                 <Card
                     style={styles.orderCard}
@@ -349,12 +357,11 @@ const VendorDashboard: React.FC = () => {
                 </View>
 
                 <View style={styles.profileBox}>
-                    <MotiView 
-                        from={{ opacity: 0, translateX: -20 }}
+                    <MotiView
+                        from={reducedMotion ? { opacity: 1, translateX: 0 } : { opacity: 0, translateX: -20 }}
                         animate={{ opacity: 1, translateX: 0 }}
-                        transition={{ type: 'timing', duration: 500 }}
+                        transition={{ type: 'timing', duration: reducedMotion ? 0 : 500 }}
                         style={styles.profileInfo}
-                        reducedMotion={reducedMotion}
                     >
                         <Text variant="headlineSmall" style={styles.vendorName}>{user?.name || 'QuickFix Pro'}</Text>
                         <View style={styles.ratingBox}>
@@ -363,10 +370,9 @@ const VendorDashboard: React.FC = () => {
                         </View>
                     </MotiView>
                     <MotiView
-                        from={{ opacity: 0, scale: 0.5 }}
+                        from={reducedMotion ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.5 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        transition={{ type: 'spring', delay: 100 }}
-                        reducedMotion={reducedMotion}
+                        transition={{ type: 'spring', delay: reducedMotion ? 0 : 100 }}
                     >
                         <Avatar.Text
                             size={64}
@@ -543,6 +549,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
     },
     statItem: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
@@ -623,9 +630,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     customerRow: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
+        marginRight: 12,
     },
     miniAvatar: {
         backgroundColor: '#F1F5F9',

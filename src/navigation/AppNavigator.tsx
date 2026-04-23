@@ -150,6 +150,9 @@ const AppNavigator: React.FC = () => {
                     <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
                     <Stack.Screen name="UserSignup" component={UserSignupScreen} />
                     <Stack.Screen name="VendorSignup" component={VendorSignupScreen} />
+                    <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: 'Privacy Policy', headerShown: false }} />
+                    <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ title: 'Terms of Service', headerShown: false }} />
+                    <Stack.Screen name="ContactSupport" component={ContactSupportScreen} options={{ title: 'Help & Support', headerShown: false }} />
                 </Stack.Navigator>
             ) : (
                 <Stack.Navigator
