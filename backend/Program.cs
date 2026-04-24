@@ -120,6 +120,21 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+    // Job creation: 20 per user per hour prevents runaway submission loops.
+    options.AddPolicy("create-job", httpContext =>
+    {
+        var userId = httpContext.User?.FindFirst("id")?.Value
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anon";
+        return RateLimitPartition.GetSlidingWindowLimiter(userId, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromHours(1),
+            SegmentsPerWindow = 4,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
 });
 
 if (!builder.Environment.IsDevelopment())

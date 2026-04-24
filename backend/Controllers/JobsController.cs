@@ -2,6 +2,7 @@ using EliteApp.API.Data;
 using EliteApp.API.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -70,6 +71,8 @@ public class JobsController : ControllerBase
     {
         // Cap page size to prevent unbounded memory loads.
         pageSize = Math.Clamp(pageSize, 1, 200);
+        // Negative or zero page causes a negative SQL OFFSET — clamp to 1.
+        page = Math.Max(1, page);
         var userRole = User.FindFirstValue("role");
         var userIdString = User.FindFirstValue("id");
 
@@ -135,6 +138,7 @@ public class JobsController : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting("create-job")]
     public async Task<IActionResult> CreateJob([FromBody] CreateJobRequest request)
     {
         var userIdString = User.FindFirstValue("id");
@@ -153,13 +157,22 @@ public class JobsController : ControllerBase
             targetCustomerId = request.CustomerId.Value;
         }
 
-        if (string.IsNullOrWhiteSpace(request.Description) || 
-            string.IsNullOrWhiteSpace(request.Address) || 
-            string.IsNullOrWhiteSpace(request.ContactPhone) || 
+        if (string.IsNullOrWhiteSpace(request.Description) ||
+            string.IsNullOrWhiteSpace(request.Address) ||
+            string.IsNullOrWhiteSpace(request.ContactPhone) ||
             string.IsNullOrWhiteSpace(request.ContactEmail) ||
             request.Services == null || !request.Services.Any())
         {
             return BadRequest(new { message = "Services, Description, Address, ContactPhone, and ContactEmail are all mandatory fields." });
+        }
+
+        // Validate each service string: max 100 chars, alphanumeric + common punctuation only.
+        // Rejects path-traversal sequences (../, /, \) and oversized payloads.
+        var invalidServiceChars = new System.Text.RegularExpressions.Regex(@"[^\w\s\-,&'().]+");
+        foreach (var svc in request.Services)
+        {
+            if (string.IsNullOrWhiteSpace(svc) || svc.Length > 100 || invalidServiceChars.IsMatch(svc))
+                return BadRequest(new { message = $"Invalid service value: '{svc}'. Services must be plain text, max 100 characters each." });
         }
 
         int nextJobNumber;

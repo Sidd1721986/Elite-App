@@ -109,13 +109,22 @@ const ChatScreen: React.FC = () => {
 
     const [resolvedOtherUserId, setResolvedOtherUserId] = useState(otherUserId === 'admin' ? '' : otherUserId);
 
+    // Consecutive failure counter drives exponential backoff for the polling interval.
+    // Resets to 0 on a successful fetch so the interval snaps back to 20 s when healthy.
+    const pollFailCountRef = useRef(0);
+    // Holds the active polling timeout so we can cancel it on cleanup / on success reset.
+    const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const loadMessages = useCallback(async () => {
         if (!resolvedOtherUserId) return;
         try {
             const data = await messageService.getMessages(resolvedOtherUserId);
             setMessages(data);
+            // Reset backoff on success.
+            pollFailCountRef.current = 0;
         } catch (error) {
             console.error('Failed to load messages:', error);
+            pollFailCountRef.current += 1;
         } finally {
             setLoading(false);
         }
@@ -139,21 +148,46 @@ const ChatScreen: React.FC = () => {
 
     useEffect(() => {
         if (!resolvedOtherUserId || !isFocused) return;
-        loadMessages();
+
+        // Base interval: 20 s. Each consecutive failure doubles it, capped at 5 min.
+        // Calculated fresh before each schedule so success resets snaps back immediately.
+        const nextPollDelay = () => {
+            const failures = pollFailCountRef.current;
+            const backoff = Math.min(20000 * Math.pow(2, failures), 300000);
+            return backoff;
+        };
+
         let appState = AppState.currentState;
-        const interval = setInterval(() => {
-            if (appState === 'active') {
-                void loadMessages();
-            }
-        }, 20000);
+        let cancelled = false;
+
+        const schedulePoll = () => {
+            if (cancelled) return;
+            pollTimeoutRef.current = setTimeout(async () => {
+                if (cancelled) return;
+                if (appState === 'active') {
+                    await loadMessages();
+                }
+                schedulePoll();
+            }, nextPollDelay());
+        };
+
+        void loadMessages();
+        schedulePoll();
+
         const appStateSub = AppState.addEventListener('change', (next) => {
             appState = next;
             if (next === 'active') {
-                void loadMessages();
+                // Foreground resume: cancel pending backoff timeout and poll immediately,
+                // then re-schedule from a clean slate so the interval resets to 20 s.
+                if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+                pollFailCountRef.current = 0;
+                void loadMessages().then(() => { if (!cancelled) schedulePoll(); });
             }
         });
+
         return () => {
-            clearInterval(interval);
+            cancelled = true;
+            if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
             appStateSub.remove();
         };
     }, [loadMessages, resolvedOtherUserId, isFocused]);

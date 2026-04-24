@@ -809,7 +809,7 @@ const AdminDashboard: React.FC = () => {
                                             const stillNeedsVendor = remainingSvc > 0 || itemsLeft > 0;
                                             if (!stillNeedsVendor) return null;
                                             const partsLine = partsDone
-                                                .map(c => `#${c.jobNumber}${c.jobSuffix || ''} → ${c.vendor?.name || 'Vendor'}`)
+                                                .map(c => `#${c.jobNumber ?? ''}${c.jobSuffix || ''} → ${c.vendor?.name || 'Vendor'}`)
                                                 .join(' • ');
                                             const assignLine =
                                                 remainingSvc > 0
