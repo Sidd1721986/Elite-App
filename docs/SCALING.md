@@ -1,4 +1,4 @@
-# Scaling Playbook — Elite Home Services
+# Scaling Playbook — Elite Home Services USA
 
 > Reference guide for growing the infrastructure as user load increases. Start at Section 7 (checklist) before going live with > 100 users.
 

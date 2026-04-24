@@ -33,7 +33,7 @@ keytool -genkey -v \
 | `IOS_DISTRIBUTION_CERT_BASE64` | Export your Distribution cert from Keychain as `.p12`, then: `base64 -i cert.p12` |
 | `IOS_DISTRIBUTION_CERT_PASSWORD` | The password you set when exporting the `.p12` |
 | `IOS_PROVISION_PROFILE_BASE64` | Download the provisioning profile from developer.apple.com, then: `base64 -i profile.mobileprovision` |
-| `IOS_PROVISIONING_PROFILE_SPECIFIER` | The profile name exactly as it appears in Xcode (e.g. `Elite Home Services Distribution`) |
+| `IOS_PROVISIONING_PROFILE_SPECIFIER` | The profile name exactly as it appears in Xcode (e.g. `Elite Home Services USA Distribution`) |
 | `APPLE_TEAM_ID` | 10-character ID — find it at developer.apple.com under Membership |
 
 > These require an **Apple Developer account ($99/year)**. Sign up at [developer.apple.com](https://developer.apple.com).

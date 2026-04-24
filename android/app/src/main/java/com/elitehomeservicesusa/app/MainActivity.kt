@@ -1,4 +1,4 @@
-package com.eliteservices.app
+package com.elitehomeservicesusa.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

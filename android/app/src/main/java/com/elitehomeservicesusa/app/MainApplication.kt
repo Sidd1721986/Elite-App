@@ -1,4 +1,4 @@
-package com.eliteservices.app
+package com.elitehomeservicesusa.app
 
 import android.app.Application
 import com.facebook.react.PackageList

@@ -1,6 +1,6 @@
 # Azure DevOps Pipeline Guide (Elite App)
 
-This guide provides step-by-step instructions for triggering and managing the deployment pipelines for the Elite Home Services application.
+This guide provides step-by-step instructions for triggering and managing the deployment pipelines for the Elite Home Services USA application.
 
 ## 🛠️ 1. Required Setup (One-time)
 

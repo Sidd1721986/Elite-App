@@ -30,7 +30,7 @@ You must have the legal authority to bind the organization to legal agreements.
 
 ### 1. Create the App Record
 1. Go to the [Google Play Console](https://play.google.com/console).
-2. Click **Create app** and ensure it matches `com.eliteservices.app`.
+2. Click **Create app** and ensure it matches `com.elitehomeservicesusa.app`.
 
 ### 2. Generate Your Production Keystore
 Run this command in your terminal to create the file that "locks" your Android app for production.
@@ -53,7 +53,7 @@ keytool -genkey -v -keystore elite-production.jks -alias elite-app -keyalg RSA -
 
 ### 1. Create the App Record
 1. Go to [App Store Connect](https://appstoreconnect.apple.com/).
-2. Create a New App for Bundle ID `com.eliteservices.app`.
+2. Create a New App for Bundle ID `com.elitehomeservicesusa.app`.
 
 ### 2. Generate Signing Credentials
 1. **Certificate**: Create an **Apple Distribution** certificate in the Apple Portal.

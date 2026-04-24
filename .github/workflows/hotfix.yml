@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Hotfix Workflow — Elite Home Services
+# Hotfix Workflow — Elite Home Services USA
 # ─────────────────────────────────────────────────────────────────────────────
 # Purpose: Fast-path for production bug fixes that cannot wait for a normal
 #          CI/CD pipeline run.  Only triggered manually (workflow_dispatch) so
@@ -232,7 +232,7 @@ jobs:
           if [ -n "$SLACK_WEBHOOK_URL" ]; then
             PAYLOAD=$(cat <<JSON
           {
-            "text": "$ICON *Elite Home Services — Hotfix #${{ github.run_number }}*",
+            "text": "$ICON *Elite Home Services USA — Hotfix #${{ github.run_number }}*",
             "attachments": [
               {
                 "color": "$([ "$STATUS" = "success" ] && echo "good" || echo "danger")",
@@ -361,7 +361,7 @@ jobs:
           if [ -n "$SLACK_WEBHOOK_URL" ]; then
             PAYLOAD=$(cat <<JSON
           {
-            "text": "$ICON *Elite Home Services — Mobile OTA Hotfix #${{ github.run_number }}*",
+            "text": "$ICON *Elite Home Services USA — Mobile OTA Hotfix #${{ github.run_number }}*",
             "attachments": [
               {
                 "color": "$([ "$STATUS" = "success" ] && echo "good" || echo "danger")",

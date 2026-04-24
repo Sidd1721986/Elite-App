@@ -1,6 +1,6 @@
-# 🚀 Elite Home Services Submission Kit
+# 🚀 Elite Home Services USA Submission Kit
 
-This folder contains everything you need to submit **Elite Home Services** to the Apple App Store and Google Play Store.
+This folder contains everything you need to submit **Elite Home Services USA** to the Apple App Store and Google Play Store.
 
 ## 📂 Folder Structure
 
