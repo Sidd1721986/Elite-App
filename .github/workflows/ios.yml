@@ -9,10 +9,7 @@ name: iOS Build & TestFlight
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  push:
-    tags:
-      - 'v*'          # e.g. v1.0, v1.2.3 — triggers a full release build
-  workflow_dispatch:  # Manual trigger from Actions tab
+  workflow_dispatch:  # Manual only — run from GitHub Actions tab
 
 jobs:
   build-ios:

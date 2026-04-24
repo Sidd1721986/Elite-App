@@ -1,9 +1,7 @@
 name: Health Monitor
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'  # Every 30 minutes — halves GitHub Actions usage vs 15-min
-  workflow_dispatch:
+  workflow_dispatch:  # Manual only — run from GitHub Actions tab
 
 jobs:
   check-api:

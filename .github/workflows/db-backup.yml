@@ -1,9 +1,7 @@
 name: Database Backup
 
 on:
-  schedule:
-    - cron: '0 2 * * *'  # 2 AM UTC daily
-  workflow_dispatch:
+  workflow_dispatch:  # Manual only — run from GitHub Actions tab
     inputs:
       retention_days:
         description: 'Override backup retention (days)'

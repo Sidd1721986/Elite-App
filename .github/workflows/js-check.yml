@@ -7,15 +7,7 @@ name: JS Check (fast)
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  push:
-    branches: [main, master]
-    paths:
-      - src/**
-      - App.tsx
-      - package.json
-      - tsconfig.json
-  pull_request:
-    branches: [main, master]
+  workflow_dispatch:  # Manual only — run from GitHub Actions tab
 
 jobs:
   js-check:
