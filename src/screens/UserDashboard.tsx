@@ -245,6 +245,9 @@ const UserDashboard: React.FC = () => {
         jobs.filter(j => j.status === JobStatus.COMPLETED || j.status === JobStatus.INVOICED),
         [jobs]);
 
+    // Pre-slice to avoid recomputing inside ListFooterComponent on every render
+    const recentHistoryJobs = useMemo(() => historyJobs.slice(0, 3), [historyJobs]);
+
     const renderJobItem = useCallback(({ item, index }: { item: Job, index: number }) => (
         <JobItem
             job={item}
@@ -357,96 +360,95 @@ const UserDashboard: React.FC = () => {
         </View>
     ), [user, activeTab, settingsMenuVisible, handleLogout, navigation, messageUnreadTotal]);
 
-    const renderActiveTab = () => (
+    // Memoised FlashList sub-components — stable references prevent unnecessary
+    // FlashList re-renders when unrelated state (e.g. settingsMenu) changes.
+    const ListHeader = useCallback(() => (
+        <View style={styles.tabHeader}>
+            <MotiView
+                from={reducedMotion ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: 'spring', delay: reducedMotion ? 0 : 200 }}
+                style={styles.bannerSurface}
+            >
+                <View style={styles.bannerTextContainer}>
+                    {!isCustomer && (
+                        <Chip icon="eye-outline" style={{ marginBottom: 8, alignSelf: 'flex-start' }}>Preview Mode</Chip>
+                    )}
+                    <Text variant="titleLarge" style={styles.bannerTitle}>
+                        {isCustomer ? 'How can we help today?' : 'Service Request Preview'}
+                    </Text>
+                    <Text variant="bodyMedium" style={styles.bannerText}>
+                        {isCustomer
+                            ? 'Describe your needs and we\'ll assign the best experts for the job.'
+                            : 'This is a preview of the user request flow. Only User accounts can create requests.'
+                        }
+                    </Text>
+                    {isCustomer && (
+                        <Button
+                            mode="contained"
+                            icon="plus"
+                            style={styles.newJobBtn}
+                            labelStyle={{ fontWeight: '900' }}
+                            onPress={() => { clearForm(); setNewJobModalVisible(true); }}
+                        >
+                            Request Service
+                        </Button>
+                    )}
+                </View>
+                <AppLogo size={80} showSurface={false} />
+            </MotiView>
+
+            {isLoading ? (
+                <View style={{ marginTop: 20 }}>
+                    <JobSkeleton />
+                    <JobSkeleton />
+                    <JobSkeleton />
+                </View>
+            ) : activeJobs.length > 0 ? (
+                <View style={styles.sectionHeader}>
+                    <Text variant="titleMedium" style={styles.sectionTitle}>Ongoing Projects</Text>
+                    <Button mode="text" compact labelStyle={{ fontSize: 12 }}>View All</Button>
+                </View>
+            ) : null}
+        </View>
+    ), [isCustomer, isLoading, activeJobs.length, clearForm, reducedMotion]);
+
+    const ListFooter = useCallback(() => (
+        recentHistoryJobs.length > 0 ? (
+            <View style={styles.historySection}>
+                <View style={styles.sectionHeader}>
+                    <Text variant="titleMedium" style={styles.sectionTitle}>Recent History</Text>
+                    <Button mode="text" compact labelStyle={{ fontSize: 12 }}>Full Report</Button>
+                </View>
+                {recentHistoryJobs.map(item => (
+                    <JobItem key={item.id} job={item} onViewDetails={handleViewDetails} />
+                ))}
+            </View>
+        ) : null
+    ), [recentHistoryJobs, handleViewDetails]);
+
+    const ListEmpty = useCallback(() => (
+        <View style={styles.emptyContainer}>
+            <IconButton icon="hammer-wrench" size={48} iconColor="#E2E8F0" />
+            <Text variant="bodyLarge" style={styles.emptyText}>Ready to start your first project?</Text>
+        </View>
+    ), []);
+
+    const renderActiveTab = useCallback(() => (
         <View style={{ flex: 1 }}>
             <FlashListCompat
                 data={isLoading ? [] : activeJobs}
                 keyExtractor={(item: Job) => item.id}
                 renderItem={renderJobItem}
                 estimatedItemSize={250}
-                ListHeaderComponent={() => (
-                    <View style={styles.tabHeader}>
-                <MotiView
-                    from={reducedMotion ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ type: 'spring', delay: reducedMotion ? 0 : 200 }}
-                    style={styles.bannerSurface}
-                >
-                    <View style={styles.bannerTextContainer}>
-                        {!isCustomer && (
-                            <Chip icon="eye-outline" style={{ marginBottom: 8, alignSelf: 'flex-start' }}>Preview Mode</Chip>
-                        )}
-                        <Text variant="titleLarge" style={styles.bannerTitle}>
-                            {isCustomer ? 'How can we help today?' : 'Service Request Preview'}
-                        </Text>
-                        <Text variant="bodyMedium" style={styles.bannerText}>
-                            {isCustomer 
-                                ? 'Describe your needs and we\'ll assign the best experts for the job.'
-                                : 'This is a preview of the user request flow. Only User accounts can create requests.'
-                            }
-                        </Text>
-                        {isCustomer && (
-                            <Button
-                                mode="contained"
-                                icon="plus"
-                                style={styles.newJobBtn}
-                                labelStyle={{ fontWeight: '900' }}
-                                onPress={() => {
-                                    clearForm();
-                                    setNewJobModalVisible(true);
-                                }}
-                            >
-                                Request Service
-                            </Button>
-                        )}
-                    </View>
-                    <AppLogo size={80} showSurface={false} />
-                </MotiView>
-
-                        {isLoading ? (
-                            <View style={{ marginTop: 20 }}>
-                                <JobSkeleton />
-                                <JobSkeleton />
-                                <JobSkeleton />
-                            </View>
-                        ) : activeJobs.length > 0 && (
-                            <View style={styles.sectionHeader}>
-                                <Text variant="titleMedium" style={styles.sectionTitle}>
-                                    Ongoing Projects
-                                </Text>
-                                <Button mode="text" compact labelStyle={{ fontSize: 12 }}>View All</Button>
-                            </View>
-                        )}
-                    </View>
-                )}
-            ListFooterComponent={() => (
-                historyJobs.length > 0 ? (
-                    <View style={styles.historySection}>
-                        <View style={styles.sectionHeader}>
-                            <Text variant="titleMedium" style={styles.sectionTitle}>Recent History</Text>
-                            <Button mode="text" compact labelStyle={{ fontSize: 12 }}>Full Report</Button>
-                        </View>
-                        {historyJobs.slice(0, 3).map(item => (
-                            <JobItem
-                                key={item.id}
-                                job={item}
-                                onViewDetails={handleViewDetails}
-                            />
-                        ))}
-                    </View>
-                ) : null
-            )}
-            ListEmptyComponent={() => (
-                <View style={styles.emptyContainer}>
-                    <IconButton icon="hammer-wrench" size={48} iconColor="#E2E8F0" />
-                    <Text variant="bodyLarge" style={styles.emptyText}>Ready to start your first project?</Text>
-                </View>
-            )}
-            contentContainerStyle={styles.tabContent}
-            extraData={[isLoading, activeJobs, refreshing, messageUnreadTotal, historyJobs]}
+                ListHeaderComponent={ListHeader}
+                ListFooterComponent={ListFooter}
+                ListEmptyComponent={ListEmpty}
+                contentContainerStyle={styles.tabContent}
+                extraData={[isLoading, activeJobs, refreshing, messageUnreadTotal, recentHistoryJobs]}
             />
         </View>
-    );
+    ), [isLoading, activeJobs, renderJobItem, ListHeader, ListFooter, ListEmpty, refreshing, messageUnreadTotal, recentHistoryJobs]);
 
 
     const renderProfileTab = () => (

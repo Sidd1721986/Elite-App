@@ -250,7 +250,8 @@ const JobDetailsScreen: React.FC = () => {
         }
     };
 
-    const statusStyle = getStatusStyle(job.status);
+    // Memoised — getStatusStyle is a pure switch; no need to rerun on every render
+    const statusStyle = React.useMemo(() => getStatusStyle(job.status), [job.status]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -573,9 +574,9 @@ const JobDetailsScreen: React.FC = () => {
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
                                     {job.photos.map((uri, index) => uri ? (
                                         <View key={uri} style={styles.photoWrapper}>
-                                            <FastImage 
-                                                source={{ uri, priority: FastImage.priority.normal }} 
-                                                style={styles.photoThumbnail} 
+                                            <FastImage
+                                                source={{ uri, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }}
+                                                style={styles.photoThumbnail}
                                                 resizeMode={FastImage.resizeMode.cover}
                                             />
                                             {user?.role !== 'Vendor' && (
@@ -611,9 +612,9 @@ const JobDetailsScreen: React.FC = () => {
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
                                     {job.completedPhotos.map((uri, index) => uri ? (
                                         <View key={uri} style={styles.photoWrapper}>
-                                            <FastImage 
-                                                source={{ uri, priority: FastImage.priority.normal }} 
-                                                style={[styles.photoThumbnail, { borderColor: '#10B981' }]} 
+                                            <FastImage
+                                                source={{ uri, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }}
+                                                style={[styles.photoThumbnail, { borderColor: '#10B981' }]}
                                                 resizeMode={FastImage.resizeMode.cover}
                                             />
                                         </View>

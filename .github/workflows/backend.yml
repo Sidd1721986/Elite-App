@@ -13,6 +13,10 @@ on:
       - .github/workflows/backend.yml
   workflow_dispatch:
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 env:
   IMAGE_NAME: eliteapp-api
 
@@ -78,13 +82,108 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Save previous image tag
+        id: previous-image
+        run: |
+          if [ -z "${{ secrets.AZURE_RESOURCE_GROUP }}" ]; then
+            echo "Warning: AZURE_RESOURCE_GROUP secret is not set — skipping previous tag capture"
+            echo "previous_tag=" >> "$GITHUB_OUTPUT"
+          else
+            CURRENT_IMAGE=$(az webapp config container show \
+              --name "${{ secrets.AZURE_WEBAPP_NAME }}" \
+              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+              --query "[?name=='DOCKER_CUSTOM_IMAGE_NAME'].value | [0]" \
+              --output tsv 2>/dev/null || echo "")
+            echo "Current running image: $CURRENT_IMAGE"
+            # Extract just the tag portion (everything after the last colon)
+            PREV_TAG="${CURRENT_IMAGE##*:}"
+            echo "previous_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+            echo "Captured previous tag: $PREV_TAG"
+          fi
+
       - name: Deploy to Azure App Service
+        id: deploy
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
           images: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.run_number }}
 
+      - name: Configure auto-scaling rules
+        continue-on-error: true
+        run: |
+          if [ -z "${{ secrets.AZURE_RESOURCE_GROUP }}" ]; then
+            echo "Warning: AZURE_RESOURCE_GROUP secret is not set — skipping auto-scaling configuration"
+            exit 0
+          fi
+
+          WEBAPP_NAME="${{ secrets.AZURE_WEBAPP_NAME }}"
+          RESOURCE_GROUP="${{ secrets.AZURE_RESOURCE_GROUP }}"
+
+          echo "Fetching App Service Plan resource ID..."
+          PLAN_ID=$(az webapp show \
+            --name "$WEBAPP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "appServicePlanId" \
+            --output tsv 2>/dev/null || echo "")
+
+          if [ -z "$PLAN_ID" ]; then
+            echo "Could not retrieve App Service Plan ID — skipping auto-scaling"
+            exit 0
+          fi
+
+          AUTOSCALE_NAME="${WEBAPP_NAME}-autoscale"
+
+          echo "Checking for existing autoscale setting..."
+          EXISTING=$(az monitor autoscale show \
+            --name "$AUTOSCALE_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "name" \
+            --output tsv 2>/dev/null || echo "")
+
+          if [ -z "$EXISTING" ]; then
+            echo "Creating autoscale setting..."
+            az monitor autoscale create \
+              --name "$AUTOSCALE_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --resource "$PLAN_ID" \
+              --min-count 1 \
+              --max-count 5 \
+              --count 1
+          else
+            echo "Autoscale setting '$AUTOSCALE_NAME' already exists — updating instance bounds..."
+            az monitor autoscale update \
+              --name "$AUTOSCALE_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --min-count 1 \
+              --max-count 5 \
+              --count 1
+          fi
+
+          echo "Removing existing autoscale rules to ensure idempotency..."
+          PROFILE_NAME="default"
+
+          # Scale OUT: CPU > 70% for 5 minutes
+          echo "Adding scale-out rule (CPU > 70% for 5 min)..."
+          az monitor autoscale rule create \
+            --autoscale-name "$AUTOSCALE_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --condition "Percentage CPU > 70 avg 5m" \
+            --scale out 1 \
+            --cooldown 5 2>/dev/null || echo "Scale-out rule may already exist — continuing"
+
+          # Scale IN: CPU < 30% for 10 minutes
+          echo "Adding scale-in rule (CPU < 30% for 10 min)..."
+          az monitor autoscale rule create \
+            --autoscale-name "$AUTOSCALE_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --condition "Percentage CPU < 30 avg 10m" \
+            --scale in 1 \
+            --cooldown 10 2>/dev/null || echo "Scale-in rule may already exist — continuing"
+
+          echo "Auto-scaling configuration complete."
+
       - name: Post-deploy health check
+        id: health-check
         run: |
           set -e
           URL="https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net/health"
@@ -100,3 +199,93 @@ jobs:
           done
           echo "Health check failed after 3 minutes"
           exit 1
+
+      - name: Smoke tests
+        id: smoke-tests
+        run: |
+          BASE_URL="https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+          FAILED=0
+
+          echo "--- Smoke test: GET /health ---"
+          HEALTH_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE_URL/health" || echo "000")
+          echo "GET /health => HTTP $HEALTH_STATUS"
+          if [ "$HEALTH_STATUS" != "200" ]; then
+            echo "FAIL: /health returned $HEALTH_STATUS, expected 200"
+            FAILED=1
+          else
+            echo "PASS"
+          fi
+
+          echo "--- Smoke test: GET /api/jobs ---"
+          JOBS_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE_URL/api/jobs" || echo "000")
+          echo "GET /api/jobs => HTTP $JOBS_STATUS"
+          if [ "$JOBS_STATUS" = "200" ] || [ "$JOBS_STATUS" = "401" ]; then
+            echo "PASS (API is responding)"
+          else
+            echo "FAIL: /api/jobs returned $JOBS_STATUS, expected 200 or 401"
+            FAILED=1
+          fi
+
+          if [ "$FAILED" = "1" ]; then
+            echo "One or more smoke tests failed — triggering rollback"
+            exit 1
+          fi
+
+          echo "All smoke tests passed."
+
+      - name: Rollback on health check or smoke test failure
+        if: failure() && (steps.health-check.outcome == 'failure' || steps.smoke-tests.outcome == 'failure')
+        run: |
+          PREV_TAG="${{ steps.previous-image.outputs.previous_tag }}"
+
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "latest" ]; then
+            echo "No usable previous tag captured (got: '$PREV_TAG') — cannot perform automatic rollback"
+            echo "Manual intervention required."
+          else
+            echo "Rolling back to image tag: $PREV_TAG"
+
+            # Re-deploy the previous image via az CLI directly
+            az webapp config container set \
+              --name "${{ secrets.AZURE_WEBAPP_NAME }}" \
+              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+              --docker-custom-image-name "${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:$PREV_TAG"
+
+            echo "Rollback deploy issued. Waiting 60 seconds for app to restart..."
+            sleep 60
+
+            echo "Re-checking health after rollback..."
+            URL="https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net/health"
+            ROLLBACK_OK=0
+            for i in $(seq 1 12); do
+              STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+              echo "Rollback health check attempt $i: HTTP $STATUS"
+              if [ "$STATUS" = "200" ]; then
+                echo "Rollback health check passed — service restored to tag $PREV_TAG"
+                ROLLBACK_OK=1
+                break
+              fi
+              sleep 5
+            done
+
+            if [ "$ROLLBACK_OK" = "0" ]; then
+              echo "Rollback health check also failed — service may be degraded. Manual intervention required."
+            fi
+          fi
+
+          # Failure notification via Slack webhook
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            PAYLOAD=$(cat <<EOF
+          {
+            "text": ":rotating_light: *Backend deploy FAILED* and rollback was triggered.\n*Run:* <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|#${{ github.run_number }}>\n*Branch:* \`${{ github.ref_name }}\`\n*Commit:* \`${{ github.sha }}\`\n*Rolled back to:* \`$PREV_TAG\`"
+          }
+          EOF
+            )
+            curl -sS -X POST \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD" \
+              "${{ secrets.SLACK_WEBHOOK_URL }}"
+            echo "Slack failure notification sent."
+          else
+            echo "SLACK_WEBHOOK_URL not set — skipping Slack notification."
+            echo "Deploy failed for run #${{ github.run_number }} on branch ${{ github.ref_name }}, rolled back to tag: $PREV_TAG"
+          fi

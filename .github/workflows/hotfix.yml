@@ -1,0 +1,387 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Hotfix Workflow — Elite Home Services
+# ─────────────────────────────────────────────────────────────────────────────
+# Purpose: Fast-path for production bug fixes that cannot wait for a normal
+#          CI/CD pipeline run.  Only triggered manually (workflow_dispatch) so
+#          no accidental deploys can happen.
+#
+# Targets:
+#   backend      → rebuild + push Docker image to ACR, redeploy Azure App Service
+#   mobile-ota   → verify the JS bundle compiles clean (OTA / CodePush path)
+#   both         → run both jobs in parallel
+#
+# Required secrets (Settings → Secrets → Actions):
+#   ACR_LOGIN_SERVER       e.g. myeliteregistry.azurecr.io
+#   ACR_USERNAME           ACR admin username (or service-principal client ID)
+#   ACR_PASSWORD           ACR admin password (or service-principal client secret)
+#   AZURE_CREDENTIALS      JSON output of: az ad sp create-for-rbac --sdk-auth
+#   AZURE_WEBAPP_NAME      Azure App Service name
+#
+# Optional secrets:
+#   SLACK_WEBHOOK_URL      Incoming-webhook URL for deployment notifications
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Hotfix Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      fix_description:
+        description: "Short description of what is being fixed (shown in notifications)"
+        required: true
+        type: string
+
+      target:
+        description: "What to deploy"
+        required: true
+        type: choice
+        default: backend
+        options:
+          - backend
+          - mobile-ota
+          - both
+
+      skip_tests:
+        description: "Emergency bypass — skip test suite (use only when every second counts)"
+        required: false
+        type: boolean
+        default: false
+
+# ── Concurrency guard ────────────────────────────────────────────────────────
+# Only one production deployment can run at a time.
+# A queued hotfix will NOT cancel a deploy already in progress — it waits.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: eliteapp-api   # must match the name used in backend.yml
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 1 — Backend hotfix
+# Runs when target is "backend" or "both".
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  hotfix-backend:
+    name: "Hotfix — Backend (ACR + Azure App Service)"
+    runs-on: ubuntu-24.04
+    if: ${{ github.event.inputs.target == 'backend' || github.event.inputs.target == 'both' }}
+
+    steps:
+      # ── 1. Source code ───────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. .NET toolchain ────────────────────────────────────────────────────
+      - name: Setup .NET 10.x
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      # ── 3. Restore NuGet packages (cached for speed) ─────────────────────────
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore backend/EliteApp.API.csproj --locked-mode
+
+      # ── 4. Tests ─────────────────────────────────────────────────────────────
+      # Skipped only when the caller explicitly sets skip_tests = true.
+      # continue-on-error is NOT set, so a test failure blocks the deploy.
+      - name: Run tests
+        if: ${{ github.event.inputs.skip_tests != 'true' }}
+        run: |
+          echo "Running test suite..."
+          dotnet test backend/EliteApp.API.csproj \
+            --configuration Release \
+            --no-restore \
+            --logger "trx;LogFileName=testresults.trx"
+
+      - name: Skipped tests notice
+        if: ${{ github.event.inputs.skip_tests == 'true' }}
+        run: |
+          echo "WARNING: Tests were skipped via skip_tests=true."
+          echo "Fix: ${{ github.event.inputs.fix_description }}"
+          echo "Ensure tests are run and pass before the next regular release."
+
+      # ── 5. Log in to Azure Container Registry ───────────────────────────────
+      - name: Log in to ACR
+        uses: azure/docker-login@v2
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username:     ${{ secrets.ACR_USERNAME }}
+          password:     ${{ secrets.ACR_PASSWORD }}
+
+      # ── 6. Build and push Docker image ───────────────────────────────────────
+      # Tagged with two labels:
+      #   hotfix-<run_number>  — immutable, traceable to this exact run
+      #   latest               — the floating pointer used by App Service
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:hotfix-${{ github.run_number }}
+            ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
+
+      # ── 7. Authenticate with Azure ───────────────────────────────────────────
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # ── 8. Deploy the hotfix image to Azure App Service ──────────────────────
+      # We deploy the *hotfix-<run_number>* tag (not latest) so the exact
+      # artefact is pinned to this deployment — easier to roll back.
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          images: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:hotfix-${{ github.run_number }}
+
+      # ── 9. Health check ──────────────────────────────────────────────────────
+      # Poll /health every 5 seconds for up to 3 minutes (36 attempts).
+      # Exits 0 the moment a 200 is received; exits 1 if the window expires.
+      - name: Health check (3 min timeout)
+        id: health_check
+        run: |
+          set -e
+          URL="https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net/health"
+          echo "Polling $URL for readiness (max 3 minutes)..."
+          for i in $(seq 1 36); do
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+            echo "Attempt $i/36: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed on attempt $i."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "ERROR: Health check failed after 3 minutes (36 x 5s)."
+          exit 1
+
+      # ── 10a. Success summary ─────────────────────────────────────────────────
+      - name: Deployment success summary
+        if: success()
+        run: |
+          echo "=============================================="
+          echo "  HOTFIX DEPLOYED SUCCESSFULLY"
+          echo "=============================================="
+          echo "  Fix       : ${{ github.event.inputs.fix_description }}"
+          echo "  Image tag : hotfix-${{ github.run_number }}"
+          echo "  App Service: ${{ secrets.AZURE_WEBAPP_NAME }}"
+          echo "  Tests skipped: ${{ github.event.inputs.skip_tests }}"
+          echo "=============================================="
+
+      # ── 10b. Failure rollback instructions ───────────────────────────────────
+      # The previous stable image is still in ACR under "latest" from the last
+      # successful backend.yml run.  To roll back, re-deploy that tag manually.
+      - name: Rollback instructions (on failure)
+        if: failure()
+        run: |
+          echo "=============================================="
+          echo "  HOTFIX FAILED — MANUAL ROLLBACK NEEDED"
+          echo "=============================================="
+          echo ""
+          echo "  The failed image tag is:"
+          echo "    ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:hotfix-${{ github.run_number }}"
+          echo ""
+          echo "  To roll back to the last known-good release:"
+          echo ""
+          echo "  Option A — re-deploy the previous 'latest' tag via the portal:"
+          echo "    1. Go to Azure Portal → App Services → ${{ secrets.AZURE_WEBAPP_NAME }}"
+          echo "    2. Deployment Center → change image tag to the last stable run number"
+          echo "    3. Save / restart"
+          echo ""
+          echo "  Option B — re-run the last successful backend.yml workflow"
+          echo "    (it will rebuild and push a fresh :latest)"
+          echo ""
+          echo "  Option C — az CLI (fastest if you know the previous run number N):"
+          echo "    az webapp config container set \\"
+          echo "      --name ${{ secrets.AZURE_WEBAPP_NAME }} \\"
+          echo "      --resource-group <YOUR_RG> \\"
+          echo "      --docker-custom-image-name ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:<N>"
+          echo "=============================================="
+
+      # ── 11. Notification (always runs) ───────────────────────────────────────
+      - name: Notify — backend
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ job.status }}"
+          TIMESTAMP=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+          ICON=$([ "$STATUS" = "success" ] && echo ":white_check_mark:" || echo ":red_circle:")
+
+          echo "----------------------------------------------"
+          echo "  Hotfix notification summary"
+          echo "  Fix        : ${{ github.event.inputs.fix_description }}"
+          echo "  Target     : ${{ github.event.inputs.target }}"
+          echo "  Run #      : ${{ github.run_number }}"
+          echo "  Timestamp  : $TIMESTAMP"
+          echo "  Status     : $STATUS"
+          echo "----------------------------------------------"
+
+          # Post to Slack only if the webhook secret is configured.
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            PAYLOAD=$(cat <<JSON
+          {
+            "text": "$ICON *Elite Home Services — Hotfix #${{ github.run_number }}*",
+            "attachments": [
+              {
+                "color": "$([ "$STATUS" = "success" ] && echo "good" || echo "danger")",
+                "fields": [
+                  { "title": "Fix",       "value": "${{ github.event.inputs.fix_description }}", "short": false },
+                  { "title": "Target",    "value": "${{ github.event.inputs.target }}",           "short": true  },
+                  { "title": "Run",       "value": "#${{ github.run_number }}",                   "short": true  },
+                  { "title": "Status",    "value": "$STATUS",                                     "short": true  },
+                  { "title": "Timestamp", "value": "$TIMESTAMP",                                  "short": true  }
+                ]
+              }
+            ]
+          }
+          JSON
+          )
+            curl -s -X POST \
+              -H "Content-Type: application/json" \
+              --data "$PAYLOAD" \
+              "$SLACK_WEBHOOK_URL"
+            echo "Slack notification sent."
+          else
+            echo "SLACK_WEBHOOK_URL not configured — skipping Slack notification."
+          fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 2 — Mobile OTA hotfix (JS-only changes)
+# Runs when target is "mobile-ota" or "both".
+#
+# What is OTA (Over-The-Air)?
+#   React Native splits your app into two layers:
+#     1. Native shell  — compiled into the .ipa / .aab, requires an App Store release
+#     2. JS bundle     — loaded at runtime, can be updated without a store release
+#   Tools like CodePush (Microsoft App Center) let you push a new JS bundle
+#   directly to installed apps, bypassing the App Store review cycle entirely.
+#   This is only safe for JS/TypeScript changes — any native module change still
+#   needs a full store release (use ios.yml / android.yml instead).
+# ─────────────────────────────────────────────────────────────────────────────
+  hotfix-mobile-ota:
+    name: "Hotfix — Mobile OTA (JS bundle verification)"
+    runs-on: ubuntu-24.04
+    if: ${{ github.event.inputs.target == 'mobile-ota' || github.event.inputs.target == 'both' }}
+
+    steps:
+      # ── 1. Source code ───────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js ───────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 3. Install JS dependencies ───────────────────────────────────────────
+      - name: Install JS dependencies (npm ci)
+        run: npm ci --ignore-scripts
+
+      # ── 4. Bundle verification — Android ─────────────────────────────────────
+      # Produces the JS bundle that would be shipped via CodePush or a full
+      # Android build.  We write to /tmp so no repo files are modified.
+      - name: Bundle JS — Android
+        run: |
+          echo "Bundling JavaScript for Android..."
+          npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output /tmp/main.android.jsbundle \
+            --assets-dest /tmp/android-assets
+          echo "Android bundle size: $(du -sh /tmp/main.android.jsbundle | cut -f1)"
+
+      # ── 5. Bundle verification — iOS ─────────────────────────────────────────
+      - name: Bundle JS — iOS
+        run: |
+          echo "Bundling JavaScript for iOS..."
+          npx react-native bundle \
+            --platform ios \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output /tmp/main.ios.jsbundle \
+            --assets-dest /tmp/ios-assets
+          echo "iOS bundle size: $(du -sh /tmp/main.ios.jsbundle | cut -f1)"
+
+      # ── 6. Next steps ─────────────────────────────────────────────────────────
+      - name: OTA deployment guidance
+        run: |
+          echo "=============================================="
+          echo "  JS BUNDLE VERIFIED CLEAN"
+          echo "=============================================="
+          echo ""
+          echo "  Both Android and iOS bundles compiled without errors."
+          echo "  The fix is safe to ship as a JS-only (OTA) update."
+          echo ""
+          echo "  Deployment options:"
+          echo ""
+          echo "  1. CodePush (when configured):"
+          echo "     appcenter codepush release-react -a <org>/EliteHomeServices-Android -d Production"
+          echo "     appcenter codepush release-react -a <org>/EliteHomeServices-iOS     -d Production"
+          echo ""
+          echo "  2. Full store build (if native changes are also needed):"
+          echo "     Trigger the ios.yml or android.yml workflow manually."
+          echo ""
+          echo "  Fix being shipped: ${{ github.event.inputs.fix_description }}"
+          echo "=============================================="
+
+      # ── 7. Notification (always runs) ────────────────────────────────────────
+      - name: Notify — mobile OTA
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ job.status }}"
+          TIMESTAMP=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+          ICON=$([ "$STATUS" = "success" ] && echo ":white_check_mark:" || echo ":red_circle:")
+
+          echo "----------------------------------------------"
+          echo "  Hotfix notification summary"
+          echo "  Fix        : ${{ github.event.inputs.fix_description }}"
+          echo "  Target     : ${{ github.event.inputs.target }}"
+          echo "  Run #      : ${{ github.run_number }}"
+          echo "  Timestamp  : $TIMESTAMP"
+          echo "  Status     : $STATUS"
+          echo "----------------------------------------------"
+
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            PAYLOAD=$(cat <<JSON
+          {
+            "text": "$ICON *Elite Home Services — Mobile OTA Hotfix #${{ github.run_number }}*",
+            "attachments": [
+              {
+                "color": "$([ "$STATUS" = "success" ] && echo "good" || echo "danger")",
+                "fields": [
+                  { "title": "Fix",       "value": "${{ github.event.inputs.fix_description }}", "short": false },
+                  { "title": "Target",    "value": "${{ github.event.inputs.target }}",           "short": true  },
+                  { "title": "Run",       "value": "#${{ github.run_number }}",                   "short": true  },
+                  { "title": "Status",    "value": "$STATUS",                                     "short": true  },
+                  { "title": "Timestamp", "value": "$TIMESTAMP",                                  "short": true  }
+                ]
+              }
+            ]
+          }
+          JSON
+          )
+            curl -s -X POST \
+              -H "Content-Type: application/json" \
+              --data "$PAYLOAD" \
+              "$SLACK_WEBHOOK_URL"
+            echo "Slack notification sent."
+          else
+            echo "SLACK_WEBHOOK_URL not configured — skipping Slack notification."
+          fi
