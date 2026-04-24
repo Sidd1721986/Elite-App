@@ -43,6 +43,8 @@
 	<string>Elite Services needs photo library access when you attach images to a job.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Elite Services may save images to your library when you export or save job photos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Elite Home Services USA needs microphone access when recording video through the camera. Photos do not use the microphone.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
