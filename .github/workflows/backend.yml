@@ -72,6 +72,43 @@ jobs:
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.run_number }}
             ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
 
+      # Keep only the 10 most recent numbered tags in ACR — old images cost storage.
+      # `latest` and `hotfix-*` tags are excluded from cleanup.
+      - name: Prune old ACR images (keep last 10)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        continue-on-error: true
+        run: |
+          echo "Fetching all numbered tags for ${{ env.IMAGE_NAME }}..."
+          ALL_TAGS=$(az acr repository show-tags \
+            --name "$(echo '${{ secrets.ACR_LOGIN_SERVER }}' | cut -d'.' -f1)" \
+            --repository "${{ env.IMAGE_NAME }}" \
+            --orderby time_desc \
+            --output tsv 2>/dev/null || echo "")
+
+          if [ -z "$ALL_TAGS" ]; then
+            echo "No tags found or ACR not accessible — skipping cleanup."
+            exit 0
+          fi
+
+          # Only consider purely numeric tags (run numbers), skip latest/hotfix-*
+          NUMERIC_TAGS=$(echo "$ALL_TAGS" | grep -E '^[0-9]+$' || true)
+          TAGS_TO_DELETE=$(echo "$NUMERIC_TAGS" | tail -n +11)
+
+          if [ -z "$TAGS_TO_DELETE" ]; then
+            echo "Fewer than 10 numbered images — nothing to prune."
+            exit 0
+          fi
+
+          ACR_NAME="$(echo '${{ secrets.ACR_LOGIN_SERVER }}' | cut -d'.' -f1)"
+          echo "$TAGS_TO_DELETE" | while read tag; do
+            echo "Deleting ${{ env.IMAGE_NAME }}:$tag"
+            az acr repository delete \
+              --name "$ACR_NAME" \
+              --image "${{ env.IMAGE_NAME }}:$tag" \
+              --yes 2>/dev/null || true
+          done
+          echo "✅ ACR cleanup complete."
+
   deploy:
     runs-on: ubuntu-24.04
     needs: build-and-push

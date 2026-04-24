@@ -8,10 +8,13 @@ on:
       retention_days:
         description: 'Override backup retention (days)'
         required: false
-        default: '30'
+        default: '14'
 
 env:
-  BACKUP_RETENTION_DAYS: ${{ github.event.inputs.retention_days || '30' }}
+  # 14-day retention: recent backups stay hot, older ones move to Cool storage tier automatically.
+  # Azure PostgreSQL Flexible Server also provides 7-day point-in-time restore for free,
+  # so 14 days of manual backups gives full coverage with minimal storage cost.
+  BACKUP_RETENTION_DAYS: ${{ github.event.inputs.retention_days || '14' }}
 
 jobs:
   backup:
@@ -81,3 +84,27 @@ jobs:
             --auth-mode login \
             --query "{name:name, size:properties.contentLength, modified:properties.lastModified}" \
             --output table
+
+      # Move backups older than 7 days to Cool tier (50% cheaper) automatically.
+      # Backups older than BACKUP_RETENTION_DAYS are already deleted above,
+      # so only the 7-14 day window lives in Cool storage.
+      - name: Set blob lifecycle policy (Cool tier after 7 days)
+        continue-on-error: true
+        run: |
+          az storage account management-policy create \
+            --account-name "${{ secrets.BACKUP_STORAGE_ACCOUNT }}" \
+            --policy '{
+              "rules": [{
+                "name": "backup-tiering",
+                "enabled": true,
+                "type": "Lifecycle",
+                "definition": {
+                  "filters": { "blobTypes": ["blockBlob"], "prefixMatch": ["db-backups/"] },
+                  "actions": {
+                    "baseBlob": {
+                      "tierToCool": { "daysAfterModificationGreaterThan": 7 }
+                    }
+                  }
+                }
+              }]
+            }' || echo "⚠️  Lifecycle policy update skipped (may need Storage Blob Data Contributor role)"

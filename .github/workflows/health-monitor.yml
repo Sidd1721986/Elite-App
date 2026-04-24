@@ -2,7 +2,7 @@ name: Health Monitor
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Every 15 minutes
+    - cron: '*/30 * * * *'  # Every 30 minutes — halves GitHub Actions usage vs 15-min
   workflow_dispatch:
 
 jobs:

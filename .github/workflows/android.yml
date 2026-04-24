@@ -1,23 +1,16 @@
 name: Android Build & Play Store
 
+# ── Cost note ────────────────────────────────────────────────────────────────
+# Full signed AAB builds are only triggered on version tags or manual dispatch.
+# A fast JS/type-check runs on every push (see js-check.yml) to catch errors cheaply.
+# To release: git tag v1.2 && git push origin v1.2
+# ─────────────────────────────────────────────────────────────────────────────
+
 on:
   push:
-    branches: [main, master]
-    paths:
-      - android/**
-      - src/**
-      - App.tsx
-      - package.json
-      - .github/workflows/android.yml
-  pull_request:
-    branches: [main, master]
-    paths:
-      - android/**
-      - src/**
-      - App.tsx
-      - package.json
-      - .github/workflows/android.yml
-  workflow_dispatch:
+    tags:
+      - 'v*'          # e.g. v1.0, v1.2.3 — triggers a full release build
+  workflow_dispatch:  # Manual trigger from Actions tab
 
 jobs:
   build-android:
@@ -75,41 +68,30 @@ jobs:
           VERSION_NAME: "1.${{ github.run_number }}"
         run: ./gradlew bundleRelease --no-daemon
 
-      # Always save the AAB as a downloadable artifact (30-day retention).
+      # 7-day retention — Play Store is source of truth; no need to keep AABs long
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-aab-${{ github.run_number }}
           path: android/app/build/outputs/bundle/release/app-release.aab
-          retention-days: 30
+          retention-days: 7
 
-      # ── Play Store upload ────────────────────────────────────────────────────
-      # Runs only on pushes to main (not on PRs).
-      # Uploads to the "internal" testing track — safest entry point so you
-      # can promote to alpha → beta → production from the Play Console manually.
-      # Skips gracefully if GOOGLE_PLAY_SERVICE_ACCOUNT_JSON secret is not set
-      # (add it once you have your Google Play Console account).
+      # ── Play Store upload ────────────────────────────────────────────────
       - name: Check Play Store secret
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         id: play_check
         env:
           PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           if [ -z "$PLAY_JSON" ]; then
             echo "skip=true" >> $GITHUB_OUTPUT
-            echo "⚠️  GOOGLE_PLAY_SERVICE_ACCOUNT_JSON secret is not configured."
+            echo "⚠️  GOOGLE_PLAY_SERVICE_ACCOUNT_JSON not configured — skipping Play Store upload."
             echo "    AAB is available as a workflow artifact — upload manually for now."
-            echo "    Once you have your Google Play Console account, add the secret:"
-            echo "      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
           else
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Upload to Play Store (Internal Testing)
-        if: |
-          github.ref == 'refs/heads/main' &&
-          github.event_name == 'push' &&
-          steps.play_check.outputs.skip == 'false'
+        if: steps.play_check.outputs.skip == 'false'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
