@@ -85,7 +85,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.eliteservices.app"
+        applicationId "com.elitehomeservicesusa.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode (System.getenv("BUILD_NUMBER") ?: "1").toInteger()
