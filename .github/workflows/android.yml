@@ -1,4 +1,4 @@
-name: Android Build
+name: Android Build & Play Store
 
 on:
   push:
@@ -75,9 +75,47 @@ jobs:
           VERSION_NAME: "1.${{ github.run_number }}"
         run: ./gradlew bundleRelease --no-daemon
 
-      - name: Upload AAB
+      # Always save the AAB as a downloadable artifact (30-day retention).
+      - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-aab-${{ github.run_number }}
           path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
+
+      # ── Play Store upload ────────────────────────────────────────────────────
+      # Runs only on pushes to main (not on PRs).
+      # Uploads to the "internal" testing track — safest entry point so you
+      # can promote to alpha → beta → production from the Play Console manually.
+      # Skips gracefully if GOOGLE_PLAY_SERVICE_ACCOUNT_JSON secret is not set
+      # (add it once you have your Google Play Console account).
+      - name: Check Play Store secret
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: play_check
+        env:
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_JSON" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "⚠️  GOOGLE_PLAY_SERVICE_ACCOUNT_JSON secret is not configured."
+            echo "    AAB is available as a workflow artifact — upload manually for now."
+            echo "    Once you have your Google Play Console account, add the secret:"
+            echo "      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload to Play Store (Internal Testing)
+        if: |
+          github.ref == 'refs/heads/main' &&
+          github.event_name == 'push' &&
+          steps.play_check.outputs.skip == 'false'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.eliteservices.app
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: draft
+          releaseName: "1.${{ github.run_number }}"
+          mappingFile: android/app/build/outputs/mapping/release/mapping.txt
