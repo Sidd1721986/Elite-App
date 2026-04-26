@@ -5,7 +5,7 @@ import { User, Job, Contact, JobNote, JobStatus, Urgency } from '../types/types'
  * Handles casing differences and ensures required string properties exist.
  */
 export const normalizeUser = (user: any): User | undefined => {
-    if (!user || typeof user !== 'object' || Object.keys(user).length === 0) return undefined;
+    if (!user || typeof user !== 'object' || Object.keys(user).length === 0) {return undefined;}
 
     return {
         ...user,
@@ -36,7 +36,7 @@ export const normalizeJob = (job: any): Job => {
             photos: [],
             completedPhotos: [],   // was '' — must match string[] type so callers can safely call .map()
             contacts: [],
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
         } as Job;
     }
 

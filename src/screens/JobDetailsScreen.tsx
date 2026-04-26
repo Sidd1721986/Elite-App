@@ -15,9 +15,9 @@ type JobDetailsRouteProp = RouteProp<RootStackParamList, 'JobDetails'>;
 
 /** Admin may force Completed when a vendor is assigned but has not finalized (matches server rules). */
 function adminMayMarkVendorJobComplete(job: { vendorId?: string; status?: string }): boolean {
-    if (!job?.vendorId) return false;
+    if (!job?.vendorId) {return false;}
     const s = (job.status || '').trim().toLowerCase().replace(/\s+/g, '');
-    if (!s) return false;
+    if (!s) {return false;}
     const blocked = new Set([
         'completed',
         'invoiced',
@@ -26,7 +26,7 @@ function adminMayMarkVendorJobComplete(job: { vendorId?: string; status?: string
         'assigned',
         'expired',
     ]);
-    if (blocked.has(s)) return false;
+    if (blocked.has(s)) {return false;}
     const eligible = new Set(['sale', 'followup', 'accepted', 'reachedout', 'apptset']);
     return eligible.has(s);
 }
@@ -82,7 +82,7 @@ const JobDetailsScreen: React.FC = () => {
     }, [user?.role]);
 
     const fetchNotes = React.useCallback(async () => {
-        if (!jobId) return;
+        if (!jobId) {return;}
         try {
             const fetchedNotes = await jobService.getNotes(jobId);
             setNotes(Array.isArray(fetchedNotes) ? fetchedNotes : []);
@@ -93,8 +93,10 @@ const JobDetailsScreen: React.FC = () => {
     }, [jobId]);
 
     React.useEffect(() => {
-        if (jobId) fetchNotes();
+        if (jobId) {fetchNotes();}
     }, [fetchNotes, jobId]);
+
+    const statusStyle = React.useMemo(() => getStatusStyle(job?.status ?? ''), [job?.status]);
 
     if (!jobId) {
         return (
@@ -122,7 +124,7 @@ const JobDetailsScreen: React.FC = () => {
 
 
     const handleAddNote = async () => {
-        if (!noteContent.trim()) return;
+        if (!noteContent.trim()) {return;}
         try {
             await jobService.addNote(jobId, noteContent);
             setNoteContent('');
@@ -133,14 +135,14 @@ const JobDetailsScreen: React.FC = () => {
     };
 
     const handlePhotoUpload = async (type: 'camera' | 'library') => {
-        if (user?.role === 'Vendor') return;
+        if (user?.role === 'Vendor') {return;}
         setShowAddPhotoMenu(false);
         const options = {
             mediaType: 'photo' as const,
             quality: 0.8 as const,
         };
 
-        const result = type === 'camera' 
+        const result = type === 'camera'
             ? await launchCamera(options)
             : await launchImageLibrary(options);
 
@@ -148,14 +150,14 @@ const JobDetailsScreen: React.FC = () => {
             const asset = result.assets[0];
             setIsUploading(true);
             setUploadProgress(0.3);
-            
+
             try {
                 const fileToUpload = {
                     uri: asset.uri,
                     type: asset.type || 'image/jpeg',
                     name: asset.fileName || 'upload.jpg',
                 };
-                
+
                 const uploadResult = await jobService.uploadFile(fileToUpload);
                 if (uploadResult && uploadResult.url) {
                     setUploadProgress(0.8);
@@ -172,7 +174,7 @@ const JobDetailsScreen: React.FC = () => {
     };
 
     const handleDeletePhoto = async (photoUrl: string) => {
-        if (user?.role === 'Vendor') return;
+        if (user?.role === 'Vendor') {return;}
         setIsDeletingPhoto(photoUrl);
         try {
             await removeJobPhoto(job.id, photoUrl);
@@ -225,7 +227,7 @@ const JobDetailsScreen: React.FC = () => {
         const result =
             type === 'camera' ? await launchCamera(options) : await launchImageLibrary(options);
 
-        if (!result.assets?.[0]) return;
+        if (!result.assets?.[0]) {return;}
 
         const asset = result.assets[0];
         setIsUploading(true);
@@ -250,8 +252,6 @@ const JobDetailsScreen: React.FC = () => {
         }
     };
 
-    // Memoised — getStatusStyle is a pure switch; no need to rerun on every render
-    const statusStyle = React.useMemo(() => getStatusStyle(job.status), [job.status]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -319,16 +319,16 @@ const JobDetailsScreen: React.FC = () => {
                             ) : (
                                 <View>
                                     <View style={{ flexDirection: 'row', gap: 12 }}>
-                                        <Button 
-                                            mode="contained" 
+                                        <Button
+                                            mode="contained"
                                             style={{ flex: 1, borderRadius: 12, backgroundColor: '#6366F1' }}
                                             icon="camera"
                                             onPress={() => handleInvoiceImagePick('camera')}
                                         >
                                             Take Photo
                                         </Button>
-                                        <Button 
-                                            mode="contained" 
+                                        <Button
+                                            mode="contained"
                                             style={{ flex: 1, borderRadius: 12, backgroundColor: '#0F172A' }}
                                             icon="file-image-outline"
                                             onPress={() => handleInvoiceImagePick('library')}
@@ -337,8 +337,8 @@ const JobDetailsScreen: React.FC = () => {
                                         </Button>
                                     </View>
                                     <View style={{ marginTop: 12 }}>
-                                        <Button 
-                                            mode="outlined" 
+                                        <Button
+                                            mode="outlined"
                                             style={{ borderRadius: 12, borderColor: '#CBD5E1' }}
                                             icon="file-document-outline"
                                             onPress={handlePickDocument}
@@ -358,8 +358,8 @@ const JobDetailsScreen: React.FC = () => {
                                         activeOutlineColor="#6366F1"
                                     />
                                     {invoiceUrl.trim().length > 0 && (
-                                        <Button 
-                                            mode="text" 
+                                        <Button
+                                            mode="text"
                                             onPress={async () => {
                                                 setIsProcessing(true);
                                                 try {
@@ -389,8 +389,8 @@ const JobDetailsScreen: React.FC = () => {
                                     <Text variant="titleMedium" style={styles.contactName}>Job Invoice</Text>
                                     <Text variant="labelSmall" style={styles.contactType}>Document uploaded by vendor</Text>
                                 </View>
-                                <Button 
-                                    mode="outlined" 
+                                <Button
+                                    mode="outlined"
                                     icon="open-in-new"
                                     onPress={() => job.invoiceDocumentUrl && Linking.openURL(job.invoiceDocumentUrl)}
                                     style={{ borderRadius: 12 }}
@@ -409,9 +409,9 @@ const JobDetailsScreen: React.FC = () => {
                                 <Text variant="titleMedium" style={[styles.sectionTitle, { marginBottom: 0 }]}>
                                     Assign Work
                                 </Text>
-                                <Button 
-                                    mode="contained" 
-                                    compact 
+                                <Button
+                                    mode="contained"
+                                    compact
                                     onPress={() => (navigation as any).navigate('AssignVendor', { jobId: job.id })}
                                     style={{ borderRadius: 8 }}
                                 >
@@ -447,9 +447,9 @@ const JobDetailsScreen: React.FC = () => {
                                                 {child.vendor?.name || 'Unassigned'}
                                             </Text>
                                         </View>
-                                        <Button 
-                                            mode="text" 
-                                            compact 
+                                        <Button
+                                            mode="text"
+                                            compact
                                             labelStyle={{ fontSize: 11 }}
                                             onPress={() => (navigation as any).navigate('JobDetails', { jobId: child.id })}
                                         >
@@ -495,7 +495,7 @@ const JobDetailsScreen: React.FC = () => {
                                         </Text>
                                     </>
                                 )}
-                                
+
                                 {job.otherDetails && (
                                     <View style={styles.otherDetailsBox}>
                                         <Text variant="labelSmall" style={styles.subLabel}>ADDITIONAL NOTES</Text>
@@ -514,9 +514,9 @@ const JobDetailsScreen: React.FC = () => {
                                     visible={showAddPhotoMenu}
                                     onDismiss={() => setShowAddPhotoMenu(false)}
                                     anchor={
-                                        <Button 
-                                            mode="text" 
-                                            compact 
+                                        <Button
+                                            mode="text"
+                                            compact
                                             icon="plus-circle-outline"
                                             onPress={() => setShowAddPhotoMenu(true)}
                                             textColor="#6366F1"
@@ -551,10 +551,10 @@ const JobDetailsScreen: React.FC = () => {
                                         outlineColor="#E2E8F0"
                                         activeOutlineColor="#6366F1"
                                         right={
-                                            <TextInput.Icon 
-                                                icon="send" 
+                                            <TextInput.Icon
+                                                icon="send"
                                                 onPress={async () => {
-                                                    if (!newPhotoUrl.trim()) return;
+                                                    if (!newPhotoUrl.trim()) {return;}
                                                     setIsProcessing(true);
                                                     try {
                                                         await addJobPhotos(job.id, [newPhotoUrl]);
@@ -674,7 +674,7 @@ const JobDetailsScreen: React.FC = () => {
                                             icon="send"
                                             disabled={!noteContent.trim()}
                                             onPress={handleAddNote}
-                                            color={noteContent.trim() ? "#6366F1" : "#CBD5E1"}
+                                            color={noteContent.trim() ? '#6366F1' : '#CBD5E1'}
                                         />
                                     }
                                 />

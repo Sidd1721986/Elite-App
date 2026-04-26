@@ -7,13 +7,13 @@ import {
     IconButton,
     List,
     Divider,
-    Chip
+    Chip,
 } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import {
-    RootStackParamList
+    RootStackParamList,
 } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -48,7 +48,7 @@ const AccountDetailsScreen: React.FC = () => {
         );
     };
 
-    if (!user) return null;
+    if (!user) {return null;}
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     infoText: {
         color: '#4F46E5',
         lineHeight: 18,
-    }
+    },
 });
 
 export default AccountDetailsScreen;

@@ -39,8 +39,8 @@ class RootErrorBoundary extends React.Component<
                 <View style={errorStyles.box}>
                     <Text style={errorStyles.title}>Something went wrong</Text>
                     <Text style={errorStyles.msg}>{this.state.error.message}</Text>
-                    <Button 
-                        mode="contained" 
+                    <Button
+                        mode="contained"
                         onPress={this.handleReset}
                         style={{ marginTop: 24, borderRadius: 8 }}
                         buttonColor="#991B1B"

@@ -10,7 +10,7 @@ import {
     Portal, Modal, TextInput, List, IconButton,
     Chip,
     Menu, SegmentedButtons, Snackbar,
-    ProgressBar, Dialog
+    ProgressBar, Dialog,
 } from 'react-native-paper';
 import { MotiView, MotiText } from 'moti';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -39,7 +39,7 @@ const UserDashboard: React.FC = () => {
     const navigation = useNavigation<NavigationProp>();
 
     const isCustomer = useMemo(() => {
-        if (!user?.role) return false;
+        if (!user?.role) {return false;}
         const role = user.role.toLowerCase();
         return role !== 'admin' && role !== 'vendor';
     }, [user?.role]);
@@ -71,7 +71,7 @@ const UserDashboard: React.FC = () => {
     const [contactEmail, setContactEmail] = useState(user?.email || '');
     const [photos, setPhotos] = useState<string[]>([]);
     const [selectedServices, setSelectedServices] = useState<string[]>([]);
-    
+
     // Auto-populate description from selected services
     React.useEffect(() => {
         if (selectedServices.length > 0) {
@@ -128,29 +128,29 @@ const UserDashboard: React.FC = () => {
         setPhotos([]);
         setSelectedServices([]);
         setEditingJobId(null);
-        
+
         const parts = parseAddress(user?.address);
         setStreet(parts.street);
         setCity(parts.city);
         setZip(parts.zip);
         setState(parts.state);
-        
+
         setContactPhone(user?.phone || '');
         setContactEmail(user?.email || '');
     }, [user]);
 
     const handleSubmitJob = useCallback(async () => {
         const address = formatAddress({ street, city, zip, state });
-        
+
         const missingFields = [];
-        if (!street.trim()) missingFields.push('Address');
-        if (!city.trim()) missingFields.push('City');
-        if (!zip.trim()) missingFields.push('Zip');
-        if (!state.trim()) missingFields.push('State');
-        if (selectedServices.length === 0) missingFields.push('Services');
-        if (!description.trim()) missingFields.push('What\'s needs fixing');
-        if (!contactPhone.trim()) missingFields.push('Contact Phone');
-        if (!contactEmail.trim()) missingFields.push('Contact Email');
+        if (!street.trim()) {missingFields.push('Address');}
+        if (!city.trim()) {missingFields.push('City');}
+        if (!zip.trim()) {missingFields.push('Zip');}
+        if (!state.trim()) {missingFields.push('State');}
+        if (selectedServices.length === 0) {missingFields.push('Services');}
+        if (!description.trim()) {missingFields.push('What\'s needs fixing');}
+        if (!contactPhone.trim()) {missingFields.push('Contact Phone');}
+        if (!contactEmail.trim()) {missingFields.push('Contact Email');}
 
         if (missingFields.length > 0) {
             setSnackbarMessage(`Missing: ${missingFields.join(', ')}`);
@@ -563,7 +563,7 @@ const UserDashboard: React.FC = () => {
                                 visible={showStateMenu}
                                 onDismiss={() => setShowStateMenu(false)}
                                 anchor={
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         onPress={() => setShowStateMenu(true)}
                                         activeOpacity={1}
                                         style={{ flex: 1 }}
@@ -595,7 +595,7 @@ const UserDashboard: React.FC = () => {
                                 </ScrollView>
                             </Menu>
                         </View>
-                        
+
                         <Text variant="titleSmall" style={styles.sectionLabel}>Select Services Needed *</Text>
                         <Menu
                             visible={showServicesMenu}

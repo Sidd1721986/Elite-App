@@ -163,8 +163,8 @@ const AdminDashboard: React.FC = () => {
     const jobsDeduped = useMemo(() => {
         const seen = new Set<string>();
         return jobs.filter(j => {
-            if (!j?.id) return false;
-            if (seen.has(j.id)) return false;
+            if (!j?.id) {return false;}
+            if (seen.has(j.id)) {return false;}
             seen.add(j.id);
             return true;
         });
@@ -174,7 +174,7 @@ const AdminDashboard: React.FC = () => {
         // Hide only true shell records (typically split-parent containers) but keep real submitted requests visible.
         const visibleJobs = jobsDeduped.filter(j => {
             // Split children are represented on the parent card; do not show duplicate rows.
-            if (j.parentJobId) return false;
+            if (j.parentJobId) {return false;}
 
             const hasServices = Array.isArray(j.services) && j.services.length > 0;
             const hasItems = Array.isArray(j.items) && j.items.length > 0;
@@ -187,13 +187,13 @@ const AdminDashboard: React.FC = () => {
             const hasChildren = Array.isArray(j.childJobs) && j.childJobs.length > 0;
 
             // Keep any real request/activity row; hide only empty parent containers.
-            if (hasServices || hasItems || hasVendor || hasCustomerContent) return true;
+            if (hasServices || hasItems || hasVendor || hasCustomerContent) {return true;}
             return !hasChildren;
         });
 
-        if (!searchQuery.trim()) return visibleJobs;
+        if (!searchQuery.trim()) {return visibleJobs;}
         const query = searchQuery.toLowerCase().trim();
-        return visibleJobs.filter(j => 
+        return visibleJobs.filter(j =>
             j.address?.toLowerCase().includes(query) ||
             j.description?.toLowerCase().includes(query) ||
             j.jobNumber?.toString().includes(query) ||
@@ -204,7 +204,7 @@ const AdminDashboard: React.FC = () => {
 
     /** Vendor list filtered by the inline search bar in the Verified Vendors section. */
     const filteredApprovedVendors = useMemo(() => {
-        if (!vendorSearch.trim()) return approvedVendors;
+        if (!vendorSearch.trim()) {return approvedVendors;}
         const q = vendorSearch.toLowerCase().trim();
         return approvedVendors.filter(v =>
             v.name?.toLowerCase().includes(q) ||
@@ -250,8 +250,8 @@ const AdminDashboard: React.FC = () => {
             const result: Job[] = [];
 
             const add = (child: any) => {
-                if (!child?.id || seen.has(String(child.id))) return;
-                if (!statusSet.has(child.status)) return;
+                if (!child?.id || seen.has(String(child.id))) {return;}
+                if (!statusSet.has(child.status)) {return;}
                 seen.add(String(child.id));
                 result.push({
                     ...child,
@@ -305,7 +305,7 @@ const AdminDashboard: React.FC = () => {
 
     /** In Progress list filtered by the inline search bar. Must come AFTER activeProjects. */
     const filteredActiveProjects = useMemo(() => {
-        if (!inProgressSearch.trim()) return activeProjects;
+        if (!inProgressSearch.trim()) {return activeProjects;}
         const q = inProgressSearch.toLowerCase().trim();
         return activeProjects.filter(j =>
             j.address?.toLowerCase().includes(q) ||
@@ -359,16 +359,16 @@ const AdminDashboard: React.FC = () => {
     const updateSectionY = useCallback((_key: string, _y: number) => {}, []);
 
     const getTimelineBarColor = useCallback((createdAt: string): string => {
-        if (!createdAt) return '#22C55E';
+        if (!createdAt) {return '#22C55E';}
         const created = new Date(createdAt).getTime();
-        if (Number.isNaN(created)) return '#22C55E';
+        if (Number.isNaN(created)) {return '#22C55E';}
         const now = Date.now();
         const hoursElapsed = Math.max(0, (now - created) / (1000 * 60 * 60));
-        if (hoursElapsed <= 12) return '#22C55E';   // green
-        if (hoursElapsed <= 24) return '#84CC16';   // lime
-        if (hoursElapsed <= 36) return '#EAB308';   // yellow
-        if (hoursElapsed <= 48) return '#F97316';   // orange
-        if (hoursElapsed <= 60) return '#EF4444';   // red
+        if (hoursElapsed <= 12) {return '#22C55E';}   // green
+        if (hoursElapsed <= 24) {return '#84CC16';}   // lime
+        if (hoursElapsed <= 36) {return '#EAB308';}   // yellow
+        if (hoursElapsed <= 48) {return '#F97316';}   // orange
+        if (hoursElapsed <= 60) {return '#EF4444';}   // red
         return '#B91C1C';                            // super red (past 48h)
     }, []);
 
@@ -452,15 +452,20 @@ const AdminDashboard: React.FC = () => {
                             />
                         }
                     >
-                        <Menu.Item 
-                            leadingIcon="account-circle-outline" 
-                            onPress={() => { setSettingsMenuVisible(false); navigation.navigate('Profile'); }} 
-                            title="Profile Settings" 
+                        <Menu.Item
+                            leadingIcon="account-circle-outline"
+                            onPress={() => { setSettingsMenuVisible(false); navigation.navigate('Profile'); }}
+                            title="Profile Settings"
                         />
-                        <Menu.Item 
-                            leadingIcon="information-outline" 
-                            onPress={() => { setSettingsMenuVisible(false); navigation.navigate('AccountDetails'); }} 
-                            title="Account Details" 
+                        <Menu.Item
+                            leadingIcon="information-outline"
+                            onPress={() => { setSettingsMenuVisible(false); navigation.navigate('AccountDetails'); }}
+                            title="Account Details"
+                        />
+                        <Menu.Item
+                            leadingIcon="account-plus-outline"
+                            onPress={() => { setSettingsMenuVisible(false); navigation.navigate('InviteAdmin'); }}
+                            title="Invite Admin"
                         />
                         <Divider />
                         <Menu.Item leadingIcon="logout" onPress={handleLogout} title="Logout" />
@@ -591,7 +596,7 @@ const AdminDashboard: React.FC = () => {
     const listData = useMemo<AdminDashboardDataItem[]>(() => {
         const data: AdminDashboardDataItem[] = [];
         // Header is handled by ListHeaderComponent to keep it sticky or standard
-        
+
         // Inbox Section
         data.push({ type: 'section_inbox' });
 
@@ -807,7 +812,7 @@ const AdminDashboard: React.FC = () => {
                                             const remainingSvc = job.services?.length || 0;
                                             const itemsLeft = (job.items || []).filter(i => i && !i.isAssigned).length;
                                             const stillNeedsVendor = remainingSvc > 0 || itemsLeft > 0;
-                                            if (!stillNeedsVendor) return null;
+                                            if (!stillNeedsVendor) {return null;}
                                             const partsLine = partsDone
                                                 .map(c => `#${c.jobNumber ?? ''}${c.jobSuffix || ''} → ${c.vendor?.name || 'Vendor'}`)
                                                 .join(' • ');

@@ -42,7 +42,7 @@ const MessageItem = memo(({ item, isMe, otherUserName }: {
 }) => {
     const parsed = parseChatMessageContent(item.content);
     const openImage = () => {
-        if (parsed.kind !== 'image') return;
+        if (parsed.kind !== 'image') {return;}
         Linking.openURL(parsed.url).catch(() => {
             Alert.alert('Unable to open', 'This image link could not be opened.');
         });
@@ -70,7 +70,7 @@ const MessageItem = memo(({ item, isMe, otherUserName }: {
                             onError={() => {
                                 // Image failed to load — FastImage will show blank;
                                 // the Pressable still lets the user open the URL directly.
-                                if (__DEV__) console.warn('Chat image failed to load:', parsed.url);
+                                if (__DEV__) {console.warn('Chat image failed to load:', parsed.url);}
                             }}
                         />
                     </Pressable>
@@ -116,7 +116,7 @@ const ChatScreen: React.FC = () => {
     const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const loadMessages = useCallback(async () => {
-        if (!resolvedOtherUserId) return;
+        if (!resolvedOtherUserId) {return;}
         try {
             const data = await messageService.getMessages(resolvedOtherUserId);
             setMessages(data);
@@ -137,7 +137,7 @@ const ChatScreen: React.FC = () => {
                     const id = await messageService.getDefaultAdminId();
                     setResolvedOtherUserId(id);
                 } catch (error) {
-                    if (__DEV__) console.error('Failed to resolve admin ID:', error);
+                    if (__DEV__) {console.error('Failed to resolve admin ID:', error);}
                     // Release the spinner so the user isn't stuck on a blank screen.
                     setLoading(false);
                 }
@@ -147,7 +147,7 @@ const ChatScreen: React.FC = () => {
     }, [otherUserId]);
 
     useEffect(() => {
-        if (!resolvedOtherUserId || !isFocused) return;
+        if (!resolvedOtherUserId || !isFocused) {return;}
 
         // Base interval: 20 s. Each consecutive failure doubles it, capped at 5 min.
         // Calculated fresh before each schedule so success resets snaps back immediately.
@@ -161,9 +161,9 @@ const ChatScreen: React.FC = () => {
         let cancelled = false;
 
         const schedulePoll = () => {
-            if (cancelled) return;
+            if (cancelled) {return;}
             pollTimeoutRef.current = setTimeout(async () => {
-                if (cancelled) return;
+                if (cancelled) {return;}
                 if (appState === 'active') {
                     await loadMessages();
                 }
@@ -179,15 +179,15 @@ const ChatScreen: React.FC = () => {
             if (next === 'active') {
                 // Foreground resume: cancel pending backoff timeout and poll immediately,
                 // then re-schedule from a clean slate so the interval resets to 20 s.
-                if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+                if (pollTimeoutRef.current) {clearTimeout(pollTimeoutRef.current);}
                 pollFailCountRef.current = 0;
-                void loadMessages().then(() => { if (!cancelled) schedulePoll(); });
+                void loadMessages().then(() => { if (!cancelled) {schedulePoll();} });
             }
         });
 
         return () => {
             cancelled = true;
-            if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+            if (pollTimeoutRef.current) {clearTimeout(pollTimeoutRef.current);}
             appStateSub.remove();
         };
     }, [loadMessages, resolvedOtherUserId, isFocused]);
@@ -200,7 +200,7 @@ const ChatScreen: React.FC = () => {
     }, []);
 
     const pickAndSendImage = useCallback(async (source: 'camera' | 'library') => {
-        if (!resolvedOtherUserId || imageSending || sending) return;
+        if (!resolvedOtherUserId || imageSending || sending) {return;}
         setAttachMenuVisible(false);
         const options = { mediaType: 'photo' as const, quality: 0.8 as const };
         let result;
@@ -210,11 +210,11 @@ const ChatScreen: React.FC = () => {
                 : await launchImageLibrary(options);
         } catch (e) {
             // Native picker threw (e.g. permission denied at OS level on Android)
-            if (__DEV__) console.warn('Image picker failed to open:', e);
+            if (__DEV__) {console.warn('Image picker failed to open:', e);}
             Alert.alert('Permission Denied', 'Please allow camera or photo access in Settings.');
             return;
         }
-        if (result.didCancel || !result.assets?.[0]?.uri) return;
+        if (result.didCancel || !result.assets?.[0]?.uri) {return;}
         const asset = result.assets[0];
         setImageSending(true);
         try {
@@ -224,12 +224,12 @@ const ChatScreen: React.FC = () => {
                 name: asset.fileName || 'chat.jpg',
             };
             const uploadResult = await jobService.uploadFile(fileToUpload);
-            if (!uploadResult?.url) throw new Error('Upload failed');
+            if (!uploadResult?.url) {throw new Error('Upload failed');}
             const newMessage = await messageService.sendImageMessage(resolvedOtherUserId, uploadResult.url);
             setMessages(prev => [...prev, newMessage]);
             scheduleScrollToBottom();
         } catch (e) {
-            if (__DEV__) console.error('Chat image send failed:', e);
+            if (__DEV__) {console.error('Chat image send failed:', e);}
             Alert.alert('Error', 'Could not send photo. Please try again.');
         } finally {
             setImageSending(false);
@@ -237,7 +237,7 @@ const ChatScreen: React.FC = () => {
     }, [resolvedOtherUserId, imageSending, sending, scheduleScrollToBottom]);
 
     const handleSendMessage = async () => {
-        if (!inputText.trim() || sending || imageSending || !resolvedOtherUserId) return;
+        if (!inputText.trim() || sending || imageSending || !resolvedOtherUserId) {return;}
 
         setSending(true);
         try {
@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-    }
+    },
 });
 
 export default ChatScreen;

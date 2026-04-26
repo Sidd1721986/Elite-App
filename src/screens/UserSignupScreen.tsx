@@ -56,7 +56,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
     const handleSignup = async () => {
         setSubmitted(true);
         const address = formatAddress({ street, city, zip, state });
-        
+
         if (!name || !email || !street || !city || !zip || !state || !phone || !password || !confirmPassword || !referralSource || (selectedRole === UserRole.OTHER && !roleOther)) {
             setSnackbarMessage('Please fill in all required fields');
             setSnackbarVisible(true);
@@ -163,7 +163,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
                                 <Card.Content>
                                     <TextInput
                                         ref={nameRef}
-                                        label={submitted && !name ? "Full Name *" : "Full Name"}
+                                        label={submitted && !name ? 'Full Name *' : 'Full Name'}
                                         value={name}
                                         onChangeText={setName}
                                         autoCapitalize="words"
@@ -176,7 +176,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
 
                                     <TextInput
                                         ref={streetRef}
-                                        label={submitted && !street ? "Street Address *" : "Street Address"}
+                                        label={submitted && !street ? 'Street Address *' : 'Street Address'}
                                         value={street}
                                         onChangeText={setStreet}
                                         mode="outlined"
@@ -189,7 +189,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
                                     <View style={styles.formRow}>
                                         <TextInput
                                             ref={cityRef}
-                                            label={submitted && !city ? "City *" : "City"}
+                                            label={submitted && !city ? 'City *' : 'City'}
                                             value={city}
                                             onChangeText={setCity}
                                             mode="outlined"
@@ -200,7 +200,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
                                         />
                                         <TextInput
                                             ref={zipRef}
-                                            label={submitted && !zip ? "Zip *" : "Zip"}
+                                            label={submitted && !zip ? 'Zip *' : 'Zip'}
                                             value={zip}
                                             onChangeText={setZip}
                                             mode="outlined"
@@ -214,7 +214,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
                                             visible={showStateMenu}
                                             onDismiss={() => setShowStateMenu(false)}
                                             anchor={
-                                                <TouchableOpacity 
+                                                <TouchableOpacity
                                                     onPress={() => setShowStateMenu(true)}
                                                     activeOpacity={1}
                                                     style={{ flex: 1.2 }}
@@ -222,7 +222,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
                                                     <View pointerEvents="none">
                                                         <TextInput
                                                             ref={stateRef}
-                                                            label={submitted && !state ? "State *" : "State"}
+                                                            label={submitted && !state ? 'State *' : 'State'}
                                                             value={state}
                                                             mode="outlined"
                                                             style={styles.input}
@@ -252,7 +252,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
 
                                     <TextInput
                                         ref={emailRef}
-                                        label={submitted && (!email || !isEmailValid(email)) ? "Email *" : "Email"}
+                                        label={submitted && (!email || !isEmailValid(email)) ? 'Email *' : 'Email'}
                                         value={email}
                                         onChangeText={setEmail}
                                         keyboardType="email-address"
@@ -266,7 +266,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
 
                                     <TextInput
                                         ref={phoneRef}
-                                        label={submitted && (!phone || !isPhoneValid(phone)) ? "Phone Number *" : "Phone Number"}
+                                        label={submitted && (!phone || !isPhoneValid(phone)) ? 'Phone Number *' : 'Phone Number'}
                                         value={phone}
                                         onChangeText={setPhone}
                                         keyboardType="phone-pad"
@@ -279,7 +279,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
 
                                     <TextInput
                                         ref={passwordRef}
-                                        label={submitted && !password ? "Password *" : "Password"}
+                                        label={submitted && !password ? 'Password *' : 'Password'}
                                         value={password}
                                         onChangeText={setPassword}
                                         secureTextEntry
@@ -292,7 +292,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
 
                                     <TextInput
                                         ref={confirmPasswordRef}
-                                        label={submitted && (!confirmPassword || password !== confirmPassword) ? "Confirm Password *" : "Confirm Password"}
+                                        label={submitted && (!confirmPassword || password !== confirmPassword) ? 'Confirm Password *' : 'Confirm Password'}
                                         value={confirmPassword}
                                         onChangeText={setConfirmPassword}
                                         secureTextEntry
@@ -342,7 +342,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
                                     {selectedRole === UserRole.OTHER && (
                                         <TextInput
                                             ref={roleOtherRef}
-                                            label={submitted && !roleOther ? "Please specify type *" : "Please specify type"}
+                                            label={submitted && !roleOther ? 'Please specify type *' : 'Please specify type'}
                                             value={roleOther}
                                             onChangeText={setRoleOther}
                                             mode="outlined"
@@ -355,7 +355,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
 
                                     <TextInput
                                         ref={referralSourceRef}
-                                        label={submitted && !referralSource ? "How did you hear about us? *" : "How did you hear about us?"}
+                                        label={submitted && !referralSource ? 'How did you hear about us? *' : 'How did you hear about us?'}
                                         value={referralSource}
                                         onChangeText={setReferralSource}
                                         mode="outlined"

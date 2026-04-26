@@ -42,12 +42,12 @@ const ForgotPasswordScreen: React.FC = () => {
             setSnackbarVisible(true);
             return;
         }
-        
+
         setLoading(true);
         const result = await authService.requestForgotPassword(
-            email, 
-            selectedRole, 
-            deliveryMethod, 
+            email,
+            selectedRole,
+            deliveryMethod,
             deliveryMethod === 'Phone' ? phone : undefined
         );
         setLoading(false);
@@ -59,8 +59,8 @@ const ForgotPasswordScreen: React.FC = () => {
         }
         setIsCodeSent(true);
         setSnackbarMessage(
-            deliveryMethod === 'Email' 
-                ? 'Verification code sent! Check your email.' 
+            deliveryMethod === 'Email'
+                ? 'Verification code sent! Check your email.'
                 : 'Verification code sent to your phone!'
         );
         setSnackbarVisible(true);
@@ -111,9 +111,9 @@ const ForgotPasswordScreen: React.FC = () => {
                             {isCodeVerified ? 'Verified!' : 'Reset password'}
                         </Text>
                         <Text variant="bodyMedium" style={styles.subtitle}>
-                            {isCodeVerified 
+                            {isCodeVerified
                                 ? 'Your identity has been confirmed. Click below to choose your new password.'
-                                : isCodeSent 
+                                : isCodeSent
                                     ? `We sent a code to your ${deliveryMethod.toLowerCase()}. Paste it here to continue.`
                                     : 'Enter your details to receive a 6-digit reset code.'
                             }
@@ -124,7 +124,7 @@ const ForgotPasswordScreen: React.FC = () => {
                         <Card.Content style={styles.cardInner}>
                             {!isCodeSent && (
                                 <View style={styles.methodToggle}>
-                                    <Button 
+                                    <Button
                                         mode={deliveryMethod === 'Email' ? 'contained' : 'outlined'}
                                         onPress={() => setDeliveryMethod('Email')}
                                         style={styles.methodBtn}
@@ -133,7 +133,7 @@ const ForgotPasswordScreen: React.FC = () => {
                                     >
                                         Email
                                     </Button>
-                                    <Button 
+                                    <Button
                                         mode={deliveryMethod === 'Phone' ? 'contained' : 'outlined'}
                                         onPress={() => setDeliveryMethod('Phone')}
                                         style={styles.methodBtn}
@@ -205,7 +205,7 @@ const ForgotPasswordScreen: React.FC = () => {
                                         activeOutlineColor="#6366F1"
                                         left={<TextInput.Icon icon="key-variant" color="#94A3B8" />}
                                     />
-                                    
+
                                     {!isCodeVerified ? (
                                         <Button
                                             mode="contained"
@@ -228,14 +228,14 @@ const ForgotPasswordScreen: React.FC = () => {
                                             Reset Password
                                         </Button>
                                     )}
-                                    
-                                    <Button 
-                                        mode="text" 
+
+                                    <Button
+                                        mode="text"
                                         onPress={() => {
                                             setIsCodeSent(false);
                                             setIsCodeVerified(false);
                                             setCode('');
-                                        }} 
+                                        }}
                                         textColor="#64748B"
                                         disabled={loading}
                                     >

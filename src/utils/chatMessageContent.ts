@@ -33,8 +33,8 @@ export function buildImageMessageContent(imageUrl: string): string {
 /** Short label for conversation lists / notifications */
 export function formatChatPreview(content: string): string {
     const p = parseChatMessageContent(content);
-    if (p.kind === 'image') return 'Photo';
+    if (p.kind === 'image') {return 'Photo';}
     const t = p.text;
-    if (t.length > 80) return `${t.slice(0, 77)}…`;
+    if (t.length > 80) {return `${t.slice(0, 77)}…`;}
     return t;
 }

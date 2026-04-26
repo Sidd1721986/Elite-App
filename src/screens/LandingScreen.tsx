@@ -20,7 +20,7 @@ const LandingScreen: React.FC<Props> = ({ navigation }) => {
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-            <ScrollView 
+            <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
@@ -72,11 +72,11 @@ interface RoleButtonProps {
 }
 
 const RoleButton: React.FC<RoleButtonProps> = ({ label, icon, onPress }) => (
-    <Pressable 
+    <Pressable
         onPress={onPress}
         style={({ pressed }) => [
             styles.roleButton,
-            { opacity: pressed ? 0.7 : 1, backgroundColor: pressed ? '#EEF2FF' : '#FFFFFF' }
+            { opacity: pressed ? 0.7 : 1, backgroundColor: pressed ? '#EEF2FF' : '#FFFFFF' },
         ]}
     >
         <View style={styles.roleButtonInner}>

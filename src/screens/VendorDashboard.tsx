@@ -33,7 +33,7 @@ function groupVendorJobsForDisplay(feed: Job[]): VendorJobGroup[] {
 
     for (const j of feed) {
         const key = j.parentJobId ? String(j.parentJobId) : String(j.id);
-        if (!map.has(key)) orderKeys.push(key);
+        if (!map.has(key)) {orderKeys.push(key);}
         const arr = map.get(key) || [];
         arr.push(j);
         map.set(key, arr);
@@ -44,7 +44,7 @@ function groupVendorJobsForDisplay(feed: Job[]): VendorJobGroup[] {
         const parts = [...partsRaw].sort((a, b) => {
             const na = a.jobNumber ?? 0;
             const nb = b.jobNumber ?? 0;
-            if (na !== nb) return na - nb;
+            if (na !== nb) {return na - nb;}
             return String(a.jobSuffix || '').localeCompare(String(b.jobSuffix || ''));
         });
 
@@ -68,23 +68,23 @@ function groupVendorJobsForDisplay(feed: Job[]): VendorJobGroup[] {
 }
 
 function mergedGroupStatus(parts: Job[]): string {
-    if (parts.some(p => p.status === JobStatus.ASSIGNED)) return JobStatus.ASSIGNED;
-    if (parts.some(p => p.status === JobStatus.INVOICE_REQUESTED)) return JobStatus.INVOICE_REQUESTED;
+    if (parts.some(p => p.status === JobStatus.ASSIGNED)) {return JobStatus.ASSIGNED;}
+    if (parts.some(p => p.status === JobStatus.INVOICE_REQUESTED)) {return JobStatus.INVOICE_REQUESTED;}
     return parts[0]?.status ?? JobStatus.SUBMITTED;
 }
 
 function displayRootForGroup(groupKey: string, parts: Job[], allJobs: Job[]): Job {
     const parent = allJobs.find(j => String(j.id) === groupKey);
-    if (parent) return parent;
+    if (parent) {return parent;}
     return parts[0];
 }
 
 function mergedServicesLine(parts: Job[]): string {
     const set = new Set<string>();
     parts.forEach(p => (p.services || []).forEach(s => {
-        if (s && String(s).trim()) set.add(String(s).trim());
+        if (s && String(s).trim()) {set.add(String(s).trim());}
     }));
-    if (set.size > 0) return Array.from(set).join(' · ');
+    if (set.size > 0) {return Array.from(set).join(' · ');}
     const desc = parts.map(p => p.description).filter(Boolean).join(' · ');
     return desc.length > 180 ? `${desc.slice(0, 177)}…` : desc;
 }
@@ -124,9 +124,9 @@ const VendorDashboard: React.FC = () => {
     }, [logout]);
 
     const filteredJobs = useMemo(() => {
-        if (!searchQuery.trim()) return jobs;
+        if (!searchQuery.trim()) {return jobs;}
         const query = searchQuery.toLowerCase().trim();
-        return jobs.filter(j => 
+        return jobs.filter(j =>
             j.address?.toLowerCase().includes(query) ||
             j.description?.toLowerCase().includes(query) ||
             j.jobNumber?.toString().includes(query) ||
@@ -175,7 +175,7 @@ const VendorDashboard: React.FC = () => {
         return [...list].sort((a, b) => {
             const pending = (x: Job) => (x.status === JobStatus.ASSIGNED ? 0 : 1);
             const d = pending(a) - pending(b);
-            if (d !== 0) return d;
+            if (d !== 0) {return d;}
             const ta = new Date(a.createdAt || 0).getTime();
             const tb = new Date(b.createdAt || 0).getTime();
             return tb - ta;
@@ -188,12 +188,12 @@ const VendorDashboard: React.FC = () => {
         [vendorFeedJobs],
     );
 
-    const pendingCount = useMemo(() => 
-        jobs.filter(j => j.status === JobStatus.ASSIGNED).length, 
+    const pendingCount = useMemo(() =>
+        jobs.filter(j => j.status === JobStatus.ASSIGNED).length,
         [jobs]
     );
 
-    const completedCount = useMemo(() => 
+    const completedCount = useMemo(() =>
         jobs.filter(j => j.status === JobStatus.INVOICED).length,
         [jobs]
     );
@@ -340,15 +340,15 @@ const VendorDashboard: React.FC = () => {
                                 />
                             }
                         >
-                            <Menu.Item 
-                                leadingIcon="account-circle-outline" 
-                                onPress={() => { setSettingsMenuVisible(false); navigation.navigate('Profile'); }} 
-                                title="Profile Settings" 
+                            <Menu.Item
+                                leadingIcon="account-circle-outline"
+                                onPress={() => { setSettingsMenuVisible(false); navigation.navigate('Profile'); }}
+                                title="Profile Settings"
                             />
-                            <Menu.Item 
-                                leadingIcon="information-outline" 
-                                onPress={() => { setSettingsMenuVisible(false); navigation.navigate('AccountDetails'); }} 
-                                title="Account Details" 
+                            <Menu.Item
+                                leadingIcon="information-outline"
+                                onPress={() => { setSettingsMenuVisible(false); navigation.navigate('AccountDetails'); }}
+                                title="Account Details"
                             />
                             <Divider />
                             <Menu.Item leadingIcon="logout" onPress={handleLogout} title="Logout" />

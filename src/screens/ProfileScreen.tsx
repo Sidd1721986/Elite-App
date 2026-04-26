@@ -109,7 +109,7 @@ const ProfileScreen: React.FC = () => {
     };
 
     const handleVerifyOTP = async () => {
-        if (!otp.trim()) return;
+        if (!otp.trim()) {return;}
 
         setIsVerifyingOTP(true);
         try {
@@ -136,19 +136,19 @@ const ProfileScreen: React.FC = () => {
             "We're sad to see you go! 😢",
             "Are you sure you want to delete your account? You'll lose access to all your personalized features and settings that make your experience smooth.",
             [
-                { text: "I'll Stay! (Recommended)", style: "cancel" },
+                { text: "I'll Stay! (Recommended)", style: 'cancel' },
                 {
-                    text: "Continue to Deletion",
-                    style: "destructive",
+                    text: 'Continue to Deletion',
+                    style: 'destructive',
                     onPress: () => {
                         Alert.alert(
-                            "WAIT! Your Home Still Needs Us! 🏠",
+                            'WAIT! Your Home Still Needs Us! 🏠',
                             "Every house needs something eventually. Whether it's a repair, maintenance, or a new project—keep us and we will handle it for you! Are you absolutely sure you want to delete your history and start over from scratch?",
                             [
-                                { text: "Keep My Account", style: "cancel" },
+                                { text: 'Keep My Account', style: 'cancel' },
                                 {
-                                    text: "Delete Anyway",
-                                    style: "destructive",
+                                    text: 'Delete Anyway',
+                                    style: 'destructive',
                                     onPress: async () => {
                                         const result = await deleteAccount();
                                         if (result !== true) {
@@ -156,17 +156,17 @@ const ProfileScreen: React.FC = () => {
                                             setSnackbarVisible(true);
                                         }
                                         // On success, AuthContext handles logout & redirect automatically
-                                    }
-                                }
+                                    },
+                                },
                             ]
                         );
-                    }
-                }
+                    },
+                },
             ]
         );
     };
 
-    if (!user) return null;
+    if (!user) {return null;}
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -188,9 +188,9 @@ const ProfileScreen: React.FC = () => {
                             size={80}
                             label={(() => {
                                 const n = name.trim();
-                                if (!n) return '??';
+                                if (!n) {return '??';}
                                 const parts = n.split(/\s+/);
-                                if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                                if (parts.length >= 2) {return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();}
                                 return n.substring(0, 2).toUpperCase();
                             })()}
                             style={styles.avatar}
@@ -250,7 +250,7 @@ const ProfileScreen: React.FC = () => {
                                 visible={showStateMenu}
                                 onDismiss={() => setShowStateMenu(false)}
                                 anchor={
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         onPress={() => setShowStateMenu(true)}
                                         activeOpacity={1}
                                         style={{ flex: 1 }}
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#94A3B8',
         marginTop: 12,
-    }
+    },
 });
 
 export default ProfileScreen;

@@ -39,7 +39,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             setSnackbarMessage('Password updated. Sign in with your new password.');
             setSnackbarVisible(true);
         }
-        
+
         if (route.params?.initialRole) {
             setSelectedRole(route.params.initialRole);
         }

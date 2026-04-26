@@ -22,10 +22,10 @@ const AnyFlashList = FlashList as any;
 function mergeChildJobs(remote?: Job[] | null, ctx?: Job[] | null): Job[] {
     const byId = new Map<string, Job>();
     for (const c of remote || []) {
-        if (c?.id) byId.set(String(c.id), c);
+        if (c?.id) {byId.set(String(c.id), c);}
     }
     for (const c of ctx || []) {
-        if (!c?.id) continue;
+        if (!c?.id) {continue;}
         const id = String(c.id);
         const prev = byId.get(id);
         byId.set(id, prev ? ({ ...prev, ...c } as Job) : c);
@@ -34,9 +34,9 @@ function mergeChildJobs(remote?: Job[] | null, ctx?: Job[] | null): Job[] {
 }
 
 function mergeAssignJob(ctx?: Job, remote?: Job | null): Job | undefined {
-    if (!ctx && !remote) return undefined;
-    if (!remote) return ctx;
-    if (!ctx) return remote;
+    if (!ctx && !remote) {return undefined;}
+    if (!remote) {return ctx;}
+    if (!ctx) {return remote;}
     return {
         ...ctx,
         ...remote,
@@ -139,7 +139,7 @@ const VendorItem = memo(({ item, onAssign, isLoading, assignedData }: { item: Us
 });
 
 function AssignmentPhotoThumbnails({ urls }: { urls?: string[] | null }) {
-    if (!urls?.length) return null;
+    if (!urls?.length) {return null;}
     return (
         <View style={styles.assignmentPhotoRow}>
             <View style={styles.assignmentPhotoLabelRow}>
@@ -185,7 +185,7 @@ const AssignVendorScreen: React.FC = () => {
     const [assignedOutPhotoUrls, setAssignedOutPhotoUrls] = React.useState<Set<string>>(new Set());
     const [isFinalizing, setIsFinalizing] = React.useState(false);
     const navigationTimeoutRef = React.useRef<any>(null);
-    
+
     // Refs to keep handleAssign stable and avoid re-renders while typing
     const selectedItemIdsRef = React.useRef(selectedItemIds);
     const selectedPhotoUrlsRef = React.useRef(selectedPhotoUrls);
@@ -232,12 +232,12 @@ const AssignVendorScreen: React.FC = () => {
             let cancelled = false;
             (async () => {
                 await refreshJobs();
-                if (!jobId || cancelled) return;
+                if (!jobId || cancelled) {return;}
                 try {
                     const raw = await jobService.getJobById(jobId);
-                    if (!cancelled) setRemoteJob(normalizeJob(raw));
+                    if (!cancelled) {setRemoteJob(normalizeJob(raw));}
                 } catch {
-                    if (!cancelled) setRemoteJob(null);
+                    if (!cancelled) {setRemoteJob(null);}
                 }
             })();
             return () => {
@@ -248,18 +248,18 @@ const AssignVendorScreen: React.FC = () => {
 
     // Child rows may only exist nested on the parent (admin GET) and not as top-level list entries.
     const splitAssignments = useMemo(() => {
-        if (!jobId) return [] as Job[];
+        if (!jobId) {return [] as Job[];}
         const byId = new Map<string, Job>();
         const pid = String(jobId);
         jobs
             .filter(j => j?.vendorId && (j.parentJobId === jobId || String(j.parentJobId) === pid))
             .forEach(j => {
-                if (j.id) byId.set(j.id, j);
+                if (j.id) {byId.set(j.id, j);}
             });
         (job?.childJobs || []).forEach(c => {
-            if (!c?.id || !c.vendorId || byId.has(c.id)) return;
+            if (!c?.id || !c.vendorId || byId.has(c.id)) {return;}
             const cid = String(c.parentJobId || '');
-            if (cid && cid !== pid && c.parentJobId !== jobId) return;
+            if (cid && cid !== pid && c.parentJobId !== jobId) {return;}
             byId.set(c.id, c);
         });
         return Array.from(byId.values());
@@ -275,7 +275,7 @@ const AssignVendorScreen: React.FC = () => {
         const byVendor = new Map<string, AssignedVendorGroup>();
 
         splitAssignments.forEach(assignment => {
-            if (!assignment.vendorId) return;
+            if (!assignment.vendorId) {return;}
             const vid = String(assignment.vendorId);
             const existing = byVendor.get(vid);
             const nextServices = Array.from(new Set([
@@ -341,7 +341,7 @@ const AssignVendorScreen: React.FC = () => {
     }, [job?.id, job?.vendorId]);
 
     const toggleService = useCallback((name: string) => {
-        setSelectedServiceNames(prev => 
+        setSelectedServiceNames(prev =>
             prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name]
         );
     }, []);
@@ -385,7 +385,7 @@ const AssignVendorScreen: React.FC = () => {
         assignedVendorGroups.length > 0 || sessionOnlyVendorIds.length > 0 || splitAssignments.length > 0;
 
     const handleUnassign = useCallback((group: AssignedVendorGroup) => {
-        if (!jobId) return;
+        if (!jobId) {return;}
 
         const vendorName = group.vendor?.name || 'this vendor';
         const scopeLabel = group.services.length > 0
@@ -403,13 +403,13 @@ const AssignVendorScreen: React.FC = () => {
         ])).filter(Boolean);
 
         Alert.alert(
-            "Unassign Vendor",
+            'Unassign Vendor',
             `Remove ${vendorName} from: ${scopeLabel}? Their assigned scope will return to the Target Job card.`,
             [
-                { text: "Cancel", style: "cancel" },
+                { text: 'Cancel', style: 'cancel' },
                 {
-                    text: "Unassign",
-                    style: "destructive",
+                    text: 'Unassign',
+                    style: 'destructive',
                     onPress: async () => {
                         setIsLoading(true);
                         try {
@@ -447,17 +447,17 @@ const AssignVendorScreen: React.FC = () => {
                         } finally {
                             setIsLoading(false);
                         }
-                    }
-                }
+                    },
+                },
             ]
         );
     }, [jobId, splitAssignments, sessionAssignments, unassignVendorScope, unassignVendor, loadJobDetail]);
 
     const handleAssign = useCallback(async (vendorId: string) => {
-        if (!jobId) return;
-        
+        if (!jobId) {return;}
+
         const hasItems = job?.items && job.items.length > 0;
-        
+
         // Validation: must have either an item, a photo, or a selected service category
         if (selectedItemIdsRef.current.length === 0 && selectedServiceNamesRef.current.length === 0 && selectedPhotoUrlsRef.current.length === 0) {
             setSnackbarMessage('Please select at least one item or service category to assign');
@@ -466,8 +466,8 @@ const AssignVendorScreen: React.FC = () => {
         }
 
         // Use selected services as the automated scope if no manual input exists
-        const currentScope = selectedServiceNamesRef.current.length > 0 
-            ? selectedServiceNamesRef.current.join(', ') 
+        const currentScope = selectedServiceNamesRef.current.length > 0
+            ? selectedServiceNamesRef.current.join(', ')
             : 'Assigned Tasks';
 
         setIsLoading(true);
@@ -532,7 +532,7 @@ const AssignVendorScreen: React.FC = () => {
     }, [jobId, partialAssign, job?.items, loadJobDetail]);
 
     const handleFinalize = useCallback(async () => {
-        if (!jobId) return;
+        if (!jobId) {return;}
         if (hasRemainingTargetWork) {
             setSnackbarMessage('You still need to assign the other job request items.');
             setSnackbarVisible(true);
@@ -554,13 +554,13 @@ const AssignVendorScreen: React.FC = () => {
     }, [jobId, finalizeAssignment, navigation, hasRemainingTargetWork]);
 
     const toggleItem = (id: string) => {
-        setSelectedItemIds(prev => 
+        setSelectedItemIds(prev =>
             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
         );
     };
 
     const togglePhoto = (url: string) => {
-        setSelectedPhotoUrls(prev => 
+        setSelectedPhotoUrls(prev =>
             prev.includes(url) ? prev.filter(u => u !== url) : [...prev, url]
         );
     };
@@ -783,7 +783,7 @@ const AssignVendorScreen: React.FC = () => {
                             </View>
                         </View>
                     )}
-                    
+
                     {job?.services && job.services.length > 0 && (
                         <View style={{ marginTop: 12 }}>
                             <Text variant="labelSmall" style={{ color: '#64748B', fontWeight: 'bold', marginBottom: 6, opacity: 0.8 }}>SERVICES REQUESTED (Select to Assign)</Text>
@@ -791,32 +791,32 @@ const AssignVendorScreen: React.FC = () => {
                                 {job.services.map(s => {
                                     const isSelected = selectedServiceNames.includes(s);
                                     return (
-                                        <TouchableOpacity 
-                                            key={s} 
+                                        <TouchableOpacity
+                                            key={s}
                                             onPress={() => toggleService(s)}
-                                            style={{ 
+                                            style={{
                                                 flexDirection: 'row',
                                                 alignItems: 'center',
-                                                backgroundColor: isSelected ? '#F0F9FF' : '#FFFFFF', 
-                                                paddingHorizontal: 12, 
-                                                paddingVertical: 10, 
-                                                borderRadius: 12, 
-                                                borderWidth: 1, 
+                                                backgroundColor: isSelected ? '#F0F9FF' : '#FFFFFF',
+                                                paddingHorizontal: 12,
+                                                paddingVertical: 10,
+                                                borderRadius: 12,
+                                                borderWidth: 1,
                                                 borderColor: isSelected ? '#6366F1' : '#E2E8F0',
-                                                marginBottom: 4
+                                                marginBottom: 4,
                                             }}
                                         >
-                                            <Checkbox 
+                                            <Checkbox
                                                 status={isSelected ? 'checked' : 'unchecked'}
                                                 color="#6366F1"
                                             />
-                                            <Text style={{ 
-                                                fontSize: 13, 
-                                                color: isSelected ? '#1E293B' : '#64748B', 
-                                                fontWeight: isSelected ? 'bold' : '500', 
+                                            <Text style={{
+                                                fontSize: 13,
+                                                color: isSelected ? '#1E293B' : '#64748B',
+                                                fontWeight: isSelected ? 'bold' : '500',
                                                 textTransform: 'capitalize',
                                                 flex: 1,
-                                                marginLeft: 8
+                                                marginLeft: 8,
                                             }}>
                                                 {s}
                                             </Text>
@@ -826,15 +826,15 @@ const AssignVendorScreen: React.FC = () => {
                             </View>
                         </View>
                     )}
-                    
+
                     <Divider style={{ marginVertical: 12 }} />
-                    
+
                     {Array.isArray(job?.items) && job.items.length > 0 ? (
                         <>
                             <Text variant="labelMedium" style={styles.selectionTitle}>Select Items to Assign</Text>
                             {job.items.map((item, idx) => item && (
                                 <View key={item.id || idx} style={styles.itemSelectionRow}>
-                                    <Checkbox 
+                                    <Checkbox
                                         status={selectedItemIds.includes(item.id) ? 'checked' : 'unchecked'}
                                         onPress={() => !item.isAssigned && toggleItem(item.id)}
                                         disabled={Boolean(item.isAssigned)}
@@ -879,7 +879,7 @@ const AssignVendorScreen: React.FC = () => {
                                     key={`${url}-${index}`}
                                     style={[
                                         styles.photoItem,
-                                        selectedPhotoUrls.includes(url) && styles.photoItemSelected
+                                        selectedPhotoUrls.includes(url) && styles.photoItemSelected,
                                     ]}
                                     onPress={() => togglePhoto(url)}
                                     activeOpacity={0.8}
@@ -887,7 +887,7 @@ const AssignVendorScreen: React.FC = () => {
                                     <FastImage source={{ uri: url }} style={styles.photoImage} />
                                     <View style={[
                                         styles.photoOverlay,
-                                        selectedPhotoUrls.includes(url) && styles.photoOverlaySelected
+                                        selectedPhotoUrls.includes(url) && styles.photoOverlaySelected,
                                     ]}>
                                         <Checkbox
                                             status={selectedPhotoUrls.includes(url) ? 'checked' : 'unchecked'}
@@ -979,11 +979,11 @@ const AssignVendorScreen: React.FC = () => {
                 estimatedItemSize={120}
                 ListHeaderComponent={renderHeaderContent}
                 renderItem={({ item }: any) => (
-                    <VendorItem 
-                        item={item} 
-                        onAssign={handleAssign} 
-                        isLoading={isLoading} 
-                        assignedData={activeAssignmentsByVendor[item.id!]} 
+                    <VendorItem
+                        item={item}
+                        onAssign={handleAssign}
+                        isLoading={isLoading}
+                        assignedData={activeAssignmentsByVendor[item.id!]}
                     />
                 )}
                 extraData={[
