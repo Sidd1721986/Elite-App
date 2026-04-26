@@ -85,19 +85,16 @@ stages:
           - script: |
               echo "export const PRODUCTION_API_BASE_URL = '$(PROD_API_URL)';" > src/config/env.ts
             displayName: Inject production API URL
-          - task: DownloadSecureFile@1
-            name: androidKeystore
-            displayName: Download Android keystore
-            inputs:
-              secureFile: $(ANDROID_KEYSTORE_SECURE_FILE)
           - script: |
               set -e
-              printf '%s\n' "storeFile=$(androidKeystore.secureFilePath)" > android/keystore.properties
+              echo "$(ANDROID_KEYSTORE_BASE64)" | base64 --decode > $(Agent.TempDirectory)/elite-release.keystore
+              printf '%s\n' "storeFile=$(Agent.TempDirectory)/elite-release.keystore" > android/keystore.properties
               printf '%s\n' "storePassword=$(ANDROID_KEYSTORE_PASSWORD)" >> android/keystore.properties
               printf '%s\n' "keyAlias=$(ANDROID_KEY_ALIAS)" >> android/keystore.properties
               printf '%s\n' "keyPassword=$(ANDROID_KEY_PASSWORD)" >> android/keystore.properties
-            displayName: Write android/keystore.properties
+            displayName: Decode keystore and write android/keystore.properties
             env:
+              ANDROID_KEYSTORE_BASE64: $(ANDROID_KEYSTORE_BASE64)
               ANDROID_KEYSTORE_PASSWORD: $(ANDROID_KEYSTORE_PASSWORD)
               ANDROID_KEY_ALIAS: $(ANDROID_KEY_ALIAS)
               ANDROID_KEY_PASSWORD: $(ANDROID_KEY_PASSWORD)
