@@ -1,10 +1,13 @@
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, IconButton, Surface, Button, List } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SUPPORT_URL } from '../config/appConfig';
 import { openExternalUrl } from '../utils/openExternalUrl';
+
+const CONTACT_PHONE = '+19044311127';
+const CONTACT_PHONE_DISPLAY = '(904) 431-1127';
 
 const ContactSupportScreen: React.FC = () => {
     const navigation = useNavigation();
@@ -35,14 +38,32 @@ const ContactSupportScreen: React.FC = () => {
                 <Surface style={styles.primaryCard} elevation={1}>
                     <Text variant="titleMedium" style={styles.cardTitle}>Contact &amp; safety reporting</Text>
                     <Text variant="bodyMedium" style={styles.cardBody}>
-                        Open our support page in your browser. It includes our support email and
-                        guidance for reporting misuse of chat or job features.
+                        Reach us directly by phone or text, or open our support page for email
+                        and guidance on reporting misuse of chat or job features.
                     </Text>
+                    <View style={styles.phoneRow}>
+                        <Button
+                            mode="contained"
+                            icon="phone"
+                            onPress={() => void Linking.openURL(`tel:${CONTACT_PHONE}`)}
+                            style={[styles.phoneBtn, { marginRight: 8 }]}
+                        >
+                            {CONTACT_PHONE_DISPLAY}
+                        </Button>
+                        <Button
+                            mode="outlined"
+                            icon="message-text"
+                            onPress={() => void Linking.openURL(`sms:${CONTACT_PHONE}`)}
+                            style={styles.phoneBtn}
+                        >
+                            Text us
+                        </Button>
+                    </View>
                     <Button
-                        mode="contained"
+                        mode="text"
                         icon="open-in-new"
                         onPress={() => void openExternalUrl(SUPPORT_URL)}
-                        style={styles.primaryBtn}
+                        style={styles.supportLinkBtn}
                     >
                         Open support page
                     </Button>
@@ -150,6 +171,18 @@ const styles = StyleSheet.create({
     },
     primaryBtn: {
         borderRadius: 12,
+    },
+    phoneRow: {
+        flexDirection: 'row',
+        marginBottom: 8,
+    },
+    phoneBtn: {
+        flex: 1,
+        borderRadius: 12,
+    },
+    supportLinkBtn: {
+        marginTop: 4,
+        alignSelf: 'flex-start',
     },
     faqSection: {
         backgroundColor: 'transparent',

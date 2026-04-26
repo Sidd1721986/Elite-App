@@ -5,6 +5,8 @@
 #  1) Upload your Android keystore and iOS certificates to "Library -> Secure files"
 #  2) Set ENABLE_MOBILE_ANDROID and ENABLE_MOBILE_IOS to true in the "EliteApp-Production" Variable Group.
 #  3) Ensure ANDROID_KEYSTORE_SECURE_FILE, IOS_DISTRIBUTION_P12_SECURE_FILE, etc. are set.
+#  4) Set PROD_API_URL in the variable group (e.g. https://eliteapp-api-prod.azurewebsites.net/api)
+#     This is injected into src/config/env.ts before each native build — never commit env.ts.
 
 trigger:
   branches:
@@ -80,6 +82,9 @@ stages:
               path: $(HOME)/.gradle/caches
           - script: npm ci
             displayName: npm ci
+          - script: |
+              echo "export const PRODUCTION_API_BASE_URL = '$(PROD_API_URL)';" > src/config/env.ts
+            displayName: Inject production API URL
           - task: DownloadSecureFile@1
             name: androidKeystore
             displayName: Download Android keystore
@@ -141,6 +146,9 @@ stages:
               path: ios/Pods
           - script: npm ci
             displayName: npm ci
+          - script: |
+              echo "export const PRODUCTION_API_BASE_URL = '$(PROD_API_URL)';" > src/config/env.ts
+            displayName: Inject production API URL
           - script: |
               set -e
               gem install cocoapods --no-document --user-install

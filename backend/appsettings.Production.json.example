@@ -39,6 +39,13 @@
   "Legal": {
     "SupportEmail": "support@eliteservices.com"
   },
+  "Sms": {
+    "ContactPhone": "+19044311127",
+    "Twilio": {
+      "AccountSid": "YOUR_TWILIO_ACCOUNT_SID",
+      "AuthToken": "YOUR_TWILIO_AUTH_TOKEN"
+    }
+  },
   "Bootstrap": {
     "AdminPassword": "CHANGE_ME_TO_A_SECURE_ADMIN_PASSWORD"
   },

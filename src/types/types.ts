@@ -41,6 +41,7 @@ export interface AuthContextType {
   ) => Promise<boolean | string>;
   logout: () => Promise<void>;
   isLoading: boolean;
+  isOffline: boolean;
   getPendingVendors: () => Promise<User[]>;
   getApprovedVendors: () => Promise<User[]>;
   updateUserStatus: (userId: string, approved: boolean) => Promise<boolean>;

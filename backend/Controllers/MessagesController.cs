@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using EliteApp.API.Data;
 using EliteApp.API.Models;
@@ -54,6 +55,8 @@ public class MessagesController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(messageDto.Content))
             return BadRequest(new { message = "Message content cannot be empty." });
+        if (messageDto.Content.Length > 10_000)
+            return BadRequest(new { message = "Message content exceeds the 10,000 character limit." });
         if (messageDto.ReceiverId == Guid.Empty)
             return BadRequest(new { message = "ReceiverId is required." });
         if (messageDto.ReceiverId == currentUserId)
@@ -82,6 +85,7 @@ public class MessagesController : ControllerBase
     // Static segments must be registered before {otherUserId} or "conversations" is parsed as a Guid and this route never runs.
     // GET: api/messages/conversations
     [HttpGet("conversations")]
+    [EnableRateLimiting("read-messages")]
     public async Task<ActionResult<IEnumerable<ConversationDto>>> GetConversations()
     {
         var currentUserId = GetCurrentUserId();
@@ -138,6 +142,7 @@ public class MessagesController : ControllerBase
     // GET: api/messages/{otherUserId}?page=1&pageSize=50
     // Returns the most-recent N messages, oldest-first (UI scrolls up to load more).
     [HttpGet("{otherUserId}")]
+    [EnableRateLimiting("read-messages")]
     public async Task<ActionResult<IEnumerable<Message>>> GetMessages(
         Guid otherUserId,
         [FromQuery] int page = 1,

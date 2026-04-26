@@ -25,8 +25,13 @@ public class User
     [Required]
     public string Role { get; set; } = UserRole.Customer.ToString();
 
+    [StringLength(255, MinimumLength = 1)]
     public string Name { get; set; } = string.Empty;
+
+    [StringLength(500)]
     public string? Address { get; set; }
+
+    [StringLength(30)]
     public string? Phone { get; set; }
     
     // Vendor specific
@@ -37,6 +42,8 @@ public class User
     public bool IsPhoneVerified { get; set; } = false;
     public string? PhoneVerificationCode { get; set; }
     public DateTime? PhoneVerificationExpiry { get; set; }
+    public int PhoneVerificationAttempts { get; set; } = 0;
+    public DateTime? PhoneVerificationLastAttempt { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -54,14 +61,19 @@ public class Job
     public User? Customer { get; set; }
 
     [Required]
+    [StringLength(5000)]
     public string Description { get; set; } = string.Empty;
 
     [Required]
+    [StringLength(500)]
     public string Address { get; set; } = string.Empty;
 
-    public string Status { get; set; } = "Submitted"; // Submitted, Assigned, Accepted, ReachedOut, ApptSet, Sale, FollowUp, Expired, Completed, Invoiced
+    [StringLength(50)]
+    public string Status { get; set; } = "Submitted";
+    [StringLength(50)]
     public string Urgency { get; set; } = "No rush";
-    
+
+    [StringLength(5000)]
     public string? OtherDetails { get; set; }
     
     // Simple way to store photos as comma separated strings for now
@@ -99,6 +111,9 @@ public class Job
 
     public List<Job> ChildJobs { get; set; } = new();
 
+    [Timestamp]
+    public byte[]? RowVersion { get; set; }
+
     public string? JobSuffix { get; set; }
     public string? Services { get; set; }
 }
@@ -132,6 +147,7 @@ public class Message
     public Guid ReceiverId { get; set; }
 
     [Required]
+    [StringLength(10000)]
     public string Content { get; set; } = string.Empty;
 
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;

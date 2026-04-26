@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using EliteApp.API.Data;
 using EliteApp.API.Models;
+using EliteApp.API.Services.Sms;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -17,12 +18,16 @@ public class UsersController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
+    private readonly ISmsService _smsService;
+    private readonly ILogger<UsersController> _logger;
 
-    public UsersController(AppDbContext context, IWebHostEnvironment environment, IConfiguration configuration)
+    public UsersController(AppDbContext context, IWebHostEnvironment environment, IConfiguration configuration, ISmsService smsService, ILogger<UsersController> logger)
     {
         _context = context;
         _environment = environment;
         _configuration = configuration;
+        _smsService = smsService;
+        _logger = logger;
     }
 
     // ── Phone-OTP hashing (mirrors AuthService.HashResetCode) ──────────────────
@@ -54,14 +59,19 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("pending-vendors")]
-    public async Task<IActionResult> GetPendingVendors()
+    public async Task<IActionResult> GetPendingVendors([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
-        // Only Admin should access this
         if (!User.IsInRole("Admin")) return Forbid();
+
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        page     = Math.Max(1, page);
 
         var pendingVendors = await _context.Users
             .AsNoTracking()
-            .Where(u => u.Role == "Vendor" && !u.IsApproved)
+            .Where(u => u.Role == "Vendor" && !u.IsApproved && u.IsActive)
+            .OrderByDescending(u => u.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(u => new { u.Id, u.Email, u.Name, u.Role, u.Address, u.Phone, u.IsApproved, u.CreatedAt })
             .ToListAsync();
 
@@ -76,9 +86,11 @@ public class UsersController : ControllerBase
         var user = await _context.Users.FindAsync(id);
         if (user == null) return NotFound();
 
+        var adminId = User.FindFirst("id")?.Value;
         user.IsApproved = true;
         await _context.SaveChangesAsync();
 
+        _logger.LogInformation("Vendor approved: vendorId={VendorId} email={Email} by adminId={AdminId}", id, user.Email, adminId);
         return Ok(new { message = "Vendor approved" });
     }
     
@@ -97,20 +109,28 @@ public class UsersController : ControllerBase
         //    is still respected, so a denied vendor cannot simply re-register).
         //  • Consistent with how DeleteSelf works (IsActive = false).
         // A denied vendor is identified by: Role == "Vendor" && IsApproved == false && IsActive == false.
+        var adminId = User.FindFirst("id")?.Value;
         user.IsActive = false;
         await _context.SaveChangesAsync();
 
+        _logger.LogWarning("Vendor denied: vendorId={VendorId} email={Email} by adminId={AdminId}", id, user.Email, adminId);
         return Ok(new { message = "Vendor denied" });
     }
 
     [HttpGet("approved-vendors")]
-    public async Task<IActionResult> GetApprovedVendors()
+    public async Task<IActionResult> GetApprovedVendors([FromQuery] int page = 1, [FromQuery] int pageSize = 100)
     {
         if (!User.IsInRole("Admin")) return Forbid();
 
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        page     = Math.Max(1, page);
+
         var approvedVendors = await _context.Users
             .AsNoTracking()
-            .Where(u => u.Role == "Vendor" && u.IsApproved)
+            .Where(u => u.Role == "Vendor" && u.IsApproved && u.IsActive)
+            .OrderBy(u => u.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(u => new { u.Id, u.Email, u.Name, u.Role, u.Address, u.Phone, u.IsApproved, u.CreatedAt })
             .ToListAsync();
 
@@ -183,11 +203,7 @@ public class UsersController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        // TODO: Replace with a real SMS provider (e.g. Twilio, Azure Communication Services).
-        // Until then the code is logged at Warning level so it is visible in dev but still
-        // surfaced as a configuration gap in production log monitoring.
-        Serilog.Log.Warning("[SMS NOT CONFIGURED] Phone verification code for {Phone}: {Code}. " +
-            "Wire up ISmsService with a real provider before shipping.", user.Phone, plainCode);
+        await _smsService.SendAsync(user.Phone, $"Your Elite Home Services verification code is: {plainCode}. It expires in 10 minutes.");
 
         return Ok(new { message = "Verification code sent" });
     }
@@ -201,24 +217,42 @@ public class UsersController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user == null) return NotFound();
 
+        // Brute-force guard: max 5 attempts per 10-minute window per user.
+        var windowStart = DateTime.UtcNow.AddMinutes(-10);
+        if (user.PhoneVerificationLastAttempt > windowStart && user.PhoneVerificationAttempts >= 5)
+            return StatusCode(429, new { message = "Too many attempts. Request a new code and try again." });
+
+        // Reset counter once outside the window.
+        if (user.PhoneVerificationLastAttempt <= windowStart)
+            user.PhoneVerificationAttempts = 0;
+
+        user.PhoneVerificationAttempts++;
+        user.PhoneVerificationLastAttempt = DateTime.UtcNow;
+
         // Compare hashes — the DB stores only the hashed OTP, never the plaintext.
         // CryptographicOperations.FixedTimeEquals prevents timing-based side-channel attacks.
         var submittedHash = HashPhoneCode(request.Code ?? string.Empty);
         var storedHash    = user.PhoneVerificationCode ?? string.Empty;
 
-        var hashesMatch = CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(submittedHash),
-            Encoding.UTF8.GetBytes(storedHash));
+        // Ensure equal-length byte arrays for constant-time compare.
+        var submittedBytes = Encoding.UTF8.GetBytes(submittedHash);
+        var storedBytes    = Encoding.UTF8.GetBytes(storedHash.PadRight(submittedHash.Length));
+
+        var hashesMatch = CryptographicOperations.FixedTimeEquals(submittedBytes, storedBytes)
+                          && storedHash.Length == submittedHash.Length;
 
         if (hashesMatch && user.PhoneVerificationExpiry > DateTime.UtcNow)
         {
             user.IsPhoneVerified = true;
             user.PhoneVerificationCode = null;
             user.PhoneVerificationExpiry = null;
+            user.PhoneVerificationAttempts = 0;
+            user.PhoneVerificationLastAttempt = null;
             await _context.SaveChangesAsync();
             return Ok(new { message = "Phone verified successfully" });
         }
 
+        await _context.SaveChangesAsync();
         return BadRequest(new { message = "Invalid or expired verification code" });
     }
 

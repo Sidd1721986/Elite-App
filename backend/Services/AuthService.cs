@@ -64,7 +64,7 @@ public class AuthService : IAuthService
         // In a real app, hash the password properly (e.g., BCrypt). 
         // For this demo, we'll store it as is or a simple hash to match the requirement of "setup".
         // Let's stick to simple for now but acknowledge it's not prod-ready security.
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password); 
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password, 12); 
         
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
@@ -86,11 +86,13 @@ public class AuthService : IAuthService
         {
             if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             {
+                _logger.LogWarning("Login failed: email={Email} reason=InvalidCredentials", emailTrimmed);
                 return (null, null, "Invalid credentials");
             }
 
             if (!user.IsActive)
             {
+                _logger.LogWarning("Login failed: email={Email} reason=AccountDeactivated userId={UserId}", emailTrimmed, user.Id);
                 return (null, null, "Account deactivated. Please contact support.");
             }
         }
@@ -111,6 +113,7 @@ public class AuthService : IAuthService
         }
 
         var token = GenerateJwtToken(user);
+        _logger.LogInformation("Login success: email={Email} role={Role} userId={UserId}", emailTrimmed, user.Role, user.Id);
         return (token, user, string.Empty);
     }
 
@@ -219,8 +222,13 @@ public class AuthService : IAuthService
 
         if (deliveryMethod.Equals("Phone", StringComparison.OrdinalIgnoreCase))
         {
+            if (string.IsNullOrWhiteSpace(user.Phone))
+            {
+                _logger.LogWarning("Password reset SMS requested for {Email} but no phone number on record.", user.Email);
+                return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
+            }
             var smsBody = $"Your Elite password reset code is {plaintextCode}. Valid for {expiryHours} hour(s). Do not share this code.";
-            await _smsService.SendAsync(user.Phone!, smsBody);
+            await _smsService.SendAsync(user.Phone, smsBody);
             return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed,
                 "If an account exists for this email and role, password reset instructions have been sent.");
         }
@@ -294,7 +302,7 @@ public class AuthService : IAuthService
         if (!string.Equals(entry.User.Email, email.Trim(), StringComparison.OrdinalIgnoreCase))
             return (false, "Invalid or expired reset code.");
 
-        entry.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        entry.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, 12);
         entry.Used = true;
         await _context.SaveChangesAsync();
         return (true, string.Empty);

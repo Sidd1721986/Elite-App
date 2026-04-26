@@ -10,23 +10,40 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isOffline, setIsOffline] = useState(false);
 
     const checkSession = useCallback(async () => {
         try {
             const currentUser = await authService.getCurrentUser();
             setUser(normalizeUser(currentUser) || null);
-        } catch (error) {
-            if (__DEV__) console.error('AuthContext: Session check failed:', error);
+            setIsOffline(false);
+        } catch (error: any) {
+            // Network errors (no connection, timeout) should not log the user out —
+            // keep showing the last known user so they can still navigate offline.
+            const isNetworkError =
+                error?.message?.includes('Network') ||
+                error?.message?.includes('timeout') ||
+                error?.message?.includes('fetch') ||
+                error?.name === 'AbortError';
+
+            if (isNetworkError) {
+                setIsOffline(true);
+                if (__DEV__) console.warn('AuthContext: network unavailable, keeping cached session');
+            } else {
+                // Auth error (401, token expired) — clear session.
+                setUser(null);
+                setIsOffline(false);
+                if (__DEV__) console.error('AuthContext: session check failed:', error);
+            }
         }
     }, []);
 
     // Initial session check on app mount
     useEffect(() => {
         let isCurrent = true;
-        
+
         const initSession = async () => {
             try {
-                // Ensure we check storage/API for existing token
                 await checkSession();
             } finally {
                 if (isCurrent) {
@@ -36,7 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         initSession();
-        
+
         return () => {
             isCurrent = false;
         };
@@ -176,6 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signup,
         logout,
         isLoading,
+        isOffline,
         getPendingVendors,
         getApprovedVendors,
         updateUserStatus,
@@ -185,8 +203,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         requestPhoneVerification,
         verifyPhone
     }), [
-        user, login, signup, logout, isLoading, getPendingVendors, 
-        getApprovedVendors, updateUserStatus, removeVendor, deleteAccount, 
+        user, login, signup, logout, isLoading, isOffline, getPendingVendors,
+        getApprovedVendors, updateUserStatus, removeVendor, deleteAccount,
         updateProfile, requestPhoneVerification, verifyPhone
     ]);
 

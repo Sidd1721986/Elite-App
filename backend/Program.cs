@@ -11,6 +11,9 @@ using System.Diagnostics;
 using HealthChecks.NpgSql;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// appsettings.Local.json is gitignored — use it for local secrets (Twilio, SMTP passwords, etc.)
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
 // BindAllInterfaces: listen on 0.0.0.0 so physical phones (same Wi‑Fi) can reach the API during dev.
 // appsettings.Development.json sets Kestrel:BindAllInterfaces=true; omit or false for localhost-only.
 // Configure Serilog for structured logging
@@ -74,14 +77,26 @@ builder.Services.AddSingleton<IEmailSender>(sp =>
 });
 builder.Services.AddScoped<EliteApp.API.Services.IAuthService, EliteApp.API.Services.AuthService>();
 
-// SMS: swap MockSmsService for a real provider when Sms:Provider config is present.
-// See MockSmsService.cs for integration instructions (Twilio, Azure Communication Services, etc.).
+// SMS: uses Twilio when credentials are present; logs-only fallback otherwise so the
+// app starts cleanly even without Twilio configured (e.g. local dev without credentials).
 builder.Services.AddSingleton<ISmsService>(sp =>
 {
     var cfg    = sp.GetRequiredService<IConfiguration>();
-    var logger = sp.GetRequiredService<ILogger<MockSmsService>>();
-    // TODO: check cfg["Sms:Twilio:AccountSid"] (or your chosen provider) and return a real impl.
-    return new MockSmsService(logger);
+    var hasCreds = !string.IsNullOrWhiteSpace(cfg["Sms:Twilio:AccountSid"])
+                && !string.IsNullOrWhiteSpace(cfg["Sms:Twilio:AuthToken"]);
+
+    if (hasCreds)
+    {
+        var logger = sp.GetRequiredService<ILogger<ContactSmsService>>();
+        return new ContactSmsService(cfg, logger);
+    }
+
+    // In production, log a warning so it's visible in App Service logs.
+    var fallbackLogger = sp.GetRequiredService<ILogger<LoggingSmsService>>();
+    fallbackLogger.LogWarning(
+        "Sms:Twilio credentials not configured — SMS delivery disabled. " +
+        "Set Sms__Twilio__AccountSid and Sms__Twilio__AuthToken in App Service Configuration.");
+    return new LoggingSmsService(fallbackLogger);
 });
 
 builder.Services.AddRateLimiter(options =>
@@ -115,6 +130,21 @@ builder.Services.AddRateLimiter(options =>
         {
             PermitLimit = 30,
             Window = TimeSpan.FromMinutes(15),
+            SegmentsPerWindow = 4,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+    // Messages: 120 reads per minute per authenticated user.
+    options.AddPolicy("read-messages", httpContext =>
+    {
+        var userId = httpContext.User?.FindFirst("id")?.Value
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anon";
+        return RateLimitPartition.GetSlidingWindowLimiter(userId, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
             SegmentsPerWindow = 4,
             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
             QueueLimit = 0
@@ -261,7 +291,9 @@ builder.Services.AddCors(options =>
         if (origins.Length == 0)
             throw new InvalidOperationException(
                 "Cors:AllowedOrigins must list allowed web origins (semicolon-separated), e.g. https://app.example.com");
-        policy.WithOrigins(origins).AllowAnyMethod().AllowAnyHeader();
+        policy.WithOrigins(origins)
+              .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+              .WithHeaders("Authorization", "Content-Type", "X-Correlation-ID");
     });
 });
 
@@ -301,10 +333,23 @@ if (app.Environment.IsProduction() &&
         "Production: Email:Smtp:Host is not configured. Password reset will return 503 until SMTP is set.");
 }
 
+// Correlation ID middleware — stamps every request with a unique ID for cross-service tracing.
+app.Use(async (context, next) =>
+{
+    var correlationId = context.Request.Headers["X-Correlation-ID"].FirstOrDefault()
+                        ?? Guid.NewGuid().ToString();
+    context.Items["CorrelationId"] = correlationId;
+    context.Response.Headers["X-Correlation-ID"] = correlationId;
+    using (Serilog.Context.LogContext.PushProperty("CorrelationId", correlationId))
+    {
+        await next();
+    }
+});
+
 // Configure the HTTP request pipeline.
-
-
-// app.UseHttpsRedirection(); // Disable for easier local dev with Android emulator
+// HTTPS redirect must be first so no subsequent middleware ever sees a plain-HTTP request.
+if (!app.Environment.IsDevelopment())
+    app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 app.UseResponseCompression();
@@ -351,6 +396,13 @@ using (var scope = app.Services.CreateScope())
         Log.Warning(
             "Database:RunMigrations is false; skipping EF migrations at startup. Apply pending migrations before serving traffic.");
 
+    // Clean up expired password reset tokens older than 7 days to prevent table bloat.
+    var deleted = await context.PasswordResetTokens
+        .Where(t => t.ExpiresAt < DateTime.UtcNow.AddDays(-7))
+        .ExecuteDeleteAsync();
+    if (deleted > 0)
+        Log.Information("Startup: purged {Count} expired password reset tokens.", deleted);
+
     const string adminEmail = "admin@elite.com";
     // Use async query — synchronous DB calls block thread-pool threads at startup.
     var existingAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == adminEmail);
@@ -363,7 +415,7 @@ using (var scope = app.Services.CreateScope())
             {
                 Id = Guid.NewGuid(),
                 Email = adminEmail,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123", 12),
                 Role = EliteApp.API.Models.UserRole.Admin.ToString(),
                 Name = "Elite Admin",
                 IsApproved = true,
@@ -374,7 +426,7 @@ using (var scope = app.Services.CreateScope())
         }
         else if (!existingAdmin.PasswordHash.StartsWith("$2"))
         {
-            existingAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123");
+            existingAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123", 12);
             await context.SaveChangesAsync();
         }
     }
@@ -387,7 +439,7 @@ using (var scope = app.Services.CreateScope())
             {
                 Id = Guid.NewGuid(),
                 Email = adminEmail,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(bootstrapPassword),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(bootstrapPassword, 12),
                 Role = EliteApp.API.Models.UserRole.Admin.ToString(),
                 Name = "Elite Admin",
                 IsApproved = true,
@@ -417,4 +469,13 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
 
 app.MapControllers();
 
-app.Run();
+// Graceful shutdown: honour SIGTERM from Azure App Service / Kubernetes.
+// The host's built-in cancellation token handles in-flight requests; this
+// just ensures we log cleanly when the process receives a stop signal.
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStopping.Register(() =>
+    Log.Information("Application is shutting down gracefully..."));
+lifetime.ApplicationStopped.Register(() =>
+    Log.Information("Application has stopped."));
+
+await app.RunAsync();

@@ -31,6 +31,8 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
+ENV ASPNETCORE_HTTP_PORTS=5260
+
 # Health check: Docker and Azure App Service use this to determine liveness.
 # /health is the existing ASP.NET Core health endpoint registered in Program.cs.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

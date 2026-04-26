@@ -18,11 +18,11 @@ namespace EliteApp.API.Controllers
         {
             string userAgent = Request.Headers["User-Agent"].ToString().ToLower();
             
-            // --- REPLACE THESE WITH YOUR ACTUAL STORE URLS WHEN READY ---
-            string iOSStoreUrl = "https://apps.apple.com/app/id123456789"; 
-            string androidStoreUrl = "https://play.google.com/store/apps/details?id=com.multiuserauthapp";
-            string fallbackUrl = "https://eliteapp-app-test-71432.azurewebsites.net/api/health"; 
-            // -------------------------------------------------------------
+            // Store URLs — update iOSStoreUrl with the real App ID once the app is live on the App Store.
+            // Android URL uses the correct bundle ID (com.elitehomeservicesusa.app).
+            string iOSStoreUrl     = "https://apps.apple.com/app/id123456789"; // TODO: replace id123456789 with real App Store ID after first submission
+            string androidStoreUrl = "https://play.google.com/store/apps/details?id=com.elitehomeservicesusa.app";
+            string fallbackUrl     = "https://elitehomeservicesusa.com";
 
             if (userAgent.Contains("iphone") || userAgent.Contains("ipad") || userAgent.Contains("ipod"))
             {

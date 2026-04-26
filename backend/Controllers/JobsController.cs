@@ -67,6 +67,7 @@ public class JobsController : ControllerBase
     }
 
     [HttpGet]
+    [EnableRateLimiting("read-messages")]
     public async Task<IActionResult> GetJobs([FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] bool includeSubJobs = false)
     {
         // Cap page size to prevent unbounded memory loads.
@@ -351,7 +352,14 @@ public class JobsController : ControllerBase
         // Do NOT set EntityState.Modified explicitly — EF Core's change tracker
         // already detects which columns changed and generates a minimal UPDATE statement.
         // Setting Modified marks every column dirty, causing unnecessary DB writes.
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { message = "Job was modified by another request. Please refresh and try again." });
+        }
 
         // Populate navigation properties on the already-tracked entity instead of
         // issuing a second SELECT round-trip.

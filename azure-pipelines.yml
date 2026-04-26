@@ -23,6 +23,8 @@
 #       - PasswordReset__Pepper  (strong secret; not placeholder text)
 #       - Cors__AllowedOrigins  (semicolon-separated HTTPS origins)
 #       - Email__Smtp__* / Email__FromAddress  (optional; without SMTP, password reset may 503)
+#       - Sms__Twilio__AccountSid              (Twilio Account SID for OTP SMS delivery)
+#       - Sms__Twilio__AuthToken               (Twilio Auth Token — mark as secret)
 #       - Bootstrap__AdminPassword  (optional one-time; only if no admin exists)
 #  5) Azure DevOps service connections:
 #       - Docker Registry → your ACR
@@ -117,8 +119,16 @@ stages:
               path: $(HOME)/.nuget/packages
           - script: dotnet restore backend/EliteApp.API.csproj --locked-mode
             displayName: Restore dependencies (locked)
-          - script: dotnet test backend/EliteApp.API.csproj --configuration Release --no-restore --logger "trx;LogFileName=testresults.trx"
-            displayName: Execute tests
+          - script: |
+              # Run tests only if a test project exists alongside the API project.
+              TEST_PROJ=$(find backend -name "*.Tests.csproj" -o -name "*Tests.csproj" | head -1)
+              if [ -n "$TEST_PROJ" ]; then
+                dotnet test "$TEST_PROJ" --configuration Release --no-restore \
+                  --logger "trx;LogFileName=testresults.trx"
+              else
+                echo "No test project found — skipping test run."
+              fi
+            displayName: Execute tests (if present)
           - task: PublishTestResults@2
             condition: succeededOrFailed()
             inputs:
@@ -134,6 +144,7 @@ stages:
               containerRegistry: $(dockerRegistryServiceConnection)
               tags: |
                 $(Build.BuildId)
+                latest
 
   - stage: Deploy
     displayName: Deploy to Azure App Service
