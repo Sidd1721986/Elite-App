@@ -78,7 +78,7 @@ stages:
           - task: Cache@2
             displayName: Cache Gradle
             inputs:
-              key: 'gradle | "$(Agent.OS)"'
+              key: 'gradle | "$(Agent.OS)" | android/build.gradle | android/app/build.gradle'
               restoreKeys: |
                 gradle | "$(Agent.OS)"
               path: $(HOME)/.gradle/caches
@@ -102,7 +102,7 @@ stages:
               ANDROID_KEY_PASSWORD: $(ANDROID_KEY_PASSWORD)
           - script: chmod +x android/gradlew
             displayName: chmod gradlew
-          - script: cd android && ./gradlew bundleRelease --no-daemon --stacktrace
+          - script: cd android && ./gradlew bundleRelease --no-daemon --stacktrace --no-build-cache
             displayName: bundleRelease
           - task: PublishBuildArtifacts@1
             displayName: Publish AAB
