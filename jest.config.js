@@ -9,4 +9,8 @@ module.exports = {
         'node_modules/(?!(react-native|@react-native|@react-navigation|react-native-paper|react-native-safe-area-context|react-native-gesture-handler|react-native-vector-icons|moti|@shopify/flash-list|react-native-reanimated)/)',
     ],
     testEnvironment: 'node',
+    moduleNameMapper: {
+        '^./env$': '<rootDir>/src/config/env.example.ts',
+        '^../config/env$': '<rootDir>/src/config/env.example.ts',
+    },
 };
