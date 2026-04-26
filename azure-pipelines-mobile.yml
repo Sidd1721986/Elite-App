@@ -41,7 +41,7 @@ stages:
               restoreKeys: |
                 npm | "$(Agent.OS)"
               path: node_modules
-          - script: npm ci
+          - script: npm ci --ignore-scripts
             displayName: npm ci
           - script: npm run lint
             displayName: eslint
@@ -80,7 +80,7 @@ stages:
               restoreKeys: |
                 gradle | "$(Agent.OS)"
               path: $(HOME)/.gradle/caches
-          - script: npm ci
+          - script: npm ci --ignore-scripts
             displayName: npm ci
           - script: |
               echo "export const PRODUCTION_API_BASE_URL = '$(PROD_API_URL)';" > src/config/env.ts
