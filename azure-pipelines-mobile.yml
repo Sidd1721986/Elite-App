@@ -60,9 +60,11 @@ stages:
       - job: AndroidPlayBundle
         pool:
           vmImage: ubuntu-latest
-        variables:
-          JAVA_HOME: $(JAVA_HOME_17_X64)
         steps:
+          - script: |
+              echo "##vso[task.setvariable variable=JAVA_HOME]$JAVA_HOME_17_X64"
+              echo "Java home: $JAVA_HOME_17_X64"
+            displayName: Set JAVA_HOME to Java 17
           - task: NodeTool@0
             inputs:
               versionSpec: 20.x
