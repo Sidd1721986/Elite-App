@@ -32,7 +32,7 @@ const LandingScreen: React.FC<Props> = ({ navigation }) => {
                             <Text style={styles.brandHome}> Home Services</Text>
                         </Text>
                         <Text variant="labelMedium" style={styles.brandSubtitle}>
-                            PREMIUM • SEAMLESS • RELIABLE
+                            Premium Services. Seamless Experience.
                         </Text>
                     </View>
                 </View>
