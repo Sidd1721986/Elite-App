@@ -1,12 +1,32 @@
-# Azure DevOps pipeline for Mobile Builds (Android AAB and iOS IPA)
+# Azure DevOps pipeline for Mobile Builds + Store Deployments
 #
-# Use this when you are ready to build for the stores.
-# PREREQUISITE:
-#  1) Upload your Android keystore and iOS certificates to "Library -> Secure files"
-#  2) Set ENABLE_MOBILE_ANDROID and ENABLE_MOBILE_IOS to true in the "EliteApp-Production" Variable Group.
-#  3) Ensure ANDROID_KEYSTORE_SECURE_FILE, IOS_DISTRIBUTION_P12_SECURE_FILE, etc. are set.
-#  4) Set PROD_API_URL in the variable group (e.g. https://eliteapp-api-prod.azurewebsites.net/api)
-#     This is injected into src/config/env.ts before each native build — never commit env.ts.
+# On every push to main this pipeline will:
+#   1) Lint + test
+#   2) Build signed Android AAB  → upload to Google Play (Internal track)
+#   3) Build signed iOS IPA      → upload to App Store Connect (TestFlight)
+#
+# PREREQUISITES — set these in Library → Variable Group "EliteApp-Production":
+#
+#  Android:
+#   ENABLE_MOBILE_ANDROID        = true
+#   ANDROID_KEYSTORE_BASE64      = base64-encoded elite-release.keystore
+#   ANDROID_KEYSTORE_PASSWORD    = keystore password
+#   ANDROID_KEY_ALIAS            = elite-alias
+#   ANDROID_KEY_PASSWORD         = key password
+#   GOOGLE_PLAY_SERVICE_CONN     = name of your Azure DevOps Google Play service connection
+#                                  (Project Settings → Service connections → Google Play)
+#   GOOGLE_PLAY_PACKAGE_NAME     = com.elitehomeservicesusa.app
+#
+#  iOS (add once Apple Developer account is active):
+#   ENABLE_MOBILE_IOS            = true
+#   IOS_DISTRIBUTION_P12_SECURE_FILE    = EliteApp-Distribution.p12  (upload to Library → Secure files)
+#   IOS_P12_PASSWORD             = p12 export password
+#   IOS_PROVISIONING_PROFILE_SECURE_FILE = EliteApp-AppStore.mobileprovision
+#   APPLE_SERVICE_CONN           = name of your Azure DevOps App Store Connect service connection
+#                                  (Project Settings → Service connections → Apple App Store)
+#
+#  Shared:
+#   PROD_API_URL                 = https://eliteapp-api-prod.azurewebsites.net/api
 
 trigger:
   branches:
@@ -105,11 +125,87 @@ stages:
           - script: cd android && ./gradlew bundleRelease --no-daemon --stacktrace --no-build-cache
             displayName: bundleRelease
           - task: PublishBuildArtifacts@1
-            displayName: Publish AAB
+            displayName: Publish AAB artifact
             inputs:
               pathToPublish: android/app/build/outputs/bundle/release/app-release.aab
               artifactName: android-aab
+          - task: GooglePlayReleaseBundle@3
+            displayName: Upload AAB to Google Play (Internal track)
+            inputs:
+              serviceConnection: $(GOOGLE_PLAY_SERVICE_CONN)
+              applicationId: $(GOOGLE_PLAY_PACKAGE_NAME)
+              bundleFile: android/app/build/outputs/bundle/release/app-release.aab
+              track: internal
+              rolloutToUserFraction: 1.0
 
-# iOS stage removed — add back when Apple Distribution certificate and
-# provisioning profile are uploaded to Library → Secure files and
-# ENABLE_MOBILE_IOS is set to true in the EliteApp-Production variable group.
+  - stage: MobileIOS
+    displayName: Mobile — iOS IPA + App Store Connect
+    dependsOn: LintAndTest
+    condition: |
+      and(
+        succeeded(),
+        or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')),
+        eq(variables['ENABLE_MOBILE_IOS'], 'true')
+      )
+    jobs:
+      - job: iOSAppStore
+        pool:
+          vmImage: macos-latest
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 20.x
+          - task: Cache@2
+            displayName: Cache node_modules
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: node_modules
+          - script: npm ci --ignore-scripts
+            displayName: npm ci
+          - script: |
+              echo "export const PRODUCTION_API_BASE_URL = '$(PROD_API_URL)';" > src/config/env.ts
+            displayName: Inject production API URL
+          - task: InstallAppleCertificate@2
+            displayName: Install Distribution Certificate
+            inputs:
+              certSecureFile: $(IOS_DISTRIBUTION_P12_SECURE_FILE)
+              certPwd: $(IOS_P12_PASSWORD)
+              keychain: temp
+          - task: InstallProvisioningProfile@1
+            displayName: Install Provisioning Profile
+            inputs:
+              provisioningProfileLocation: secureFiles
+              provProfileSecureFile: $(IOS_PROVISIONING_PROFILE_SECURE_FILE)
+          - script: |
+              cd ios && pod install --repo-update
+            displayName: Pod install
+          - task: Xcode@5
+            displayName: Build IPA
+            inputs:
+              actions: archive
+              scheme: multiuserauthapp
+              sdk: iphoneos
+              configuration: Release
+              xcWorkspacePath: ios/multiuserauthapp.xcworkspace
+              packageApp: true
+              archivePath: $(Build.ArtifactStagingDirectory)/EliteApp.xcarchive
+              exportPath: $(Build.ArtifactStagingDirectory)/ipa
+              exportOptions: plist
+              exportOptionsPlist: ios/ExportOptions.plist
+              signingOption: manual
+              provisioningProfileName: EliteApp AppStore
+          - task: PublishBuildArtifacts@1
+            displayName: Publish IPA artifact
+            inputs:
+              pathToPublish: $(Build.ArtifactStagingDirectory)/ipa
+              artifactName: ios-ipa
+          - task: AppStoreRelease@1
+            displayName: Upload IPA to TestFlight
+            inputs:
+              serviceEndpoint: $(APPLE_SERVICE_CONN)
+              appIdentifier: com.elitehomeservicesusa.app
+              ipaPath: $(Build.ArtifactStagingDirectory)/ipa/**/*.ipa
+              shouldSkipWaitingForProcessing: true
+              shouldSkipSubmission: true
