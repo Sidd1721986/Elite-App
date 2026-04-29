@@ -130,7 +130,7 @@ stages:
             inputs:
               pathToPublish: android/app/build/outputs/bundle/release/app-release.aab
               artifactName: android-aab
-          - task: GooglePlayReleaseBundle@3
+          - task: GooglePlayReleaseBundle@4
             displayName: Upload AAB to Google Play (Internal track)
             inputs:
               serviceConnection: $(GOOGLE_PLAY_SERVICE_CONN)
