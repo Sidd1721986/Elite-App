@@ -154,11 +154,13 @@ const AppNavigator: React.FC = () => {
             <NavigationContainer
                 theme={navTheme}
                 linking={linking}
-                ref={navigationIntegration.navigationRef}
+                ref={navigationIntegration?.navigationRef}
                 onReady={() => {
-                    navigationIntegration.registerNavigationContainer(
-                        navigationIntegration.navigationRef,
-                    );
+                    if (navigationIntegration?.navigationRef) {
+                        navigationIntegration.registerNavigationContainer(
+                            navigationIntegration.navigationRef,
+                        );
+                    }
                 }}
             >
             {!user ? (

@@ -1,9 +1,9 @@
 import * as Sentry from '@sentry/react-native';
 import { SENTRY_DSN } from '../config/env';
 
-export const navigationIntegration = Sentry.reactNavigationIntegration({
+export const navigationIntegration = Sentry.reactNavigationIntegration?.({
     enableTimeToInitialDisplay: false,
-});
+}) ?? null;
 
 export function initSentry(): void {
     if (!__DEV__ && SENTRY_DSN) {
@@ -12,7 +12,7 @@ export function initSentry(): void {
             environment: 'production',
             tracesSampleRate: 1.0,
             attachStacktrace: true,
-            integrations: [navigationIntegration],
+            integrations: navigationIntegration ? [navigationIntegration] : [],
         });
     }
 }
