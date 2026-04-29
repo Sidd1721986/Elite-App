@@ -130,14 +130,14 @@ stages:
             inputs:
               pathToPublish: android/app/build/outputs/bundle/release/app-release.aab
               artifactName: android-aab
-          - task: GooglePlayReleaseBundle@4
+          - task: GooglePlayRelease@4
             displayName: Upload AAB to Google Play (Internal track)
             inputs:
               serviceConnection: $(GOOGLE_PLAY_SERVICE_CONN)
               applicationId: $(GOOGLE_PLAY_PACKAGE_NAME)
+              action: SingleBundle
               bundleFile: android/app/build/outputs/bundle/release/app-release.aab
               track: internal
-              rolloutToUserFraction: 1.0
 
 # iOS stage — add back once Apple Developer account is active and certificates are uploaded.
 # Required extensions: https://marketplace.visualstudio.com/items?itemName=ms-vsclient.app-store
