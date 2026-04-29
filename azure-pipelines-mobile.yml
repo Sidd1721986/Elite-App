@@ -137,7 +137,7 @@ stages:
               applicationId: $(GOOGLE_PLAY_PACKAGE_NAME)
               action: SingleBundle
               bundleFile: android/app/build/outputs/bundle/release/app-release.aab
-              track: internal
+              track: production
 
 # iOS stage — add back once Apple Developer account is active and certificates are uploaded.
 # Required extensions: https://marketplace.visualstudio.com/items?itemName=ms-vsclient.app-store
