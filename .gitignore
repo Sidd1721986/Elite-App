@@ -68,8 +68,9 @@ metro_cache/
 *.png
 *.log
 
-# Production appsettings
+# Production and local-secret appsettings (never commit real credentials)
 backend/appsettings.Production.json
+backend/appsettings.Local.json
 
 # debug files
 minimal.js

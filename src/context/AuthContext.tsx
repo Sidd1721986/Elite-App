@@ -28,12 +28,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (isNetworkError) {
                 setIsOffline(true);
-                if (__DEV__) console.warn('AuthContext: network unavailable, keeping cached session');
+                if (__DEV__) {console.warn('AuthContext: network unavailable, keeping cached session');}
             } else {
                 // Auth error (401, token expired) — clear session.
                 setUser(null);
                 setIsOffline(false);
-                if (__DEV__) console.error('AuthContext: session check failed:', error);
+                if (__DEV__) {console.error('AuthContext: session check failed:', error);}
             }
         }
     }, []);
@@ -201,11 +201,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteAccount,
         updateProfile,
         requestPhoneVerification,
-        verifyPhone
+        verifyPhone,
     }), [
         user, login, signup, logout, isLoading, isOffline, getPendingVendors,
         getApprovedVendors, updateUserStatus, removeVendor, deleteAccount,
-        updateProfile, requestPhoneVerification, verifyPhone
+        updateProfile, requestPhoneVerification, verifyPhone,
     ]);
 
     return (

@@ -25,5 +25,5 @@ export const AVAILABLE_SERVICES = [
   'Dock / bulkhead',
   'Flooring',
   'Remediation / water / fire / mold',
-  'Other'
+  'Other',
 ];

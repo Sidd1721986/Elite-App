@@ -179,3 +179,28 @@ public class PasswordResetToken
 
     public bool Used { get; set; }
 }
+
+public class AdminInvite
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    [Required]
+    [EmailAddress]
+    [StringLength(255)]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
+    public string TokenHash { get; set; } = string.Empty;
+
+    public Guid InvitedByAdminId { get; set; }
+
+    [ForeignKey("InvitedByAdminId")]
+    public User? InvitedByAdmin { get; set; }
+
+    public DateTime ExpiresAt { get; set; }
+
+    public bool Used { get; set; } = false;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}

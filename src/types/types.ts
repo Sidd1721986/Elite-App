@@ -176,4 +176,6 @@ export type RootStackParamList = {
   PrivacyPolicy: undefined;
   TermsOfService: undefined;
   ContactSupport: undefined;
+  InviteAdmin: undefined;
+  AdminRegister: { token: string; email: string };
 };

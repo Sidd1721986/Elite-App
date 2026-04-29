@@ -20,8 +20,9 @@ Download Elite Home Services today and experience professional care, simplified.
 home,services,booking,admin,dashboard,plumbing,cleaning,electrical,maintenance,jobs,management,pro
 
 ## 🔗 Live URLs
-- **Support URL**: https://eliteapp-api-prod.azurewebsites.net/api/legal/support
-- **Privacy Policy URL**: https://eliteapp-api-prod.azurewebsites.net/api/legal/privacy
+(Replace the hostname if your App Service name changed. Routes match `LegalController` in the API.)
+- **Support URL**: https://eliteapp-api-prod.azurewebsites.net/support
+- **Privacy Policy URL**: https://eliteapp-api-prod.azurewebsites.net/privacy
 - **Marketing URL**: (Optional) https://eliteapp-api-prod.azurewebsites.net
 
 ## ⚖️ License Agreement (EULA)

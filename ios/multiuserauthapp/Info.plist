@@ -28,6 +28,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.elitehomeservicesusa.app</string>
+				<string>eliteapp</string>
 			</array>
 		</dict>
 	</array>

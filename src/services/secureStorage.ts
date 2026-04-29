@@ -77,5 +77,5 @@ export const SecureStorage = {
             console.error('SecureStorage: Error removing item', error);
             return false;
         }
-    }
+    },
 };

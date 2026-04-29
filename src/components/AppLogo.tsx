@@ -3,7 +3,7 @@ import { View, StyleSheet, Image } from 'react-native';
 import { Surface } from 'react-native-paper';
 
 /**
- * In-app logo component. 
+ * In-app logo component.
  * Displays the company logo from assets/logo.png
  */
 export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = ({

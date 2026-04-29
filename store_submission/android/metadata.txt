@@ -23,5 +23,6 @@ Elite Home Services is the all-in-one platform for professional home management.
 Experience the "Elite" standard of home care. Download now and simplify your home life today!
 
 ## 🔗 Live URLs
-- **Privacy Policy**: https://eliteapp-api-prod.azurewebsites.net/api/legal/privacy
-- **Support URL**: https://eliteapp-api-prod.azurewebsites.net/api/legal/support
+(Replace the hostname if your App Service name changed. Routes match `LegalController` in the API.)
+- **Privacy Policy**: https://eliteapp-api-prod.azurewebsites.net/privacy
+- **Support URL**: https://eliteapp-api-prod.azurewebsites.net/support

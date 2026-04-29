@@ -16,7 +16,7 @@ const DEV_API_PORT = 5260;
 function getPackagerHostname(): string | null {
     try {
         // Same helper RN uses for devtools; bundle URL is e.g. http://192.168.1.5:8081/ on a physical device
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+
         const getDevServer = require('react-native/Libraries/Core/Devtools/getDevServer') as () => { url: string };
         const { url } = getDevServer();
         return new URL(url).hostname;
@@ -132,7 +132,7 @@ export const apiClient = {
 
         const requestWithRetry = async (retries = 3, backoff = 1000): Promise<T> => {
             const url = `${BASE_URL}${endpoint}`;
-            if (__DEV__) console.log(`[API-CLIENT] ${method} ${url}`);
+            if (__DEV__) {console.log(`[API-CLIENT] ${method} ${url}`);}
             try {
                 const response = await fetchWithTimeout(url, {
                     ...options,
@@ -143,7 +143,7 @@ export const apiClient = {
                     // Retry on transient errors (503 Service Unavailable, 504 Gateway Timeout)
                     if (retries > 0 && (response.status === 503 || response.status === 504)) {
                         const delay = backoff * (4 - retries); // 1s, 2s, 3s
-                        if (__DEV__) console.log(`[API-CLIENT] Transient error ${response.status}. Retrying in ${delay}ms...`);
+                        if (__DEV__) {console.log(`[API-CLIENT] Transient error ${response.status}. Retrying in ${delay}ms...`);}
                         await new Promise(resolve => setTimeout(resolve, delay));
                         return requestWithRetry(retries - 1, backoff);
                     }
@@ -158,7 +158,7 @@ export const apiClient = {
                         try {
                             await Promise.resolve(onUnauthorized());
                         } catch (e) {
-                            if (__DEV__) console.error('onUnauthorized error:', e);
+                            if (__DEV__) {console.error('onUnauthorized error:', e);}
                         }
                     }
 
@@ -181,7 +181,7 @@ export const apiClient = {
                                     return `${field}: ${msg}`;
                                 })
                                 .join(', ');
-                            if (errorDetails) errorMessage = errorDetails;
+                            if (errorDetails) {errorMessage = errorDetails;}
                         }
                         else if (errorJson.error) {
                             errorMessage = errorJson.error;
@@ -192,7 +192,7 @@ export const apiClient = {
                             errorMessage = errorText;
                         }
                     }
-                    if (__DEV__) console.log('API CLIENT THROWING:', errorMessage);
+                    if (__DEV__) {console.log('API CLIENT THROWING:', errorMessage);}
                     const error = new Error(errorMessage) as any;
                     error.traceId = traceId;
                     throw error;
@@ -221,7 +221,7 @@ export const apiClient = {
                 // Retry on network/timeout errors
                 if (retries > 0 && (err.message === 'Request timed out' || err.message === 'Network request failed')) {
                     const delay = backoff * (4 - retries);
-                    if (__DEV__) console.log(`[API-CLIENT] Network error: ${err.message}. Retrying in ${delay}ms...`);
+                    if (__DEV__) {console.log(`[API-CLIENT] Network error: ${err.message}. Retrying in ${delay}ms...`);}
                     await new Promise(resolve => setTimeout(resolve, delay));
                     return requestWithRetry(retries - 1, backoff);
                 }

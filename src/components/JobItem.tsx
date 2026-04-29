@@ -44,10 +44,10 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify, index =
     return (
         <MotiView
             from={reducedMotion ? {} : { opacity: 0, translateY: 20 }}
-            animate={reducedMotion ? {} : { 
-                opacity: 1, 
+            animate={reducedMotion ? {} : {
+                opacity: 1,
                 translateY: 0,
-                scale: isPressed ? 0.98 : 1
+                scale: isPressed ? 0.98 : 1,
             }}
             transition={{
                 type: 'timing',

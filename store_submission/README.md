@@ -28,8 +28,8 @@ This folder contains everything you need to submit **Elite Home Services USA** t
 4. **Submit for Review**: Once all fields and assets are uploaded, you are ready to submit your first build!
 
 ## 🔗 Live Legal Links (Required)
-- **Privacy Policy**: https://eliteapp-api-prod.azurewebsites.net/api/legal/privacy
-- **Support**: https://eliteapp-api-prod.azurewebsites.net/api/legal/support
+- **Privacy Policy**: https://eliteapp-api-prod.azurewebsites.net/privacy
+- **Support**: https://eliteapp-api-prod.azurewebsites.net/support
 
 ---
 

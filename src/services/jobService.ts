@@ -92,5 +92,5 @@ export const jobService = {
                 'Content-Type': 'multipart/form-data',
             },
         });
-    }
+    },
 };

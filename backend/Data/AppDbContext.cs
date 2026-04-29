@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<JobNote> JobNotes { get; set; }
     public DbSet<Message> Messages { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+    public DbSet<AdminInvite> AdminInvites { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,5 +43,12 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Message>()
             .HasIndex(m => new { m.SenderId, m.ReceiverId, m.Timestamp });
+
+        modelBuilder.Entity<AdminInvite>()
+            .HasIndex(i => i.TokenHash)
+            .IsUnique();
+
+        modelBuilder.Entity<AdminInvite>()
+            .HasIndex(i => i.Email);
     }
 }

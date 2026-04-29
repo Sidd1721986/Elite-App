@@ -18,7 +18,7 @@ jest.mock('../../services/authService', () => {
 });
 jest.mock('../../utils/normalization', () => ({
     normalizeUser: (user: any) => {
-        if (!user || typeof user !== 'object') return undefined;
+        if (!user || typeof user !== 'object') {return undefined;}
         return {
             ...user,
             id: String(user.id ?? ''),

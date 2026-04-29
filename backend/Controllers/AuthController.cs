@@ -1,8 +1,12 @@
+using System.Security.Cryptography;
+using System.Text;
+using EliteApp.API.Data;
 using EliteApp.API.Models;
 using EliteApp.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 
 namespace EliteApp.API.Controllers;
 
@@ -11,10 +15,14 @@ namespace EliteApp.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly AppDbContext _context;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, AppDbContext context, ILogger<AuthController> logger)
     {
         _authService = authService;
+        _context = context;
+        _logger = logger;
     }
 
     [EnableRateLimiting("auth-login")]
@@ -130,6 +138,65 @@ public class AuthController : ControllerBase
 
         return Ok(new { message = "Code verified." });
     }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
+    [HttpPost("admin-register")]
+    public async Task<IActionResult> AdminRegister([FromBody] AdminRegisterRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Token) ||
+            string.IsNullOrWhiteSpace(request.Email) ||
+            string.IsNullOrWhiteSpace(request.Name) ||
+            string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { message = "All fields are required." });
+
+        var email = request.Email.Trim().ToLowerInvariant();
+        var tokenHash = HashInviteToken(request.Token.Trim());
+
+        var invite = await _context.AdminInvites
+            .FirstOrDefaultAsync(i =>
+                i.TokenHash == tokenHash &&
+                !i.Used &&
+                i.ExpiresAt > DateTime.UtcNow);
+
+        if (invite == null)
+            return BadRequest(new { message = "Invalid or expired invite link." });
+
+        if (!string.Equals(invite.Email, email, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Invalid or expired invite link." });
+
+        if (await _context.Users.AnyAsync(u => u.Email.ToLower() == email))
+            return Conflict(new { message = "An account with this email already exists." });
+
+        var minLen = 8;
+        if (request.Password.Length < minLen)
+            return BadRequest(new { message = $"Password must be at least {minLen} characters." });
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = email,
+            Name = request.Name.Trim(),
+            Role = UserRole.Admin.ToString(),
+            IsApproved = true,
+            IsActive = true,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, 12),
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        invite.Used = true;
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("New admin registered via invite: {Email}", email);
+        return Ok(new { message = "Admin account created. You can now log in." });
+    }
+
+    private static string HashInviteToken(string plaintext)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(plaintext));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
 }
 
 public class RegisterRequest
@@ -174,4 +241,12 @@ public class VerifyResetCodeRequest
 {
     public string Email { get; set; } = string.Empty;
     public string Token { get; set; } = string.Empty;
+}
+
+public class AdminRegisterRequest
+{
+    public string Token { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
 }

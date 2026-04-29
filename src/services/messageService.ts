@@ -24,5 +24,5 @@ export const messageService = {
 
     async getDefaultAdminId(): Promise<string> {
         return apiClient.get<string>('/messages/admin-id');
-    }
+    },
 };

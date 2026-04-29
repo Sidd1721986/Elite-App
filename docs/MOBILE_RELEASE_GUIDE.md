@@ -85,5 +85,5 @@ keytool -genkey -v -keystore elite-production.jks -alias elite-app -keyalg RSA -
 > [!TIP]
 > **Legal Requirements**:
 > For both stores, use these URLs for the metadata:
-> - **Privacy Policy**: `https://eliteapp-api-prod.azurewebsites.net/api/legal/privacy`
-> - **Support URL**: `https://eliteapp-api-prod.azurewebsites.net/api/legal/support`
+> - **Privacy Policy**: `https://eliteapp-api-prod.azurewebsites.net/privacy`
+> - **Support URL**: `https://eliteapp-api-prod.azurewebsites.net/support`

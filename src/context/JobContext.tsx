@@ -47,7 +47,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const jobsMap = useMemo(() => {
         const map = new Map<string, Job>();
         jobs.forEach(job => {
-            if (job && job.id) map.set(job.id, job);
+            if (job && job.id) {map.set(job.id, job);}
         });
         return map;
     }, [jobs]);
@@ -105,7 +105,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     const seen = new Set<string>();
                     const flat: any[] = [];
                     const enqueue = (j: any) => {
-                        if (!j?.id || seen.has(String(j.id))) return;
+                        if (!j?.id || seen.has(String(j.id))) {return;}
                         seen.add(String(j.id));
                         flat.push(j);
                         // Recurse into nested children
@@ -171,7 +171,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setError(null);
         } catch (err: any) {
             const msg = err?.message || 'Failed to update job';
-            if (__DEV__) console.error('JobContext: Update failed:', msg);
+            if (__DEV__) {console.error('JobContext: Update failed:', msg);}
             // Revert to snapshot
             setJobs(snapshot);
             setError(msg);
@@ -192,25 +192,25 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, []);
 
     const partialAssign = useCallback(async (
-        jobId: string, 
-        vendorId: string, 
-        selectedItemIds: string[], 
-        selectedPhotoUrls: string[], 
+        jobId: string,
+        vendorId: string,
+        selectedItemIds: string[],
+        selectedPhotoUrls: string[],
         manualDescription?: string,
         selectedServices: string[] = []
     ) => {
         const originalJob = jobsMap.get(jobId);
-        if (!originalJob) throw new Error('Original job not found');
+        if (!originalJob) {throw new Error('Original job not found');}
 
         const originalItems = originalJob.items || [];
         const originalServices = originalJob.services || [];
-        
+
         // Determine if this is a "Full Swap" (selecting everything currently on the job)
         // or a "Partial Split" (taking a subset)
-        const isSelectingAllItems = originalItems.length === 0 || 
+        const isSelectingAllItems = originalItems.length === 0 ||
             (selectedItemIds.length > 0 && originalItems.every(i => selectedItemIds.includes(i.id)));
-        
-        const isSelectingAllServices = originalServices.length === 0 || 
+
+        const isSelectingAllServices = originalServices.length === 0 ||
             (selectedServices.length > 0 && originalServices.every(s => selectedServices.includes(s)));
 
         const isFullReassign = isSelectingAllItems && isSelectingAllServices && originalJob.vendorId !== undefined;
@@ -224,7 +224,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     vendorId: vendorId,
                     status: JobStatus.PARTIALLY_ASSIGNED,
                     description: manualDescription || originalJob.description,
-                    services: selectedServices.length > 0 ? selectedServices : originalJob.services
+                    services: selectedServices.length > 0 ? selectedServices : originalJob.services,
                 });
                 const normalized = normalizeJob(updatedJob);
                 setJobs(prevJobs => prevJobs.map(j => j.id === jobId ? normalized : j));
@@ -255,10 +255,10 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const normalizedNewJob = normalizeJob(newJob);
 
             // Update the ORIGINAL job:
-            const updatedOriginalItems = originalItems.map(item => 
+            const updatedOriginalItems = originalItems.map(item =>
                 selectedItemIds.includes(item.id) ? { ...item, isAssigned: true } : item
             );
-            
+
             const remainingServices = originalServices.filter(s => !selectedServices.includes(s));
 
             const movedPhotoSet = new Set(selectedPhotoUrls);
@@ -282,7 +282,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 ...normalizedParent,
                 childJobs: [...(normalizedParent.childJobs || []), normalizedNewJob],
             };
-            
+
             setJobs(prevJobs => {
                 const filtered = prevJobs.map(j => j.id === jobId ? parentWithChildren : j);
                 return [normalizedNewJob, ...filtered];
@@ -346,7 +346,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // Merge all updated jobs into state at once.
             const updatedMap = new Map<string, Job>();
             updatedMap.set(normalizedParent.id!, normalizedParent);
-            normalizedChildren.forEach(c => { if (c.id) updatedMap.set(c.id, c); });
+            normalizedChildren.forEach(c => { if (c.id) {updatedMap.set(c.id, c);} });
 
             setJobs(prevJobs =>
                 prevJobs.map(j => (j.id && updatedMap.has(j.id) ? updatedMap.get(j.id)! : j)),
@@ -521,7 +521,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // This ensures that frequent updates (like photo uploads) don't lock the UI with repeated JSON serialization
     const lastSavedString = useRef<string>('');
     useEffect(() => {
-        if (!user || jobs.length === 0) return;
+        if (!user || jobs.length === 0) {return;}
 
         const timer = setTimeout(() => {
             const jobsString = JSON.stringify(jobs);
@@ -556,7 +556,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getJobById,
         isLoading,
         refreshJobs,
-        error
+        error,
     }), [jobs, addJob, updateJob, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, addJobPhotos, getJobById, isLoading, refreshJobs, error, partialAssign, finalizeAssignment, unassignVendor, unassignVendorScope, removeJobPhoto]);
 
     return (

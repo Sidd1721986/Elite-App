@@ -7,8 +7,8 @@ const USERS_KEY = '@users';
 
 /** Login/signup: maps UI role to backend account type (Admin, Vendor, or Customer only). */
 export function toApiRole(role: UserRole): 'Admin' | 'Vendor' | 'Customer' {
-    if (role === UserRole.ADMIN) return 'Admin';
-    if (role === UserRole.VENDOR) return 'Vendor';
+    if (role === UserRole.ADMIN) {return 'Admin';}
+    if (role === UserRole.VENDOR) {return 'Vendor';}
     return 'Customer';
 }
 
@@ -27,8 +27,8 @@ export const authService = {
         try {
             // Map granular roles to the 3 main roles expected by the backend
             let apiRole = 'Customer';
-            if (role === UserRole.ADMIN) apiRole = 'Admin';
-            else if (role === UserRole.VENDOR) apiRole = 'Vendor';
+            if (role === UserRole.ADMIN) {apiRole = 'Admin';}
+            else if (role === UserRole.VENDOR) {apiRole = 'Vendor';}
 
             await apiClient.post('/auth/register', {
                 name,
@@ -36,7 +36,7 @@ export const authService = {
                 password,
                 role: apiRole,
                 address,
-                phone
+                phone,
                 // referralSource and roleOther might need addition to backend if needed
             });
             return true;
@@ -54,8 +54,8 @@ export const authService = {
     async login(email: string, password: string, role: UserRole): Promise<User | null> {
         try {
             let apiRole = 'Customer';
-            if (role === UserRole.ADMIN) apiRole = 'Admin';
-            else if (role === UserRole.VENDOR) apiRole = 'Vendor';
+            if (role === UserRole.ADMIN) {apiRole = 'Admin';}
+            else if (role === UserRole.VENDOR) {apiRole = 'Vendor';}
 
             const response = await apiClient.post<{ token?: string; user?: any }>('/auth/login', {
                 email: email.trim(),
@@ -94,8 +94,8 @@ export const authService = {
     async getProfile(): Promise<User | null> {
         try {
             // We use the login-like flow to get the user object
-            // The backend doesn't have a dedicated GET /profile yet, but we can use the login token to identify. 
-            // Wait, let's look at UsersController again. 
+            // The backend doesn't have a dedicated GET /profile yet, but we can use the login token to identify.
+            // Wait, let's look at UsersController again.
             // Actually, I can just add a simple GET /profile to UsersController.
             const user = await apiClient.get<User>('/users/me', true);
             if (user) {
@@ -125,7 +125,7 @@ export const authService = {
         try {
             return await apiClient.get<User[]>('/users/pending-vendors', true);
         } catch (error) {
-            if (__DEV__) console.error('Error getting pending vendors:', error);
+            if (__DEV__) {console.error('Error getting pending vendors:', error);}
             return [];
         }
     },
@@ -150,7 +150,7 @@ export const authService = {
         try {
             return await apiClient.get<User[]>('/users/approved-vendors', true);
         } catch (error) {
-            if (__DEV__) console.error('Error getting approved vendors:', error);
+            if (__DEV__) {console.error('Error getting approved vendors:', error);}
             return [];
         }
     },
