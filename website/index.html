@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elite Home Services USA — Premium Home Services in Jacksonville, FL</title>
+  <meta name="description" content="Elite Home Services USA connects Jacksonville homeowners with vetted, professional service vendors. Book plumbing, electrical, HVAC, cleaning and more — fast and easy." />
+  <meta name="keywords" content="home services Jacksonville FL, handyman Jacksonville, plumbing electrical HVAC cleaning Jacksonville, Elite Home Services USA" />
+  <link rel="canonical" href="https://www.elitehomeservicesusa.com/" />
+
+  <!-- Open Graph (for social sharing previews) -->
+  <meta property="og:title" content="Elite Home Services USA" />
+  <meta property="og:description" content="Premium home services in Jacksonville, FL. Book vetted professionals fast." />
+  <meta property="og:url" content="https://www.elitehomeservicesusa.com/" />
+  <meta property="og:type" content="website" />
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --navy:  #1a2e4a;
+      --gold:  #c9a84c;
+      --light: #f5f7fa;
+      --white: #ffffff;
+      --text:  #333333;
+      --gray:  #666666;
+    }
+
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: var(--text); background: var(--white); }
+
+    /* NAV */
+    nav {
+      background: var(--navy);
+      padding: 18px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    nav .logo { color: var(--gold); font-size: 1.25rem; font-weight: 700; letter-spacing: 1px; }
+    nav .logo span { color: var(--white); }
+    nav .nav-links a {
+      color: var(--white);
+      text-decoration: none;
+      margin-left: 26px;
+      font-size: 0.92rem;
+      opacity: 0.88;
+      transition: color .2s;
+    }
+    nav .nav-links a:hover { color: var(--gold); opacity: 1; }
+
+    /* HERO */
+    .hero {
+      background: linear-gradient(135deg, var(--navy) 0%, #2c4a6e 100%);
+      color: var(--white);
+      text-align: center;
+      padding: 96px 20px 84px;
+    }
+    .hero h1 { font-size: 2.8rem; font-weight: 700; line-height: 1.2; margin-bottom: 22px; }
+    .hero h1 span { color: var(--gold); }
+    .hero .tagline {
+      font-size: 1.4rem;
+      color: var(--gold);
+      font-weight: 600;
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+    }
+    .hero p {
+      font-size: 1.1rem;
+      max-width: 640px;
+      margin: 0 auto 38px;
+      opacity: 0.88;
+      line-height: 1.75;
+    }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--gold);
+      color: var(--navy);
+      padding: 14px 32px;
+      border-radius: 6px;
+      font-weight: 700;
+      text-decoration: none;
+      font-size: 1rem;
+      transition: background .2s;
+    }
+    .btn-primary:hover { background: #e0b85a; }
+    .btn-outline {
+      border: 2px solid var(--white);
+      color: var(--white);
+      padding: 13px 32px;
+      border-radius: 6px;
+      font-weight: 600;
+      text-decoration: none;
+      font-size: 1rem;
+      transition: all .2s;
+    }
+    .btn-outline:hover { background: rgba(255,255,255,0.1); }
+
+    /* SECTIONS */
+    section { padding: 76px 20px; }
+    section.bg-light { background: var(--light); }
+    .section-inner { max-width: 900px; margin: 0 auto; text-align: center; }
+    .section-label {
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      font-size: 0.76rem;
+      color: var(--gold);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    h2 { font-size: 2rem; color: var(--navy); margin-bottom: 18px; }
+    .divider { width: 56px; height: 4px; background: var(--gold); margin: 0 auto 28px; border-radius: 2px; }
+    p.body-text {
+      font-size: 1.05rem;
+      line-height: 1.85;
+      color: var(--gray);
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    /* MISSION HIGHLIGHTS */
+    .highlights {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 44px;
+    }
+    .highlight {
+      background: var(--white);
+      border-left: 4px solid var(--gold);
+      border-radius: 8px;
+      padding: 22px 24px;
+      width: 250px;
+      text-align: left;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .highlight h4 { color: var(--navy); font-size: 1rem; margin-bottom: 8px; }
+    .highlight p  { color: var(--gray); font-size: 0.88rem; line-height: 1.6; }
+
+    /* CTA BANNER */
+    .cta-banner {
+      background: var(--gold);
+      text-align: center;
+      padding: 28px 20px;
+    }
+    .cta-banner p {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--navy);
+      letter-spacing: 1px;
+    }
+
+    /* WHO WE ARE */
+    .team-grid {
+      display: flex;
+      gap: 28px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 44px;
+    }
+    .team-card {
+      background: var(--white);
+      border-radius: 10px;
+      padding: 32px 26px;
+      width: 260px;
+      box-shadow: 0 2px 14px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    .team-card .avatar {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      overflow: hidden;
+      border: 4px solid var(--gold);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+    .team-card .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+    }
+    .team-card h4 { color: var(--navy); font-size: 1.05rem; margin-bottom: 4px; }
+    .team-card .role { color: var(--gold); font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .team-card p { color: var(--gray); font-size: 0.88rem; line-height: 1.6; }
+
+    /* TEAM GROUP PHOTO */
+    .team-photo {
+      margin: 48px auto 0;
+      max-width: 820px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+    }
+    .team-photo img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* HOW IT WORKS */
+    .steps {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 44px;
+    }
+    .step {
+      background: var(--white);
+      border-radius: 10px;
+      padding: 28px 20px;
+      width: 190px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+      text-align: center;
+    }
+    .step-num {
+      width: 48px;
+      height: 48px;
+      background: var(--navy);
+      color: var(--gold);
+      border-radius: 50%;
+      font-size: 1.2rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 14px;
+    }
+    .step h4 { color: var(--navy); font-size: 0.95rem; margin-bottom: 6px; }
+    .step p  { color: var(--gray); font-size: 0.84rem; line-height: 1.55; }
+
+    /* GIVE BACK */
+    .giveback-box {
+      background: var(--navy);
+      border-radius: 12px;
+      padding: 52px 40px;
+      color: var(--white);
+    }
+    .giveback-box h2 { color: var(--white); }
+    .giveback-box p.body-text { color: rgba(255,255,255,0.82); }
+    .charities {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 32px;
+    }
+    .charity-badge {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(201,168,76,0.4);
+      border-radius: 30px;
+      padding: 10px 22px;
+      color: var(--gold);
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    /* APP DOWNLOAD */
+    .app-buttons {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 36px;
+    }
+    .app-btn {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--navy);
+      color: var(--white);
+      text-decoration: none;
+      padding: 14px 28px;
+      border-radius: 10px;
+      min-width: 210px;
+      transition: background .2s;
+    }
+    .app-btn:hover { background: #2c4a6e; }
+    .app-btn .store-icon { font-size: 2rem; }
+    .app-btn .store-text .top    { font-size: 0.72rem; opacity: 0.75; }
+    .app-btn .store-text .bottom { font-size: 1.05rem; font-weight: 700; }
+    .app-note { margin-top: 16px; font-size: 0.84rem; color: var(--gray); }
+
+    /* FOOTER */
+    footer {
+      background: var(--navy);
+      color: rgba(255,255,255,0.65);
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .social-links { margin-bottom: 18px; }
+    .social-links a {
+      color: var(--gold);
+      text-decoration: none;
+      margin: 0 14px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    .social-links a:hover { opacity: 0.8; }
+    footer p { font-size: 0.85rem; margin-bottom: 6px; }
+    .footer-roles {
+      margin-top: 20px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.8rem;
+    }
+    .footer-roles a {
+      color: rgba(255,255,255,0.45);
+      text-decoration: none;
+      margin: 0 10px;
+    }
+    .footer-roles a:hover { color: var(--gold); }
+
+    /* RESPONSIVE */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 1.9rem; }
+      nav .nav-links { display: none; }
+      .team-card { width: 100%; max-width: 300px; }
+      .highlight { width: 100%; max-width: 320px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="logo">Elite Home Services <span>USA</span></div>
+    <div class="nav-links">
+      <a href="#mission">Mission</a>
+      <a href="#who">Who We Are</a>
+      <a href="#how">How It Works</a>
+      <a href="#giveback">Give Back</a>
+      <a href="#app">Get the App</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <div class="hero">
+    <h1>Your Home. <span>Our Priority.</span></h1>
+    <div class="tagline">"CLICK, APPROVE, DONE."</div>
+    <p>We consolidate and replace dozens of confusing options for home maintenance. One request. Vetted professionals. No fees. No hassle.</p>
+    <div class="hero-buttons">
+      <a href="#app" class="btn-primary">Download the App</a>
+      <a href="#how" class="btn-outline">How It Works</a>
+    </div>
+  </div>
+
+  <!-- CTA BANNER -->
+  <div class="cta-banner">
+    <p>"Leave the Bidding to Us."</p>
+  </div>
+
+  <!-- MISSION -->
+  <section id="mission">
+    <div class="section-inner">
+      <div class="section-label">Our Purpose</div>
+      <h2>Mission Statement</h2>
+      <div class="divider"></div>
+      <p class="body-text">
+        The goal of Elite Home Services is to be the Homeowner's Advocate. We consolidate and replace dozens of confusing options for maintenance and updates, from roofs and windows to plumbing and electrical, even kitchen and bath. You can trust our vetted vendors for your home. We vet and partner with the top companies across dozens of categories to provide you with a single place to access services from qualified, trusted vendors at the right price.
+        <br/><br/>
+        Whatever your needs, just let us know with one central request and we send the correlating professionals out — fast, simple, headache free. No fees, no picking three random vendors and spending hours researching. Need multiple things done? Simply place a single request and let us handle it.
+        <br/><br/>
+        We are revolutionizing the home services industry. Whether you're a Homeowner, Realtor, Landlord, or Property Manager — simply visit us in-app or online. We've got your home covered.
+        <br/><br/>
+        <em>Thank you for allowing us to serve you, for telling your friends and family, and God Bless America!</em>
+      </p>
+
+      <div class="highlights">
+        <div class="highlight">
+          <h4>🏠 One Request</h4>
+          <p>Describe your need once. We coordinate everything — even if it's multiple services.</p>
+        </div>
+        <div class="highlight">
+          <h4>✅ Vetted Vendors</h4>
+          <p>We partner only with trusted, qualified professionals in dozens of categories.</p>
+        </div>
+        <div class="highlight">
+          <h4>💰 No Fees</h4>
+          <p>No markups, no bidding wars, no wasted hours researching random companies.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHO WE ARE -->
+  <section id="who" class="bg-light">
+    <div class="section-inner">
+      <div class="section-label">The Team</div>
+      <h2>Who We Are</h2>
+      <div class="divider"></div>
+      <div class="team-grid">
+
+        <div class="team-card">
+          <div class="avatar"><img src="images/charlie.jpg" alt="Charlie Steinke" /></div>
+          <h4>Charlie Steinke</h4>
+          <div class="role">Co-Founder</div>
+          <p>Local Realtor and owner of Nano Seal Pro LLC. Charlie saw a need for a better way to find home services during real estate transactions and on his own homes over the years. He met Jeremy at a home show, they started sharing ideas, and Elite Home Services was born.</p>
+        </div>
+
+        <div class="team-card">
+          <div class="avatar"><img src="images/jeremy.jpg" alt="Jeremy Tintle" /></div>
+          <h4>Jeremy Tintle</h4>
+          <div class="role">Co-Founder</div>
+          <p>Local business owner and home improvement consultant with over 15 years experience in roofs, windows and doors. Having helped thousands of customers, Jeremy knew the existing options — like "Some Girls List" — weren't truly helping homeowners. He decided to build a better way since nobody else had yet.</p>
+        </div>
+
+        <div class="team-card">
+          <div class="avatar"><img src="images/sid.jpg" alt="Sid Sengar" /></div>
+          <h4>Sid Sengar</h4>
+          <div class="role">Tech &amp; Development</div>
+          <p>Tech guru, app and website developer. Literally anything tech the team mentions to Sid just shows up done. Forever grateful for his dedication to the lines of code and writing the language most of us don't understand.</p>
+        </div>
+
+      </div>
+
+      <!-- Group photo -->
+      <div class="team-photo">
+        <img src="images/team.jpg" alt="Elite Home Services USA Team" />
+      </div>
+
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how">
+    <div class="section-inner">
+      <div class="section-label">Simple Process</div>
+      <h2>How It Works</h2>
+      <div class="divider"></div>
+      <p class="body-text">Getting started takes less than 2 minutes. One request is all it takes.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h4>Download the App</h4>
+          <p>Free on iOS and Android. Create your account in seconds.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h4>Place a Request</h4>
+          <p>Describe what you need — one or multiple services, we handle it all.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h4>We Handle It</h4>
+          <p>We match you with vetted professionals and coordinate everything.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <h4>Click, Approve, Done</h4>
+          <p>Review, approve, and track your job from start to finish.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GIVE BACK -->
+  <section id="giveback" class="bg-light">
+    <div class="section-inner">
+      <div class="giveback-box">
+        <div class="section-label" style="color:var(--gold)">Community First</div>
+        <h2>Give Back to the Community</h2>
+        <div class="divider"></div>
+        <p class="body-text">
+          At Elite Home Services USA, we believe in more than just great service. We give back to our charity partners of your choice — just list your favorite in the request notes or send us a message. Every job helps a cause you care about.
+        </p>
+        <div class="charities">
+          <div class="charity-badge">❤️ Tim Tebow Foundation</div>
+          <div class="charity-badge">🎖️ Wounded Warriors</div>
+          <div class="charity-badge">🐾 EveryPet / No More Homeless Pets</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- APP DOWNLOAD -->
+  <section id="app">
+    <div class="section-inner">
+      <div class="section-label">Available Now</div>
+      <h2>Get the App</h2>
+      <div class="divider"></div>
+      <p class="body-text">
+        Everything runs through the app — request services, track jobs, manage your home, all in one place. Available for iPhone and Android.
+      </p>
+      <div class="app-buttons">
+        <!-- Replace href="#" with your App Store link once approved -->
+        <a href="#" class="app-btn">
+          <div class="store-icon">🍎</div>
+          <div class="store-text">
+            <div class="top">Download on the</div>
+            <div class="bottom">App Store</div>
+          </div>
+        </a>
+        <!-- Replace href="#" with your Google Play link once approved -->
+        <a href="#" class="app-btn">
+          <div class="store-icon">▶</div>
+          <div class="store-text">
+            <div class="top">Get it on</div>
+            <div class="bottom">Google Play</div>
+          </div>
+        </a>
+      </div>
+      <p class="app-note">Store links go live once app review is approved. Check back soon!</p>
+
+      <div style="margin-top:44px;">
+        <p style="font-size:0.9rem;color:#666;margin-bottom:16px;font-weight:600;text-transform:uppercase;letter-spacing:2px;">Scan to Download</p>
+        <img src="images/qr-download.png" alt="Scan to download Elite Home Services USA"
+          style="width:180px;height:180px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.12);" />
+        <p style="margin-top:12px;font-size:0.82rem;color:#888;">Works on iPhone &amp; Android — auto-detects your device</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="social-links">
+      <!-- Replace # with your real Facebook and Instagram URLs -->
+      <a href="#">📘 Facebook</a>
+      <a href="#">📷 Instagram</a>
+    </div>
+    <p>&copy; 2026 Elite Home Services USA LLC. All rights reserved.</p>
+    <p>EliteHomeServicesUSA.com</p>
+    <div class="footer-roles">
+      <a href="#">Vendor Portal</a>
+      <a href="#">Admin</a>
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms of Service</a>
+      <a href="#">Contact Us</a>
+    </div>
+  </footer>
+
+</body>
+</html>
