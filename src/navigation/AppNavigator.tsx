@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
-import * as Sentry from '@sentry/react-native';
+import { navigationIntegration } from '../services/sentry';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
 import { User, UserRole, RootStackParamList } from '../types/types';
@@ -154,10 +154,10 @@ const AppNavigator: React.FC = () => {
             <NavigationContainer
                 theme={navTheme}
                 linking={linking}
-                ref={Sentry.navigationIntegration.navigationRef}
+                ref={navigationIntegration.navigationRef}
                 onReady={() => {
-                    Sentry.navigationIntegration.registerNavigationContainer(
-                        Sentry.navigationIntegration.navigationRef,
+                    navigationIntegration.registerNavigationContainer(
+                        navigationIntegration.navigationRef,
                     );
                 }}
             >

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, StatusBar, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { MD3LightTheme, PaperProvider } from 'react-native-paper';
-import * as Sentry from '@sentry/react-native';
+import { Sentry } from './src/services/sentry';
 import { AuthProvider } from './src/context/AuthContext';
 import { JobProvider } from './src/context/JobContext';
 import AppNavigator from './src/navigation/AppNavigator';
