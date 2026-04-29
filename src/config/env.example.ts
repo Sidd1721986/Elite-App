@@ -18,3 +18,6 @@ export const PRODUCTION_API_BASE_URL =
 //   privacy → strip trailing /api from base + /privacy
 //   support → ... + /support
 //   terms   → ... + /terms
+
+// Sentry DSN — get from sentry.io → your project → Settings → Client Keys
+export const SENTRY_DSN = 'https://YOUR_KEY@oXXXXXX.ingest.sentry.io/XXXXXXX';

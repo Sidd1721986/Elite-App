@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import * as Sentry from '@sentry/react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
 import { User, UserRole, RootStackParamList } from '../types/types';
@@ -23,8 +24,26 @@ import AccountDetailsScreen from '../screens/AccountDetailsScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import TermsOfServiceScreen from '../screens/TermsOfServiceScreen';
 import ContactSupportScreen from '../screens/ContactSupportScreen';
+import InviteAdminScreen from '../screens/InviteAdminScreen';
+import AdminRegisterScreen from '../screens/AdminRegisterScreen';
+import { Linking } from 'react-native';
 
 const Stack = createStackNavigator<RootStackParamList>();
+
+const linking = {
+    prefixes: ['eliteapp://'],
+    config: {
+        screens: {
+            AdminRegister: {
+                path: 'admin-register',
+                parse: {
+                    token: (token: string) => token,
+                    email: (email: string) => decodeURIComponent(email),
+                },
+            },
+        },
+    },
+};
 
 const navTheme = {
     ...DefaultTheme,
@@ -61,17 +80,17 @@ function roleKey(role: unknown): string {
 }
 
 function isCustomerRoleUser(user: User | null): boolean {
-    if (!user) return false;
-    if (CUSTOMER_ROLES.has(user.role)) return true;
+    if (!user) {return false;}
+    if (CUSTOMER_ROLES.has(user.role)) {return true;}
     const r = roleKey(user.role);
     return [...CUSTOMER_ROLES].some((x) => String(x).toLowerCase() === r);
 }
 
 function mainInitialRoute(user: User, customerRole: boolean): keyof RootStackParamList {
     const r = roleKey(user.role);
-    if (r === 'admin') return 'AdminDashboard';
-    if (r === 'vendor') return 'VendorDashboard';
-    if (customerRole || r === 'customer') return 'UserDashboard';
+    if (r === 'admin') {return 'AdminDashboard';}
+    if (r === 'vendor') {return 'VendorDashboard';}
+    if (customerRole || r === 'customer') {return 'UserDashboard';}
     return 'RoleFallback';
 }
 
@@ -134,8 +153,12 @@ const AppNavigator: React.FC = () => {
         <View style={{ flex: 1, backgroundColor: navTheme.colors.background }}>
             <NavigationContainer
                 theme={navTheme}
+                linking={linking}
+                ref={Sentry.navigationIntegration.navigationRef}
                 onReady={() => {
-                    // Navigation is ready
+                    Sentry.navigationIntegration.registerNavigationContainer(
+                        Sentry.navigationIntegration.navigationRef,
+                    );
                 }}
             >
             {!user ? (
@@ -153,6 +176,7 @@ const AppNavigator: React.FC = () => {
                     <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: 'Privacy Policy', headerShown: false }} />
                     <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ title: 'Terms of Service', headerShown: false }} />
                     <Stack.Screen name="ContactSupport" component={ContactSupportScreen} options={{ title: 'Help & Support', headerShown: false }} />
+                    <Stack.Screen name="AdminRegister" component={AdminRegisterScreen} options={{ title: 'Create Admin Account', headerShown: false }} />
                 </Stack.Navigator>
             ) : (
                 <Stack.Navigator
@@ -183,6 +207,8 @@ const AppNavigator: React.FC = () => {
                     <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: 'Privacy Policy', headerShown: false }} />
                     <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ title: 'Terms of Service', headerShown: false }} />
                     <Stack.Screen name="ContactSupport" component={ContactSupportScreen} options={{ title: 'Help & Support', headerShown: false }} />
+                    <Stack.Screen name="InviteAdmin" component={InviteAdminScreen} options={{ title: 'Invite Admin', headerShown: false }} />
+                    <Stack.Screen name="AdminRegister" component={AdminRegisterScreen} options={{ title: 'Create Admin Account', headerShown: false }} />
                 </Stack.Navigator>
             )}
             </NavigationContainer>
