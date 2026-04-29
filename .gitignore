@@ -46,6 +46,7 @@ ios/build/
 ios/Pods/
 android/app/build/
 android/.gradle/
+.gradle-user-home/
 android/build/
 android/keystore.properties
 

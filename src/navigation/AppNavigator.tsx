@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import type { NavigationContainerRef } from '@react-navigation/native';
 import { navigationIntegration } from '../services/sentry';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useAuth } from '../context/AuthContext';
@@ -130,6 +131,7 @@ const roleFallbackStyles = StyleSheet.create({
 
 const AppNavigator: React.FC = () => {
     const { user, isLoading } = useAuth();
+    const navigationRef = React.useRef<NavigationContainerRef<RootStackParamList>>(null);
 
     const customerRole = React.useMemo(() => isCustomerRoleUser(user), [user]);
     const isAdmin = Boolean(user && roleKey(user.role) === 'admin');
@@ -154,13 +156,9 @@ const AppNavigator: React.FC = () => {
             <NavigationContainer
                 theme={navTheme}
                 linking={linking}
-                ref={navigationIntegration?.navigationRef}
+                ref={navigationRef}
                 onReady={() => {
-                    if (navigationIntegration?.navigationRef) {
-                        navigationIntegration.registerNavigationContainer(
-                            navigationIntegration.navigationRef,
-                        );
-                    }
+                    navigationIntegration.registerNavigationContainer(navigationRef.current);
                 }}
             >
             {!user ? (

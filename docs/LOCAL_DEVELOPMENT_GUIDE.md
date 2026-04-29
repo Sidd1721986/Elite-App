@@ -53,6 +53,20 @@ Ensure your backend is running first so the app can talk to it!
    - **For iOS**: Press `i` in the terminal (or run `npm run ios`).
    - **For Android**: Press `a` in the terminal (or run `npm run android`).
 
+### Android: JDK for Gradle
+
+The Android wrapper uses **Gradle 9.4.1**, which can **run the build on JDK 17 through JDK 26** (see the [Gradle–Java compatibility matrix](https://docs.gradle.org/current/userguide/compatibility.html)). You should no longer see `Unsupported class file major version 70` when only JDK 26 is installed.
+
+**Android Gradle Plugin 8.6** still expects **JDK 17** for compiling the app; Gradle will use the JVM from `JAVA_HOME` (or your IDE). For consistency with **CI** (which uses JDK 17), prefer:
+
+```bash
+export JAVA_HOME="$(/usr/libexec/java_home -v 17)"   # macOS, when Temurin/Android Studio 17 is installed
+# or Android Studio’s JBR, e.g.:
+# export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+```
+
+Optional: set `org.gradle.java.home` in `android/gradle.properties` to a JDK 17 install if you want every `./gradlew` invocation to use the same compiler JVM without exporting `JAVA_HOME`.
+
 ---
 
 ## 💡 Pro Tips
