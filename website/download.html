@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Download — Elite Home Services USA</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #1a2e4a;
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+    }
+    .card {
+      background: white;
+      color: #1a2e4a;
+      border-radius: 20px;
+      padding: 48px 40px;
+      max-width: 380px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .logo { font-size: 1.1rem; font-weight: 700; color: #1a2e4a; margin-bottom: 6px; }
+    .logo span { color: #c9a84c; }
+    h1 { font-size: 1.5rem; margin: 16px 0 10px; }
+    p  { color: #666; font-size: 0.95rem; line-height: 1.6; margin-bottom: 28px; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #f0f0f0;
+      border-top-color: #c9a84c;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 24px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .store-buttons { display: flex; flex-direction: column; gap: 14px; }
+    .store-btn {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: #1a2e4a;
+      color: white;
+      text-decoration: none;
+      padding: 14px 22px;
+      border-radius: 10px;
+      transition: background .2s;
+    }
+    .store-btn:hover { background: #2c4a6e; }
+    .store-btn .icon  { font-size: 1.8rem; }
+    .store-btn .top   { font-size: 0.7rem; opacity: 0.75; }
+    .store-btn .label { font-size: 1rem; font-weight: 700; }
+    .back { margin-top: 20px; font-size: 0.82rem; }
+    .back a { color: #c9a84c; text-decoration: none; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Elite Home Services <span>USA</span></div>
+  <div class="spinner" id="spinner"></div>
+  <h1 id="title">Detecting your device…</h1>
+  <p id="subtitle">Taking you to the right store automatically.</p>
+
+  <!-- Fallback buttons shown if auto-redirect fails -->
+  <div class="store-buttons" id="buttons" style="display:none">
+    <a id="ios-btn" href="#" class="store-btn">
+      <div class="icon">🍎</div>
+      <div>
+        <div class="top">Download on the</div>
+        <div class="label">App Store</div>
+      </div>
+    </a>
+    <a id="android-btn" href="#" class="store-btn">
+      <div class="icon">▶</div>
+      <div>
+        <div class="top">Get it on</div>
+        <div class="label">Google Play</div>
+      </div>
+    </a>
+  </div>
+
+  <div class="back"><a href="index.html">← Back to website</a></div>
+</div>
+
+<script>
+  // ✏️ Replace these with real store URLs once apps are approved
+  var IOS_URL     = "https://apps.apple.com/app/elite-home-services-usa/id000000000";
+  var ANDROID_URL = "https://play.google.com/store/apps/details?id=com.elitehomeservicesusa.app";
+
+  var iosbtn     = document.getElementById('ios-btn');
+  var androidbtn = document.getElementById('android-btn');
+  iosbtn.href     = IOS_URL;
+  androidbtn.href = ANDROID_URL;
+
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  }
+  function isAndroid() {
+    return /Android/.test(navigator.userAgent);
+  }
+
+  setTimeout(function() {
+    if (isIOS()) {
+      document.getElementById('title').textContent = 'Opening App Store…';
+      document.getElementById('subtitle').textContent = 'Redirecting you to the iOS App Store.';
+      window.location.href = IOS_URL;
+    } else if (isAndroid()) {
+      document.getElementById('title').textContent = 'Opening Google Play…';
+      document.getElementById('subtitle').textContent = 'Redirecting you to Google Play.';
+      window.location.href = ANDROID_URL;
+    } else {
+      // Desktop — show both buttons
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('title').textContent = 'Get the App';
+      document.getElementById('subtitle').textContent = 'Choose your platform below.';
+      document.getElementById('buttons').style.display = 'flex';
+    }
+  }, 1200);
+</script>
+</body>
+</html>
