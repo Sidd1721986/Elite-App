@@ -191,12 +191,14 @@ stages:
             displayName: Install gcloud CLI
           - script: |
               set -e
-              printf '%s' "$(FIREBASE_TESTLAB_KEY_B64)" | base64 --decode > "$AGENT_TEMPDIRECTORY/ftl-key.json"
+              # Secret vars must be read from env (not $(VAR) which Azure DevOps redacts in scripts)
+              printf '%s' "$FIREBASE_TESTLAB_KEY_B64" | base64 --decode > "$AGENT_TEMPDIRECTORY/ftl-key.json"
               gcloud auth activate-service-account --key-file="$AGENT_TEMPDIRECTORY/ftl-key.json"
-              gcloud config set project "$(FIREBASE_PROJECT_ID)"
+              gcloud config set project "$FIREBASE_PROJECT_ID"
             displayName: Authenticate gcloud
             env:
               FIREBASE_TESTLAB_KEY_B64: $(FIREBASE_TESTLAB_KEY_B64)
+              FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
           - script: |
               set -e
               AAB_PATH="$(Pipeline.Workspace)/android-aab/app-release.aab"
@@ -206,11 +208,14 @@ stages:
                 --app="$AAB_PATH" \
                 --device model=oriole,version=31,locale=en,orientation=portrait \
                 --timeout=3m \
-                --results-bucket="$(FIREBASE_RESULTS_BUCKET)" \
+                --results-bucket="$FIREBASE_RESULTS_BUCKET" \
                 --results-dir="$(Build.BuildNumber)" \
-                --project="$(FIREBASE_PROJECT_ID)"
-              echo "Results: https://console.firebase.google.com/project/$(FIREBASE_PROJECT_ID)/testlab/histories/"
+                --project="$FIREBASE_PROJECT_ID"
+              echo "Results: https://console.firebase.google.com/project/$FIREBASE_PROJECT_ID/testlab/histories/"
             displayName: Run Firebase Robo test on virtual Pixel 6
+            env:
+              FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
+              FIREBASE_RESULTS_BUCKET: $(FIREBASE_RESULTS_BUCKET)
 
 # iOS stage — add back once Apple Developer account is active and certificates are uploaded.
 # Required extensions: https://marketplace.visualstudio.com/items?itemName=ms-vsclient.app-store
