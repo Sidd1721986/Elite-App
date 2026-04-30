@@ -192,7 +192,7 @@ stages:
           - script: |
               set -e
               # Secret vars must be read from env (not $(VAR) which Azure DevOps redacts in scripts)
-              printf '%s' "$FIREBASE_TESTLAB_KEY_B64" | base64 --decode > "$AGENT_TEMPDIRECTORY/ftl-key.json"
+              printf '%s' "$FIREBASE_TESTLAB_KEY_B64" | base64 --decode --ignore-garbage > "$AGENT_TEMPDIRECTORY/ftl-key.json"
               gcloud auth activate-service-account --key-file="$AGENT_TEMPDIRECTORY/ftl-key.json"
               gcloud config set project "$FIREBASE_PROJECT_ID"
             displayName: Authenticate gcloud
