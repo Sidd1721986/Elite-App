@@ -45,6 +45,12 @@ The `azure-pipelines-mobile.yml` generates the binaries for the stores.
 3. Ensure the branch is `main`.
 4. Once completed, the `.aab` (Android) and `.ipa` (iOS) files will be available in the **Artifacts** drop-down of the build summary.
 
+#### Android — automatic rollout to testers (Play Store)
+On a successful `main` build, **Elite-App-Mobile** publishes the signed AAB to Google Play on the **`internal`** track by default, with **`isDraftRelease: false`**, so the release is rolled out to testers (not left as a draft). Anyone on your **Internal testing** list should see **Update** (or **Open**) in the **Google Play** app after Google finishes processing the new version.
+
+- To use **closed/open testing** instead, edit **`azure-pipelines-mobile.yml`** and set **`track:`** to `alpha` or `beta`, and configure those tracks in Play Console.
+- **`versionCode`** comes from the Azure **`Build.BuildId`** so every pipeline run produces a unique version Play will accept.
+
 ---
 
 ## 🛡️ 3. Security & Automation

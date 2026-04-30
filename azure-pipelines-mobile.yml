@@ -1,9 +1,13 @@
 # Azure DevOps pipeline for Mobile Builds + Store Deployments
 #
-# On every push to main this pipeline will:
+# On every push to main (and manual runs) this pipeline will:
 #   1) Lint + test
-#   2) Build signed Android AAB  → upload to Google Play (Internal track)
-#   3) Build signed iOS IPA      → upload to App Store Connect (TestFlight)
+#   2) Build signed Android AAB (versionCode = Azure Build.BuildId so each upload is unique)
+#   3) Publish that AAB to Google Play on the track below — NOT as a draft, so enrolled testers
+#      see the new version in the Play Store app (Update / Open) after Google finishes processing.
+#
+# Testers must be on the matching track in Play Console (e.g. Internal testing → testers list / link).
+# Play track is `internal` in YAML; change `track:` below if you move testers to alpha/beta.
 #
 # PREREQUISITES — set these in Library → Variable Group "EliteApp-Production":
 #
@@ -125,19 +129,35 @@ stages:
             displayName: chmod gradlew
           - script: cd android && ./gradlew bundleRelease --no-daemon --stacktrace --no-build-cache
             displayName: bundleRelease
+            env:
+              BUILD_BUILDID: $(Build.BuildId)
+              VERSION_NAME: $(Build.BuildNumber)
+          - script: |
+              set -e
+              NOTES="$(Build.ArtifactStagingDirectory)/play-release-notes.txt"
+              {
+                echo "Build $(Build.BuildNumber) ($(Build.DefinitionName))"
+                echo "Commit: $(Build.SourceVersion)"
+              } > "$NOTES"
+              echo "##vso[task.setvariable variable=PLAY_RELEASE_NOTES_FILE]$NOTES"
+            displayName: Write Play Store release notes (en-US)
           - task: PublishBuildArtifacts@1
             displayName: Publish AAB artifact
             inputs:
               pathToPublish: android/app/build/outputs/bundle/release/app-release.aab
               artifactName: android-aab
           - task: GooglePlayRelease@4
-            displayName: Upload AAB to Google Play (Internal track)
+            displayName: Publish AAB to Google Play (auto rollout to testers)
             inputs:
               serviceConnection: $(GOOGLE_PLAY_SERVICE_CONN)
               applicationId: $(GOOGLE_PLAY_PACKAGE_NAME)
               action: SingleBundle
               bundleFile: android/app/build/outputs/bundle/release/app-release.aab
               track: internal
+              isDraftRelease: false
+              releaseName: '$(Build.BuildNumber)'
+              changeLogFile: $(PLAY_RELEASE_NOTES_FILE)
+              languageCode: en-US
 
 # iOS stage — add back once Apple Developer account is active and certificates are uploaded.
 # Required extensions: https://marketplace.visualstudio.com/items?itemName=ms-vsclient.app-store

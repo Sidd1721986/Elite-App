@@ -41,7 +41,7 @@ A React Native application for **Admin**, **Vendor**, and **Customer** roles. It
 - **Node.js 20.x** (see `.nvmrc`; run `nvm use` in the project root)
 - **npm 10.x** (comes with Node 20)
 - **Xcode** (iOS) / **Android Studio** (Android) for native builds — not Expo Go
-- **Android / Gradle:** the wrapper uses **Gradle 9.4.1** (runs on **JDK 17–26**). Use **JDK 17** for `JAVA_HOME` when building to match Android Gradle Plugin / CI — see [docs/LOCAL_DEVELOPMENT_GUIDE.md](docs/LOCAL_DEVELOPMENT_GUIDE.md#android-jdk-for-gradle).
+- **Android / Gradle:** the wrapper uses **Gradle 8.10.x** (aligned with React Native 0.76). **Run Gradle with JDK 17** (`JAVA_HOME`); JDK 25+ cannot run this Gradle line — use Android Studio’s JBR or Temurin 17 — see [docs/LOCAL_DEVELOPMENT_GUIDE.md](docs/LOCAL_DEVELOPMENT_GUIDE.md#android-jdk-for-gradle).
 
 ### Installation
 
