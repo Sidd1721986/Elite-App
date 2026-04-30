@@ -158,7 +158,7 @@ const AppNavigator: React.FC = () => {
                 linking={linking}
                 ref={navigationRef}
                 onReady={() => {
-                    navigationIntegration.registerNavigationContainer(navigationRef.current);
+                    navigationIntegration?.registerNavigationContainer(navigationRef.current);
                 }}
             >
             {!user ? (
