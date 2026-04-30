@@ -413,7 +413,7 @@ const VendorDashboard: React.FC = () => {
     ), [user, handleLogout, stats, settingsMenuVisible, navigation, messageUnreadTotal]);
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top']} testID="vendor_dashboard_screen">
             <View style={{ flex: 1 }}>
                 <VendorList
                     data={isLoading ? [] : vendorGroupedFeed}

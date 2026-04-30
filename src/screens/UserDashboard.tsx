@@ -390,6 +390,7 @@ const UserDashboard: React.FC = () => {
                             style={styles.newJobBtn}
                             labelStyle={{ fontWeight: '900' }}
                             onPress={() => { clearForm(); setNewJobModalVisible(true); }}
+                            testID="request_service_btn"
                         >
                             Request Service
                         </Button>
@@ -502,7 +503,7 @@ const UserDashboard: React.FC = () => {
     );
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top']} testID="user_dashboard_screen">
             {renderHeader()}
 
             <View style={{ flex: 1 }}>
@@ -541,6 +542,7 @@ const UserDashboard: React.FC = () => {
                             mode="outlined"
                             style={styles.modalInput}
                             left={<TextInput.Icon icon="map-marker-outline" />}
+                            testID="job_street_input"
                         />
 
                         <View style={styles.addressRow}>
@@ -677,6 +679,7 @@ const UserDashboard: React.FC = () => {
                             mode="outlined"
                             style={styles.modalInput}
                             keyboardType="phone-pad"
+                            testID="job_phone_input"
                         />
 
                         <TextInput
@@ -783,6 +786,7 @@ const UserDashboard: React.FC = () => {
                             onPress={handleSubmitJob}
                             style={styles.submitBtn}
                             contentStyle={{ height: 50 }}
+                            testID="job_submit_btn"
                         >
                             {editingJobId ? 'Save Changes' : 'Submit Request'}
                         </Button>

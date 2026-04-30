@@ -1097,7 +1097,7 @@ const AdminDashboard: React.FC = () => {
     }, [navigation, getTimelineBarColor, handleApproval, handleRemoveVendor, updateSectionY, conversations, messageUnreadTotal, jobsDeduped, vendorSearch, setVendorSearch, filteredApprovedVendors, approvedVendors, inProgressSearch, setInProgressSearch, filteredActiveProjects, activeProjects, showAllRequests, setShowAllRequests, showAllInProgress, setShowAllInProgress]);
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top']} testID="admin_dashboard_screen">
             <AdminList
                 ref={scrollViewRef}
                 data={listData}
