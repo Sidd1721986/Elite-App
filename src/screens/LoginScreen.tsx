@@ -129,6 +129,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                     outlineColor="#E2E8F0"
                                     activeOutlineColor="#6366F1"
                                     left={<TextInput.Icon icon="email-outline" color="#94A3B8" />}
+                                    testID="login_email_input"
                                 />
 
                                 <TextInput
@@ -145,6 +146,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                     onSubmitEditing={handleLogin}
                                     blurOnSubmit
                                     left={<TextInput.Icon icon="lock-outline" color="#94A3B8" />}
+                                    testID="login_password_input"
                                 />
 
                                 <Button
@@ -155,6 +157,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                     style={styles.loginButton}
                                     contentStyle={styles.loginButtonContent}
                                     labelStyle={styles.loginButtonLabel}
+                                    testID="login_submit_btn"
                                 >
                                     Log In
                                 </Button>

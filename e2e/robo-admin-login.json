@@ -1,0 +1,32 @@
+[
+  {
+    "eventType": "VIEW_TEXT_CHANGED",
+    "replacementText": "PLACEHOLDER_EMAIL",
+    "elementDescriptors": [
+      {
+        "resourceId": "login_email_input"
+      }
+    ]
+  },
+  {
+    "eventType": "VIEW_TEXT_CHANGED",
+    "replacementText": "PLACEHOLDER_PASSWORD",
+    "elementDescriptors": [
+      {
+        "resourceId": "login_password_input"
+      }
+    ]
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "elementDescriptors": [
+      {
+        "resourceId": "login_submit_btn"
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED",
+    "delay": 5000
+  }
+]

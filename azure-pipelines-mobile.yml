@@ -23,10 +23,12 @@
 #   GOOGLE_PLAY_PACKAGE_NAME     = com.elitehomeservicesusa.app
 #
 #  Firebase Test Lab:
-#   FIREBASE_TESTLAB_KEY_B64     = base64-encoded GCP service account JSON key
-#                                  (firebase-testlab-ci@elite-testlab-personal.iam.gserviceaccount.com)
 #   FIREBASE_PROJECT_ID          = elite-testlab-personal
 #   FIREBASE_RESULTS_BUCKET      = elite-testlab-results
+#   TEST_ADMIN_EMAIL             = admin email for Robo login test (secret)
+#   TEST_ADMIN_PASSWORD          = admin password for Robo login test (secret)
+#   Secure file: firebase-testlab-key.json  (Library → Secure files → Upload)
+#                                  (firebase-testlab-ci@elite-testlab-personal.iam.gserviceaccount.com)
 #
 #  iOS (add once Apple Developer account is active):
 #   ENABLE_MOBILE_IOS            = true
@@ -189,33 +191,43 @@ stages:
               sudo apt-get update -qq && sudo apt-get install -y -qq google-cloud-cli
               gcloud --version
             displayName: Install gcloud CLI
+          - task: DownloadSecureFile@1
+            displayName: Download Firebase service account key
+            name: ftlKey
+            inputs:
+              secureFile: firebase-testlab-key.json
           - script: |
               set -e
-              # Secret vars must be read from env (not $(VAR) which Azure DevOps redacts in scripts)
-              printf '%s' "$FIREBASE_TESTLAB_KEY_B64" | base64 --decode --ignore-garbage > "$AGENT_TEMPDIRECTORY/ftl-key.json"
-              gcloud auth activate-service-account --key-file="$AGENT_TEMPDIRECTORY/ftl-key.json"
-              gcloud config set project "$FIREBASE_PROJECT_ID"
+              gcloud auth activate-service-account --key-file="$(ftlKey.secureFilePath)"
+              gcloud config set project "$(FIREBASE_PROJECT_ID)"
             displayName: Authenticate gcloud
-            env:
-              FIREBASE_TESTLAB_KEY_B64: $(FIREBASE_TESTLAB_KEY_B64)
-              FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
           - script: |
               set -e
+              # Inject real admin credentials into the Robo script
+              sed \
+                -e "s|PLACEHOLDER_EMAIL|$TEST_ADMIN_EMAIL|g" \
+                -e "s|PLACEHOLDER_PASSWORD|$TEST_ADMIN_PASSWORD|g" \
+                e2e/robo-admin-login.json > /tmp/robo-script.json
+              echo "Robo script ready (credentials injected)"
+
               AAB_PATH="$(Pipeline.Workspace)/android-aab/app-release.aab"
-              echo "Submitting Robo test: $AAB_PATH"
+              echo "Submitting Robo test with admin login: $AAB_PATH"
               gcloud firebase test android run \
                 --type=robo \
                 --app="$AAB_PATH" \
                 --device model=oriole,version=31,locale=en,orientation=portrait \
-                --timeout=3m \
+                --timeout=5m \
+                --robo-script=/tmp/robo-script.json \
                 --results-bucket="$FIREBASE_RESULTS_BUCKET" \
                 --results-dir="$(Build.BuildNumber)" \
                 --project="$FIREBASE_PROJECT_ID"
               echo "Results: https://console.firebase.google.com/project/$FIREBASE_PROJECT_ID/testlab/histories/"
-            displayName: Run Firebase Robo test on virtual Pixel 6
+            displayName: Run Firebase Robo test — admin login + crawl
             env:
               FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
               FIREBASE_RESULTS_BUCKET: $(FIREBASE_RESULTS_BUCKET)
+              TEST_ADMIN_EMAIL: $(TEST_ADMIN_EMAIL)
+              TEST_ADMIN_PASSWORD: $(TEST_ADMIN_PASSWORD)
 
 # iOS stage — add back once Apple Developer account is active and certificates are uploaded.
 # Required extensions: https://marketplace.visualstudio.com/items?itemName=ms-vsclient.app-store

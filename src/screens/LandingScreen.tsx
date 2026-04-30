@@ -46,18 +46,21 @@ const LandingScreen: React.FC<Props> = ({ navigation }) => {
                         label="Admin"
                         icon="shield-check-outline"
                         onPress={() => handleRoleSelect(UserRole.ADMIN)}
+                        testID="role_btn_admin"
                     />
 
                     <RoleButton
                         label="Vendor"
                         icon="account-wrench-outline"
                         onPress={() => handleRoleSelect(UserRole.VENDOR)}
+                        testID="role_btn_vendor"
                     />
 
                     <RoleButton
                         label="User"
                         icon="account-outline"
                         onPress={() => handleRoleSelect(UserRole.CUSTOMER)}
+                        testID="role_btn_user"
                     />
                 </View>
             </ScrollView>
@@ -69,11 +72,13 @@ interface RoleButtonProps {
     label: string;
     icon: string;
     onPress: () => void;
+    testID?: string;
 }
 
-const RoleButton: React.FC<RoleButtonProps> = ({ label, icon, onPress }) => (
+const RoleButton: React.FC<RoleButtonProps> = ({ label, icon, onPress, testID }) => (
     <Pressable
         onPress={onPress}
+        testID={testID}
         style={({ pressed }) => [
             styles.roleButton,
             { opacity: pressed ? 0.7 : 1, backgroundColor: pressed ? '#EEF2FF' : '#FFFFFF' },
