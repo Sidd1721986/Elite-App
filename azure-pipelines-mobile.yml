@@ -7,7 +7,8 @@
 #      see the new version in the Play Store app (Update / Open) after Google finishes processing.
 #
 # Testers must be on the matching track in Play Console (e.g. Internal testing → testers list / link).
-# Play track is `production` — every successful main build ships to 100% of users automatically.
+# Play track is `internal` — promote to production manually in Play Console until first
+# production release unlocks the API, then change track: to production below.
 #
 # PREREQUISITES — set these in Library → Variable Group "EliteApp-Production":
 #
@@ -143,16 +144,14 @@ stages:
               pathToPublish: android/app/build/outputs/bundle/release/app-release.aab
               artifactName: android-aab
           - task: GooglePlayRelease@4
-            displayName: Publish AAB to Google Play (production)
+            displayName: Publish AAB to Google Play (internal)
             inputs:
               serviceConnection: $(GOOGLE_PLAY_SERVICE_CONN)
               applicationId: $(GOOGLE_PLAY_PACKAGE_NAME)
               action: SingleBundle
               bundleFile: android/app/build/outputs/bundle/release/app-release.aab
-              track: production
+              track: internal
               isDraftRelease: false
-              rolloutToUserFraction: true
-              userFraction: 1.0
               releaseName: '$(Build.BuildNumber)'
               changeLogFile: $(PLAY_RELEASE_NOTES_FILE)
               languageCode: en-US
