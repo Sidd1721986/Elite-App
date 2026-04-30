@@ -38,11 +38,7 @@ trigger:
       - main
       - master
 
-pr:
-  branches:
-    include:
-      - main
-      - master
+pr: none  # builds only on push to main; PR-merge refs are deleted too fast to checkout
 
 variables:
   - group: EliteApp-Production
