@@ -175,6 +175,7 @@ stages:
       )
     jobs:
       - job: DetoxTests
+        timeoutInMinutes: 90
         pool:
           vmImage: ubuntu-latest
         steps:
