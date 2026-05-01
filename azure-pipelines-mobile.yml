@@ -202,31 +202,43 @@ stages:
             displayName: Authenticate gcloud
           - script: |
               set -e
-              # Inject real admin credentials into the Robo script
-              sed \
-                -e "s|PLACEHOLDER_EMAIL|$TEST_ADMIN_EMAIL|g" \
-                -e "s|PLACEHOLDER_PASSWORD|$TEST_ADMIN_PASSWORD|g" \
-                e2e/robo-admin-login.json > /tmp/robo-script.json
-              echo "Robo script ready (credentials injected)"
-
               AAB_PATH="$(Pipeline.Workspace)/android-aab/app-release.aab"
-              echo "Submitting Robo test with admin login: $AAB_PATH"
-              gcloud firebase test android run \
-                --type=robo \
-                --app="$AAB_PATH" \
-                --device model=oriole,version=31,locale=en,orientation=portrait \
-                --timeout=5m \
-                --robo-script=/tmp/robo-script.json \
-                --results-bucket="$FIREBASE_RESULTS_BUCKET" \
-                --results-dir="$(Build.BuildNumber)" \
-                --project="$FIREBASE_PROJECT_ID"
+
+              run_robo() {
+                local ROLE="$1" SCRIPT_TMPL="$2" EMAIL="$3" PASSWORD="$4"
+                echo "=== Robo test: $ROLE login ==="
+                sed \
+                  -e "s|PLACEHOLDER_EMAIL|$EMAIL|g" \
+                  -e "s|PLACEHOLDER_PASSWORD|$PASSWORD|g" \
+                  "$SCRIPT_TMPL" > /tmp/robo-${ROLE}.json
+                gcloud firebase test android run \
+                  --type=robo \
+                  --app="$AAB_PATH" \
+                  --device model=oriole,version=31,locale=en,orientation=portrait \
+                  --timeout=5m \
+                  --robo-script=/tmp/robo-${ROLE}.json \
+                  --results-bucket="$FIREBASE_RESULTS_BUCKET" \
+                  --results-dir="$(Build.BuildNumber)/${ROLE}" \
+                  --project="$FIREBASE_PROJECT_ID"
+                echo "=== $ROLE login: PASSED ==="
+              }
+
+              run_robo "admin"  e2e/robo-admin-login.json  "$TEST_ADMIN_EMAIL"  "$TEST_ADMIN_PASSWORD"
+              run_robo "vendor" e2e/robo-vendor-login.json "$TEST_VENDOR_EMAIL" "$TEST_VENDOR_PASSWORD"
+              run_robo "user"   e2e/robo-user-login.json   "$TEST_USER_EMAIL"   "$TEST_USER_PASSWORD"
+
+              echo "All 3 login flows passed."
               echo "Results: https://console.firebase.google.com/project/$FIREBASE_PROJECT_ID/testlab/histories/"
-            displayName: Run Firebase Robo test — admin login + crawl
+            displayName: Robo login tests — Admin, Vendor, User
             env:
               FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
               FIREBASE_RESULTS_BUCKET: $(FIREBASE_RESULTS_BUCKET)
               TEST_ADMIN_EMAIL: $(TEST_ADMIN_EMAIL)
               TEST_ADMIN_PASSWORD: $(TEST_ADMIN_PASSWORD)
+              TEST_VENDOR_EMAIL: $(TEST_VENDOR_EMAIL)
+              TEST_VENDOR_PASSWORD: $(TEST_VENDOR_PASSWORD)
+              TEST_USER_EMAIL: $(TEST_USER_EMAIL)
+              TEST_USER_PASSWORD: $(TEST_USER_PASSWORD)
 
 # iOS stage — add back once Apple Developer account is active and certificates are uploaded.
 # Required extensions: https://marketplace.visualstudio.com/items?itemName=ms-vsclient.app-store

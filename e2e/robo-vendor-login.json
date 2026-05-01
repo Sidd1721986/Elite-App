@@ -3,7 +3,7 @@
     "eventType": "VIEW_CLICKED",
     "elementDescriptors": [
       {
-        "resourceId": "role_btn_admin"
+        "resourceId": "role_btn_vendor"
       }
     ]
   },
