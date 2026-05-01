@@ -24,9 +24,5 @@
         "resourceId": "login_submit_btn"
       }
     ]
-  },
-  {
-    "eventType": "DELAYED",
-    "delay": 5000
   }
 ]
