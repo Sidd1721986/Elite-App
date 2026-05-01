@@ -199,10 +199,7 @@ stages:
           - script: |
               set -e
               gcloud auth activate-service-account --key-file="$(ftlKey.secureFilePath)"
-              gcloud config set project "$FIREBASE_PROJECT_ID"
             displayName: Authenticate gcloud
-            env:
-              FIREBASE_PROJECT_ID: $(FIREBASE_PROJECT_ID)
           - script: |
               set -e
               # Inject real admin credentials into the Robo script
