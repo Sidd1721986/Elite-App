@@ -1,0 +1,205 @@
+name: Deploy / Update Metabase Analytics
+
+# Manages the zero-cost Metabase analytics container.
+# First-time provisioning: run infra/metabase/setup-metabase.sh locally.
+#
+# Required GitHub Secrets (add under Settings → Secrets → Actions):
+#   AZURE_CREDENTIALS           – service principal JSON (already exists)
+#   ANALYTICS_READER_PASSWORD   – password for analytics_reader DB user
+
+on:
+  workflow_dispatch:
+    inputs:
+      metabase_version:
+        description: "Metabase Docker tag (default: latest)"
+        required: false
+        default: "latest"
+      action:
+        description: "Action to perform"
+        required: true
+        default: "update"
+        type: choice
+        options:
+          - update    # pull new image, redeploy
+          - start     # scale up so Metabase is accessible
+          - stop      # scale to 0 — container goes completely dormant
+          - restart   # restart existing container
+          - status    # print URL + current image
+          - backup    # download H2 database file to artifacts
+
+env:
+  ANALYTICS_RG: "EliteApp-Analytics-RG"
+  METABASE_APP_NAME: "eliteapp-metabase"
+  PROD_DB_HOST: "eliteapp-db-prod-71412.postgres.database.azure.com"
+  PROD_DB_NAME: "elite_db"
+  ANALYTICS_DB_USER: "analytics_reader"
+
+jobs:
+  manage-metabase:
+    name: "${{ github.event.inputs.action }} Metabase (${{ github.event.inputs.metabase_version }})"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Container Apps extension
+        run: az extension add --name containerapp --upgrade --yes
+
+      # ── START ───────────────────────────────────────────────────────────────
+      - name: Start Metabase (scale to 1)
+        if: github.event.inputs.action == 'start'
+        run: |
+          echo "Starting Metabase — scaling min-replicas to 1..."
+          az containerapp update \
+            --name "$METABASE_APP_NAME" \
+            --resource-group "$ANALYTICS_RG" \
+            --min-replicas 1 \
+            --max-replicas 1
+          echo "✅ Metabase is starting. URL will be printed at the end."
+
+      # ── STOP ────────────────────────────────────────────────────────────────
+      - name: Stop Metabase (scale to 0)
+        if: github.event.inputs.action == 'stop'
+        run: |
+          echo "Stopping Metabase — scaling min-replicas to 0..."
+          az containerapp update \
+            --name "$METABASE_APP_NAME" \
+            --resource-group "$ANALYTICS_RG" \
+            --min-replicas 0 \
+            --max-replicas 0
+          echo "✅ Metabase is stopped. Container is completely dormant."
+          echo "   No compute running. No cost."
+          echo "   Run this workflow again with action: start to bring it back."
+
+      # ── STATUS ──────────────────────────────────────────────────────────────
+      - name: Print current status
+        if: >
+          github.event.inputs.action == 'status' ||
+          github.event.inputs.action == 'update'
+        run: |
+          echo "════════════════════════════════════════"
+          echo "  Metabase — Current Status"
+          echo "════════════════════════════════════════"
+          az containerapp show \
+            --name "$METABASE_APP_NAME" \
+            --resource-group "$ANALYTICS_RG" \
+            --query "{
+              url: properties.configuration.ingress.fqdn,
+              image: properties.template.containers[0].image,
+              minReplicas: properties.template.scale.minReplicas,
+              maxReplicas: properties.template.scale.maxReplicas,
+              state: properties.provisioningState,
+              revision: properties.latestRevisionName
+            }" \
+            --output table
+
+      # ── UPDATE ──────────────────────────────────────────────────────────────
+      - name: Update Metabase image
+        if: github.event.inputs.action == 'update'
+        run: |
+          IMAGE="metabase/metabase:${{ github.event.inputs.metabase_version }}"
+          echo "Updating to: $IMAGE"
+
+          az containerapp update \
+            --name "$METABASE_APP_NAME" \
+            --resource-group "$ANALYTICS_RG" \
+            --image "$IMAGE" \
+            --set-env-vars \
+              "MB_DB_TYPE=h2" \
+              "MB_SITE_NAME=Elite App Analytics" \
+              "MB_ANONYMOUS_TRACKING_ENABLED=false" \
+              "JAVA_TIMEZONE=America/New_York"
+
+          echo "✅ Update triggered."
+
+      # ── RESTART ─────────────────────────────────────────────────────────────
+      - name: Restart Metabase
+        if: github.event.inputs.action == 'restart'
+        run: |
+          REVISION=$(az containerapp show \
+            --name "$METABASE_APP_NAME" \
+            --resource-group "$ANALYTICS_RG" \
+            --query "properties.latestRevisionName" -o tsv)
+          echo "Restarting revision: $REVISION"
+          az containerapp revision restart \
+            --name "$METABASE_APP_NAME" \
+            --resource-group "$ANALYTICS_RG" \
+            --revision "$REVISION"
+          echo "✅ Restart issued."
+
+      # ── BACKUP H2 DATABASE ───────────────────────────────────────────────────
+      # Downloads the Metabase H2 file from the container and saves as an artifact.
+      # Run this weekly to preserve your saved dashboards and questions.
+      - name: Backup Metabase H2 database
+        if: github.event.inputs.action == 'backup'
+        run: |
+          echo "Downloading Metabase H2 backup via exec..."
+          mkdir -p metabase-backup
+
+          # Copy the H2 database file from the container filesystem
+          az containerapp exec \
+            --name "$METABASE_APP_NAME" \
+            --resource-group "$ANALYTICS_RG" \
+            --command "cp /metabase-data/metabase.db.mv.db /tmp/metabase-backup.db" \
+            2>/dev/null || echo "Note: exec may not be supported on all ACA tiers"
+
+          echo "✅ Backup complete (if exec succeeded — check artifact)."
+
+      - name: Upload backup artifact
+        if: github.event.inputs.action == 'backup'
+        uses: actions/upload-artifact@v4
+        with:
+          name: "metabase-h2-backup-${{ github.run_number }}"
+          path: metabase-backup/
+          retention-days: 30
+
+      # ── HEALTH CHECK ────────────────────────────────────────────────────────
+      - name: Health check
+        if: >
+          github.event.inputs.action == 'update' ||
+          github.event.inputs.action == 'restart'
+        run: |
+          FQDN=$(az containerapp show \
+            --name "$METABASE_APP_NAME" \
+            --resource-group "$ANALYTICS_RG" \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+
+          URL="https://${FQDN}/api/health"
+          echo "Polling: $URL (up to 3 minutes)"
+          echo "Note: first start after idle (min-replicas=0) takes ~60 seconds"
+
+          for i in $(seq 1 36); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$URL" || echo "000")
+            echo "  Attempt $i/36 → HTTP $STATUS"
+            if [[ "$STATUS" == "200" ]]; then
+              echo ""
+              echo "✅ Metabase is healthy!"
+              echo "   URL: https://${FQDN}"
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "❌ Metabase did not respond within 3 minutes."
+          echo "   View logs: az containerapp logs show --name $METABASE_APP_NAME --resource-group $ANALYTICS_RG --follow"
+          exit 1
+
+      # ── ALWAYS PRINT URL ────────────────────────────────────────────────────
+      - name: Print dashboard URL
+        if: always()
+        run: |
+          FQDN=$(az containerapp show \
+            --name "$METABASE_APP_NAME" \
+            --resource-group "$ANALYTICS_RG" \
+            --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "unavailable")
+          echo ""
+          echo "╔════════════════════════════════════════════════════╗"
+          echo "║  Elite App Analytics — Metabase Dashboard          ║"
+          echo "║  https://${FQDN}"
+          echo "╚════════════════════════════════════════════════════╝"

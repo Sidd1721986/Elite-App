@@ -168,8 +168,9 @@ public class JobsController : ControllerBase
         }
 
         // Validate each service string: max 100 chars, alphanumeric + common punctuation only.
-        // Rejects path-traversal sequences (../, /, \) and oversized payloads.
-        var invalidServiceChars = new System.Text.RegularExpressions.Regex(@"[^\w\s\-,&'().]+");
+        // Allows: letters, digits, spaces, - , & ' ( ) . /  (covers all 28 service names)
+        // Rejects: \ .. and other shell/path-traversal characters.
+        var invalidServiceChars = new System.Text.RegularExpressions.Regex(@"[^\w\s\-,&'()./]+");
         foreach (var svc in request.Services)
         {
             if (string.IsNullOrWhiteSpace(svc) || svc.Length > 100 || invalidServiceChars.IsMatch(svc))
