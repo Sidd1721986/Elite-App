@@ -1,16 +1,14 @@
 import * as React from 'react';
 import { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Platform, RefreshControl, ScrollView, useWindowDimensions, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Platform, RefreshControl, ScrollView, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 
 const FlashListCompat = FlashList as any;
 import FastImage from 'react-native-fast-image';
 import {
-    Text, Card, Button, Avatar, Divider, Surface,
-    Portal, Modal, TextInput, List, IconButton,
-    Chip,
+    Text, Button, Avatar, Divider, Surface,
+    List, IconButton, Chip,
     Menu, SegmentedButtons, Snackbar,
-    ProgressBar, Dialog,
 } from 'react-native-paper';
 import { MotiView, MotiText } from 'moti';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -20,13 +18,12 @@ import AppLogo from '../components/AppLogo';
 import { useNavigation } from '@react-navigation/native';
 import { useChatInboxNotifications } from '../hooks/useChatInboxNotifications';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList, JobStatus, Urgency, Job } from '../types/types';
+import { RootStackParamList, JobStatus, Job } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import JobItem from '../components/JobItem';
-import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { JobSkeleton, DashboardStatsSkeleton } from '../components/SkeletonLoader';
-import { formatAddress, parseAddress, US_STATES } from '../utils/addressUtils';
-import { AVAILABLE_SERVICES } from '../config/services';
+import { parseAddress } from '../utils/addressUtils';
+import JobFormModal, { JobFormInitialValues } from './JobFormModal';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -59,32 +56,9 @@ const UserDashboard: React.FC = () => {
         setRefreshing(false);
     }, [refreshJobs, refreshInbox]);
 
-    // Form States for New Job
-    const [street, setStreet] = useState('');
-    const [city, setCity] = useState('');
-    const [zip, setZip] = useState('');
-    const [state, setState] = useState('');
-    const [description, setDescription] = useState('');
-    const [urgency, setUrgency] = useState<Urgency>(Urgency.NO_RUSH);
-    const [otherDetails, setOtherDetails] = useState('');
-    const [contactPhone, setContactPhone] = useState(user?.phone || '');
-    const [contactEmail, setContactEmail] = useState(user?.email || '');
-    const [photos, setPhotos] = useState<string[]>([]);
-    const [selectedServices, setSelectedServices] = useState<string[]>([]);
-
-    // Auto-populate description from selected services
-    React.useEffect(() => {
-        if (selectedServices.length > 0) {
-            setDescription(selectedServices.join(', '));
-        } else {
-            setDescription('');
-        }
-    }, [selectedServices]);
-
-    const [showUrgencyMenu, setShowUrgencyMenu] = useState(false);
-    const [showStateMenu, setShowStateMenu] = useState(false);
-    const [showServicesMenu, setShowServicesMenu] = useState(false);
-    const [showPhotoMenu, setShowPhotoMenu] = useState(false);
+    // Form state lives in JobFormModal — not here.
+    // Keeping only what the parent needs: open/close + initial values for edit mode.
+    const [editJobInitialValues, setEditJobInitialValues] = useState<JobFormInitialValues | null>(null);
 
     const handleLogout = useCallback(async () => {
         setSettingsMenuVisible(false);
@@ -92,125 +66,43 @@ const UserDashboard: React.FC = () => {
     }, [logout]);
 
 
-    const handlePickImage = useCallback(async () => {
-        setShowPhotoMenu(false);
-        const result = await launchImageLibrary({
-            mediaType: 'photo',
-            selectionLimit: 5,
-            includeBase64: false,
-        });
-
-        if (result.assets) {
-            const uris = result.assets.map(asset => asset.uri).filter(Boolean) as string[];
-            setPhotos(prev => [...prev, ...uris]);
+    // Form submission — called by JobFormModal on confirm
+    const handleSubmitJob = useCallback(async (
+        data: JobFormInitialValues & { address: string; services: string[]; customerId: string },
+        jobId: string | null,
+    ) => {
+        if (jobId) {
+            await updateJob(jobId, {
+                address: data.address,
+                description: data.description,
+                photos: data.photos,
+                services: data.services,
+                urgency: data.urgency,
+                otherDetails: data.otherDetails,
+                contactPhone: data.contactPhone,
+                contactEmail: data.contactEmail,
+            });
+            setSnackbarMessage('Job request updated successfully!');
+        } else {
+            await addJob({
+                customerId: data.customerId,
+                address: data.address,
+                description: data.description,
+                photos: data.photos,
+                services: data.services,
+                urgency: data.urgency,
+                otherDetails: data.otherDetails,
+                contactPhone: data.contactPhone,
+                contactEmail: data.contactEmail,
+            });
+            setSnackbarMessage('Job request submitted successfully!');
         }
-    }, []);
-
-    const handleTakePhoto = useCallback(async () => {
-        setShowPhotoMenu(false);
-        const result = await launchCamera({
-            mediaType: 'photo',
-            saveToPhotos: true,
-            quality: 0.8,
-            includeBase64: false,
-        });
-
-        if (result.assets) {
-            const uris = result.assets.map(asset => asset.uri).filter(Boolean) as string[];
-            setPhotos(prev => [...prev, ...uris]);
-        }
-    }, []);
-
-    const clearForm = useCallback(() => {
-        setDescription('');
-        setOtherDetails('');
-        setUrgency(Urgency.NO_RUSH);
-        setPhotos([]);
-        setSelectedServices([]);
+        setSnackbarVisible(true);
+        setNewJobModalVisible(false);
         setEditingJobId(null);
-
-        const parts = parseAddress(user?.address);
-        setStreet(parts.street);
-        setCity(parts.city);
-        setZip(parts.zip);
-        setState(parts.state);
-
-        setContactPhone(user?.phone || '');
-        setContactEmail(user?.email || '');
-    }, [user]);
-
-    const handleSubmitJob = useCallback(async () => {
-        const address = formatAddress({ street, city, zip, state });
-
-        const missingFields = [];
-        if (!street.trim()) {missingFields.push('Address');}
-        if (!city.trim()) {missingFields.push('City');}
-        if (!zip.trim()) {missingFields.push('Zip');}
-        if (!state.trim()) {missingFields.push('State');}
-        if (selectedServices.length === 0) {missingFields.push('Services');}
-        if (!description.trim()) {missingFields.push('What\'s needs fixing');}
-        if (!contactPhone.trim()) {missingFields.push('Contact Phone');}
-        if (!contactEmail.trim()) {missingFields.push('Contact Email');}
-
-        if (missingFields.length > 0) {
-            setSnackbarMessage(`Missing: ${missingFields.join(', ')}`);
-            setSnackbarVisible(true);
-            return;
-        }
-
-        // Basic email validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(contactEmail)) {
-            setSnackbarMessage('Please enter a valid email address');
-            setSnackbarVisible(true);
-            return;
-        }
-
-        if (!isCustomer) {
-            setSnackbarMessage('Error: Only User accounts can create service requests.');
-            setSnackbarVisible(true);
-            return;
-        }
-
-        try {
-            if (editingJobId) {
-                await updateJob(editingJobId, {
-                    address: address,
-                    description,
-                    photos: photos,
-                    services: selectedServices,
-                    urgency,
-                    otherDetails,
-                    contactPhone,
-                    contactEmail,
-                });
-                setSnackbarMessage('Job request updated successfully!');
-            } else {
-                await addJob({
-                    customerId: user?.id || user?.email || 'anon',
-                    address: address,
-                    description,
-                    photos: photos,
-                    services: selectedServices,
-                    urgency,
-                    otherDetails,
-                    contactPhone,
-                    contactEmail,
-                });
-                setSnackbarMessage('Job request submitted successfully!');
-            }
-
-            setSnackbarVisible(true);
-            setNewJobModalVisible(false);
-            clearForm();
-            // Refresh jobs to ensure dashboard stats and list are updated
-            await refreshJobs();
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Failed to save job request';
-            setSnackbarMessage(errorMessage);
-            setSnackbarVisible(true);
-        }
-    }, [street, city, zip, state, description, addJob, updateJob, user, urgency, otherDetails, photos, editingJobId, clearForm, contactPhone, contactEmail]);
+        setEditJobInitialValues(null);
+        await refreshJobs();
+    }, [addJob, updateJob, refreshJobs]);
 
     const handleViewDetails = useCallback((jobId: string) => {
         navigation.navigate('JobDetails', { jobId });
@@ -219,20 +111,21 @@ const UserDashboard: React.FC = () => {
     const handleModifyJob = useCallback((jobId: string) => {
         const jobToEdit = getJobById(jobId);
         if (jobToEdit) {
-            setEditingJobId(jobId);
             const parts = parseAddress(jobToEdit.address);
-            setStreet(parts.street);
-            setCity(parts.city);
-            setZip(parts.zip);
-            setState(parts.state);
-            setDescription(jobToEdit.description);
-            setUrgency(jobToEdit.urgency);
-            setOtherDetails(jobToEdit.otherDetails || '');
-            setContactPhone(jobToEdit.contactPhone || '');
-            setContactEmail(jobToEdit.contactEmail || '');
-            setPhotos(jobToEdit.photos || []);
-            setSelectedServices(jobToEdit.services || []);
-            setDescription(jobToEdit.description || '');
+            setEditingJobId(jobId);
+            setEditJobInitialValues({
+                street: parts.street,
+                city: parts.city,
+                zip: parts.zip,
+                state: parts.state,
+                description: jobToEdit.description || '',
+                urgency: jobToEdit.urgency,
+                otherDetails: jobToEdit.otherDetails || '',
+                contactPhone: jobToEdit.contactPhone || '',
+                contactEmail: jobToEdit.contactEmail || '',
+                photos: jobToEdit.photos || [],
+                selectedServices: jobToEdit.services || [],
+            });
             setNewJobModalVisible(true);
         }
     }, [getJobById]);
@@ -389,7 +282,7 @@ const UserDashboard: React.FC = () => {
                             icon="plus"
                             style={styles.newJobBtn}
                             labelStyle={{ fontWeight: '900' }}
-                            onPress={() => { clearForm(); setNewJobModalVisible(true); }}
+                            onPress={() => { setEditingJobId(null); setEditJobInitialValues(null); setNewJobModalVisible(true); }}
                             testID="request_service_btn"
                         >
                             Request Service
@@ -412,7 +305,7 @@ const UserDashboard: React.FC = () => {
                 </View>
             ) : null}
         </View>
-    ), [isCustomer, isLoading, activeJobs.length, clearForm, reducedMotion]);
+    ), [isCustomer, isLoading, activeJobs.length, reducedMotion]);
 
     const ListFooter = useCallback(() => (
         recentHistoryJobs.length > 0 ? (
@@ -511,298 +404,15 @@ const UserDashboard: React.FC = () => {
                 {activeTab === 'profile' && renderProfileTab()}
             </View>
 
-            <Portal>
-                <Modal
-                    visible={isNewJobModalVisible}
-                    onDismiss={() => {
-                        setNewJobModalVisible(false);
-                        clearForm();
-                    }}
-                    contentContainerStyle={styles.modalContent}
-                >
-                    <Text variant="headlineSmall" style={styles.modalTitle}>
-                        {editingJobId ? 'Edit Service Request' : 'Request Service'}
-                    </Text>
-
-                    {!isCustomer && (
-                        <Surface style={{ padding: 12, backgroundColor: '#FEF2F2', borderRadius: 12, marginBottom: 16 }}>
-                            <Text style={{ color: '#991B1B', fontWeight: 'bold' }}>
-                                ⚠️ Admin/Vendor View
-                            </Text>
-                            <Text style={{ color: '#991B1B', fontSize: 12 }}>
-                                You are in a read-only preview. Please login as a User to create requests.
-                            </Text>
-                        </Surface>
-                    )}
-                    <ScrollView showsVerticalScrollIndicator={false}>
-                        <TextInput
-                            label="Service Street Address *"
-                            value={street}
-                            onChangeText={setStreet}
-                            mode="outlined"
-                            style={styles.modalInput}
-                            left={<TextInput.Icon icon="map-marker-outline" />}
-                            testID="job_street_input"
-                        />
-
-                        <View style={styles.addressRow}>
-                            <TextInput
-                                label="City *"
-                                value={city}
-                                onChangeText={setCity}
-                                mode="outlined"
-                                style={[styles.modalInput, { flex: 2 }]}
-                            />
-                            <TextInput
-                                label="Zip *"
-                                value={zip}
-                                onChangeText={setZip}
-                                mode="outlined"
-                                style={[styles.modalInput, { flex: 1.2 }]}
-                                keyboardType="numeric"
-                            />
-                            <Menu
-                                visible={showStateMenu}
-                                onDismiss={() => setShowStateMenu(false)}
-                                anchor={
-                                    <TouchableOpacity
-                                        onPress={() => setShowStateMenu(true)}
-                                        activeOpacity={1}
-                                        style={{ flex: 1 }}
-                                    >
-                                        <View pointerEvents="none">
-                                            <TextInput
-                                                label="State *"
-                                                value={state}
-                                                mode="outlined"
-                                                style={styles.modalInput}
-                                                right={<TextInput.Icon icon="chevron-down" />}
-                                                editable={false}
-                                            />
-                                        </View>
-                                    </TouchableOpacity>
-                                }
-                            >
-                                <ScrollView style={{ maxHeight: 250 }}>
-                                    {US_STATES.map((s) => (
-                                        <Menu.Item
-                                            key={s}
-                                            onPress={() => {
-                                                setState(s);
-                                                setShowStateMenu(false);
-                                            }}
-                                            title={s}
-                                        />
-                                    ))}
-                                </ScrollView>
-                            </Menu>
-                        </View>
-
-                        <Text variant="titleSmall" style={styles.sectionLabel}>Select Services Needed *</Text>
-                        <Menu
-                            visible={showServicesMenu}
-                            onDismiss={() => setShowServicesMenu(false)}
-                            anchor={
-                                <TouchableOpacity
-                                    onPress={() => setShowServicesMenu(true)}
-                                    activeOpacity={1}
-                                >
-                                    <View pointerEvents="none">
-                                        <TextInput
-                                            label="Service Needed *"
-                                            value={selectedServices.length > 0 ? `${selectedServices.length} selected` : ''}
-                                            mode="outlined"
-                                            style={styles.modalInput}
-                                            placeholder="Select a service"
-                                            editable={false}
-                                            right={<TextInput.Icon icon="chevron-down" />}
-                                        />
-                                    </View>
-                                </TouchableOpacity>
-                            }
-                        >
-                            <ScrollView style={{ maxHeight: 260 }}>
-                                {AVAILABLE_SERVICES.map((service) => (
-                                    <Menu.Item
-                                        key={service}
-                                        title={service}
-                                        leadingIcon={selectedServices.includes(service) ? 'check-circle-outline' : 'plus-circle-outline'}
-                                        onPress={() => {
-                                            setSelectedServices(prev =>
-                                                prev.includes(service) ? prev : [...prev, service]
-                                            );
-                                            setShowServicesMenu(false);
-                                        }}
-                                    />
-                                ))}
-                            </ScrollView>
-                        </Menu>
-
-                        <View style={styles.selectedServicesContainer}>
-                            {selectedServices.length === 0 ? (
-                                <Text variant="bodySmall" style={styles.selectedServicesHint}>
-                                    Selected services will appear here.
-                                </Text>
-                            ) : (
-                                selectedServices.map(service => (
-                                    <Chip
-                                        key={service}
-                                        mode="outlined"
-                                        compact
-                                        style={styles.selectedServiceChip}
-                                        textStyle={styles.selectedServiceChipText}
-                                        onClose={() => {
-                                            setSelectedServices(prev => prev.filter(s => s !== service));
-                                        }}
-                                    >
-                                        {service}
-                                    </Chip>
-                                ))
-                            )}
-                        </View>
-
-                        <TextInput
-                            label="Summary of Services Needed *"
-                            value={description}
-                            mode="outlined"
-                            style={[styles.modalInput, { backgroundColor: '#F8FAFC' }]}
-                            multiline
-                            numberOfLines={2}
-                            editable={false}
-                            placeholder="Select services above to populate this summary..."
-                        />
-
-                        <TextInput
-                            label="On-site Contact Phone *"
-                            value={contactPhone}
-                            onChangeText={setContactPhone}
-                            mode="outlined"
-                            style={styles.modalInput}
-                            keyboardType="phone-pad"
-                            testID="job_phone_input"
-                        />
-
-                        <TextInput
-                            label="On-site Contact Email *"
-                            value={contactEmail}
-                            onChangeText={setContactEmail}
-                            mode="outlined"
-                            style={styles.modalInput}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                        />
-
-                        <View style={styles.formRow}>
-                            <Text variant="labelLarge" style={styles.formLabel}>Urgency Level</Text>
-                            <Menu
-                                visible={showUrgencyMenu}
-                                onDismiss={() => setShowUrgencyMenu(false)}
-                                anchor={
-                                    <Button
-                                        mode="outlined"
-                                        onPress={() => setShowUrgencyMenu(true)}
-                                        style={styles.urgencyBtn}
-                                        icon="chevron-down"
-                                        contentStyle={{ flexDirection: 'row-reverse' }}
-                                    >
-                                        {urgency}
-                                    </Button>
-                                }>
-                                {Object.values(Urgency).map((u) => (
-                                    <Menu.Item
-                                        key={u}
-                                        onPress={() => {
-                                            setUrgency(u);
-                                            setShowUrgencyMenu(false);
-                                        }}
-                                        title={u}
-                                    />
-                                ))}
-                            </Menu>
-                        </View>
-
-                        <TextInput
-                            label="Additional Notes"
-                            value={otherDetails}
-                            onChangeText={setOtherDetails}
-                            mode="outlined"
-                            style={styles.modalInput}
-                        />
-
-                        <View style={styles.photoSection}>
-                            <View style={styles.photoHeader}>
-                                <Text variant="labelLarge" style={styles.formLabel}>Work Photos</Text>
-                                <Menu
-                                    visible={showPhotoMenu}
-                                    onDismiss={() => setShowPhotoMenu(false)}
-                                    anchor={
-                                        <Button
-                                            mode="text"
-                                            compact
-                                            icon="camera-plus"
-                                            onPress={() => setShowPhotoMenu(true)}
-                                        >
-                                            Add Pictures
-                                        </Button>
-                                    }
-                                >
-                                    <Menu.Item
-                                        leadingIcon="camera"
-                                        onPress={handleTakePhoto}
-                                        title="Take Photo"
-                                    />
-                                    <Menu.Item
-                                        leadingIcon="image-multiple"
-                                        onPress={handlePickImage}
-                                        title="Choose from Gallery"
-                                    />
-                                </Menu>
-                            </View>
-                            {photos.length > 0 ? (
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
-                                    {photos.map((uri, index) => (
-                                        <View key={index} style={styles.photoWrapper}>
-                                            <FastImage source={{ uri }} style={styles.photoThumbnail} />
-                                            <IconButton
-                                                icon="close-circle"
-                                                size={20}
-                                                iconColor="#EF4444"
-                                                style={styles.removePhotoBtn}
-                                                onPress={() => setPhotos(prev => prev.filter((_, i) => i !== index))}
-                                            />
-                                        </View>
-                                    ))}
-                                </ScrollView>
-                            ) : (
-                                <Surface style={styles.emptyPhotoBox} elevation={0}>
-                                    <IconButton icon="image-plus" size={32} iconColor="#CBD5E1" />
-                                    <Text variant="bodySmall" style={{ color: '#94A3B8' }}>No photos added yet</Text>
-                                </Surface>
-                            )}
-                        </View>
-
-                        <Button
-                            mode="contained"
-                            onPress={handleSubmitJob}
-                            style={styles.submitBtn}
-                            contentStyle={{ height: 50 }}
-                            testID="job_submit_btn"
-                        >
-                            {editingJobId ? 'Save Changes' : 'Submit Request'}
-                        </Button>
-                        <Button
-                            mode="text"
-                            onPress={() => {
-                                setNewJobModalVisible(false);
-                                clearForm();
-                            }}
-                            style={{ marginTop: 8 }}
-                        >
-                            Cancel
-                        </Button>
-                    </ScrollView>
-                </Modal>
-            </Portal>
+            <JobFormModal
+                visible={isNewJobModalVisible}
+                editingJobId={editingJobId}
+                initialValues={editJobInitialValues}
+                isCustomer={isCustomer}
+                user={user}
+                onDismiss={() => { setNewJobModalVisible(false); setEditingJobId(null); setEditJobInitialValues(null); }}
+                onSubmit={handleSubmitJob}
+            />
 
             <Snackbar
                 visible={snackbarVisible}
