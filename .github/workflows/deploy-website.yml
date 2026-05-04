@@ -1,0 +1,50 @@
+name: Deploy Website to GitHub Pages
+
+# Deploys the /website folder to GitHub Pages on every push to main.
+# Custom domain: elitehomeservicesusa.com (set via CNAME file)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'        # only runs when website files change
+  workflow_dispatch:        # allow manual trigger
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload website folder as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website      # deploys everything inside /website
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Print live URL
+        run: |
+          echo "✅ Website deployed!"
+          echo "   GitHub URL : ${{ steps.deployment.outputs.page_url }}"
+          echo "   Custom URL : https://www.elitehomeservicesusa.com"
