@@ -1,50 +1,26 @@
-name: Deploy Website to GitHub Pages
-
-# Deploys the /website folder to GitHub Pages on every push to main.
-# Custom domain: elitehomeservicesusa.com (set via CNAME file)
+name: Deploy Website to Azure Static Web Apps
 
 on:
   push:
     branches: [main]
     paths:
-      - 'website/**'        # only runs when website files change
-  workflow_dispatch:        # allow manual trigger
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
+      - 'website/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
-    name: Deploy to GitHub Pages
+    name: Deploy to Azure Static Web Apps
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload website folder as Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
         with:
-          path: website      # deploys everything inside /website
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-      - name: Print live URL
-        run: |
-          echo "✅ Website deployed!"
-          echo "   GitHub URL : ${{ steps.deployment.outputs.page_url }}"
-          echo "   Custom URL : https://www.elitehomeservicesusa.com"
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: website
+          skip_app_build: true
