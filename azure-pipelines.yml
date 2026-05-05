@@ -25,7 +25,8 @@
 #       - Email__Smtp__* / Email__FromAddress  (optional; without SMTP, password reset may 503)
 #       - Sms__Twilio__AccountSid              (Twilio Account SID for OTP SMS delivery)
 #       - Sms__Twilio__AuthToken               (Twilio Auth Token — mark as secret)
-#       - Bootstrap__AdminPassword  (optional one-time; only if no admin exists)
+#       - Bootstrap__AdminPassword             (optional one-time; only if no admin exists)
+#       - APPLICATIONINSIGHTS_CONNECTION_STRING (Azure Monitor / App Insights — get from portal: eliteapp-ai-prod → Properties)
 #  5) Azure DevOps service connections:
 #       - Docker Registry → your ACR
 #       - Azure Resource Manager → subscription (for deploy task)
@@ -113,12 +114,12 @@ stages:
           - task: Cache@2
             displayName: Cache NuGet packages
             inputs:
-              key: 'nuget | "$(Agent.OS)" | backend/packages.lock.json'
+              key: 'nuget | "$(Agent.OS)" | backend/EliteApp.API.csproj'
               restoreKeys: |
                 nuget | "$(Agent.OS)"
               path: $(HOME)/.nuget/packages
-          - script: dotnet restore backend/EliteApp.API.csproj --locked-mode
-            displayName: Restore dependencies (locked)
+          - script: dotnet restore backend/EliteApp.API.csproj
+            displayName: Restore dependencies
           - script: |
               # Run tests only if a test project exists alongside the API project.
               TEST_PROJ=$(find backend -name "*.Tests.csproj" -o -name "*Tests.csproj" | head -1)
@@ -164,6 +165,25 @@ stages:
         pool:
           vmImage: ubuntu-24.04
         steps:
+          - task: AzureAppServiceSettings@1
+            displayName: Inject App Insights connection string
+            inputs:
+              azureSubscription: $(azureSubscription)
+              appName: $(webAppName)
+              appSettings: |
+                [
+                  {
+                    "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                    "value": "$(APPLICATIONINSIGHTS_CONNECTION_STRING)",
+                    "slotSetting": false
+                  },
+                  {
+                    "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+                    "value": "~3",
+                    "slotSetting": false
+                  }
+                ]
+
           - task: AzureWebAppContainer@1
             displayName: Deploy container
             inputs:

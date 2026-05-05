@@ -16,15 +16,37 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
 // BindAllInterfaces: listen on 0.0.0.0 so physical phones (same Wi‑Fi) can reach the API during dev.
 // appsettings.Development.json sets Kestrel:BindAllInterfaces=true; omit or false for localhost-only.
-// Configure Serilog for structured logging
+// ── Application Insights — full HTTP + dependency telemetry ──────────────────
+// Reads connection string from config or the standard env var
+// APPLICATIONINSIGHTS_CONNECTION_STRING (set in Azure App Service / pipeline).
+var aiConnectionString =
+    builder.Configuration["ApplicationInsights:ConnectionString"]
+    ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+
+if (!string.IsNullOrEmpty(aiConnectionString))
+{
+    builder.Services.AddApplicationInsightsTelemetry(options =>
+    {
+        options.ConnectionString = aiConnectionString;
+        options.EnableAdaptiveSampling      = true;   // keeps cost low at volume
+        options.EnableQuickPulseMetricStream = true;  // Live Metrics stream in Azure portal
+    });
+}
+
+// ── Serilog — structured logs → Console + Application Insights ───────────────
 var serilogConfig = new LoggerConfiguration()
     .WriteTo.Console()
-    .Enrich.FromLogContext();
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "EliteApp.API")
+    .Enrich.WithProperty("Environment", builder.Environment.EnvironmentName);
 
-var aiKey = builder.Configuration["ApplicationInsights:InstrumentationKey"];
-if (!string.IsNullOrEmpty(aiKey))
+if (!string.IsNullOrEmpty(aiConnectionString))
 {
-    serilogConfig.WriteTo.ApplicationInsights(aiKey, TelemetryConverter.Traces);
+    var telemetryConfig = new Microsoft.ApplicationInsights.Extensibility.TelemetryConfiguration
+    {
+        ConnectionString = aiConnectionString,
+    };
+    serilogConfig.WriteTo.ApplicationInsights(telemetryConfig, TelemetryConverter.Traces);
 }
 
 Log.Logger = serilogConfig.CreateLogger();

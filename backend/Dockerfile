@@ -1,9 +1,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy project + lockfile first so restore is a distinct cached layer (--locked-mode matches CI).
-COPY ["EliteApp.API.csproj", "packages.lock.json", "./"]
-RUN dotnet restore "EliteApp.API.csproj" --locked-mode
+# Copy project file first so restore is a distinct cached layer.
+# Lock file is regenerated on restore and committed after first CI run.
+COPY ["EliteApp.API.csproj", "./"]
+RUN dotnet restore "EliteApp.API.csproj"
 
 # Copy source and build.
 COPY . .
