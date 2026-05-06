@@ -99,15 +99,15 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         flexGrow: 1,
-        paddingHorizontal: 28,
-        paddingTop: Platform.OS === 'ios' ? 60 : 40,
-        paddingBottom: 40,
+        paddingHorizontal: 24,
+        paddingTop: Platform.OS === 'ios' ? 40 : 24,
+        paddingBottom: 32,
         alignItems: 'center',
     },
     header: {
         width: '100%',
         alignItems: 'center',
-        marginBottom: 32,
+        marginBottom: 24,
     },
     brandContainer: {
         marginTop: 12,
@@ -133,8 +133,8 @@ const styles = StyleSheet.create({
         fontSize: 11,
     },
     introSection: {
-        marginBottom: 48,
-        paddingHorizontal: 20,
+        marginBottom: 28,
+        paddingHorizontal: 16,
     },
     introText: {
         fontSize: 15,
@@ -148,16 +148,15 @@ const styles = StyleSheet.create({
     },
     roleButton: {
         width: '100%',
-        height: 72,
-        borderRadius: 36, // Fully rounded sides
+        height: 68,
+        borderRadius: 16,
         borderWidth: 1.5,
         borderColor: '#E2E8F0',
-        paddingHorizontal: 24,
+        paddingHorizontal: 20,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 16,
-        // Subtle soft shadow
+        marginBottom: 12,
         shadowColor: '#6366F1',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.03,

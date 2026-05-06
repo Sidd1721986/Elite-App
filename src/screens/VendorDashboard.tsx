@@ -464,8 +464,9 @@ const styles = StyleSheet.create({
     },
     header: {
         backgroundColor: '#FFFFFF',
-        padding: 24,
-        paddingBottom: 40,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 20,
         borderBottomLeftRadius: 32,
         borderBottomRightRadius: 32,
     },
@@ -473,7 +474,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 16,
     },
     logoBox: {
         width: 44,
@@ -511,7 +512,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 32,
+        marginBottom: 16,
     },
     profileInfo: {
         flex: 1,
@@ -535,7 +536,7 @@ const styles = StyleSheet.create({
     searchBar: {
         backgroundColor: '#F1F5F9',
         borderRadius: 16,
-        marginBottom: 24,
+        marginBottom: 16,
         height: 48,
         borderWidth: 1,
         borderColor: '#E2E8F0',
@@ -572,8 +573,8 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     orderCard: {
-        marginHorizontal: 24,
-        marginBottom: 16,
+        marginHorizontal: 20,
+        marginBottom: 14,
         backgroundColor: '#FFFFFF',
         borderRadius: 20,
         borderWidth: 1,

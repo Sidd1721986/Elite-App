@@ -245,7 +245,9 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         flexGrow: 1,
-        padding: 24,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 24,
     },
     content: {
         flex: 1,
@@ -253,7 +255,7 @@ const styles = StyleSheet.create({
     },
     headerSection: {
         alignItems: 'center',
-        marginBottom: 40,
+        marginBottom: 28,
     },
     brandTitle: {
         fontWeight: '900',
@@ -290,8 +292,8 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
     cardInner: {
-        paddingHorizontal: 20,
-        paddingVertical: 18,
+        paddingHorizontal: 16,
+        paddingVertical: 20,
         borderRadius: 32,
         overflow: 'hidden',
     },
@@ -338,7 +340,7 @@ const styles = StyleSheet.create({
         color: '#64748B',
     },
     loginButton: {
-        marginTop: 24,
+        marginTop: 16,
         borderRadius: 12,
         backgroundColor: '#6366F1',
     },

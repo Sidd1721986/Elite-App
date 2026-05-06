@@ -187,9 +187,10 @@ const UserDashboard: React.FC = () => {
                             anchor={
                                 <IconButton
                                     icon="menu"
+                                    iconColor="#6366F1"
                                     mode="contained"
-                                    containerColor="#F1F5F9"
-                                    size={24}
+                                    containerColor="#EEF2FF"
+                                    size={22}
                                     onPress={() => setSettingsMenuVisible(true)}
                                 />
                             }
@@ -444,14 +445,15 @@ const styles = StyleSheet.create({
         zIndex: 10,
     },
     header: {
-        padding: 24,
-        paddingBottom: 16,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 12,
     },
     headerTop: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 16,
     },
     headerActions: {
         flexDirection: 'row',
@@ -483,7 +485,7 @@ const styles = StyleSheet.create({
         marginRight: -12,
     },
     welcomeSection: {
-        marginBottom: 24,
+        marginBottom: 16,
     },
     headerLogoSurface: {
         width: 48,
@@ -532,15 +534,17 @@ const styles = StyleSheet.create({
         backgroundColor: '#E2E8F0',
     },
     segmentedButtons: {
-        marginHorizontal: 24,
-        marginBottom: 20,
+        marginHorizontal: 20,
+        marginTop: 12,
+        marginBottom: 16,
         backgroundColor: '#F1F5F9',
         borderRadius: 16,
         borderWidth: 0,
     },
     tabContent: {
-        padding: 24,
-        paddingBottom: 100,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 80,
     },
     tabHeader: {
         marginBottom: 16,

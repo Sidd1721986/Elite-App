@@ -186,7 +186,8 @@ const styles = StyleSheet.create({
     },
     content: {
         paddingHorizontal: 16,
-        paddingVertical: 14,
+        paddingTop: 14,
+        paddingBottom: 14,
     },
     jobHeader: {
         flexDirection: 'row',
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
     },
     contactRow: {
         flexDirection: 'row',
-        marginBottom: 16,
+        marginBottom: 8,
         flexWrap: 'wrap',
     },
     contactBadge: {
