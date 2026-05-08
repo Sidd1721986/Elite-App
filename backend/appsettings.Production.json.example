@@ -39,6 +39,11 @@
   "Legal": {
     "SupportEmail": "support@eliteservices.com"
   },
+  "App": {
+    "BaseUrl": "https://your-api.azurewebsites.net",
+    "iOSStoreUrl": "https://apps.apple.com/app/id123456789",
+    "AndroidStoreUrl": "https://play.google.com/store/apps/details?id=com.elitehomeservicesusa.app"
+  },
   "Sms": {
     "ContactPhone": "+19044311127",
     "Twilio": {

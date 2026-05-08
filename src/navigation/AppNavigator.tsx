@@ -27,7 +27,6 @@ import TermsOfServiceScreen from '../screens/TermsOfServiceScreen';
 import ContactSupportScreen from '../screens/ContactSupportScreen';
 import InviteAdminScreen from '../screens/InviteAdminScreen';
 import AdminRegisterScreen from '../screens/AdminRegisterScreen';
-import { Linking } from 'react-native';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
