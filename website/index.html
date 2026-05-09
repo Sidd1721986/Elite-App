@@ -20,10 +20,11 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "LocalBusiness",
+    "@type": "HomeAndConstructionBusiness",
     "name": "Elite Home Services USA LLC",
     "url": "https://www.elitehomeservicesusa.com",
-    "logo": "https://www.elitehomeservicesusa.com/images/team.jpg",
+    "logo": "https://www.elitehomeservicesusa.com/images/logo.png",
+    "image": "https://www.elitehomeservicesusa.com/images/team.jpg",
     "description": "Elite Home Services USA connects Jacksonville homeowners with vetted vendors for roofs, windows and doors, electrical, solar, plumbing, and many other home improvement needs.",
     "telephone": "+19044311127",
     "email": "elitehomeservices@elitehomeservicesusa.com",
@@ -31,14 +32,52 @@
       "@type": "PostalAddress",
       "addressLocality": "Jacksonville",
       "addressRegion": "FL",
+      "postalCode": "32225",
       "addressCountry": "US"
     },
-    "areaServed": {
-      "@type": "City",
-      "name": "Jacksonville"
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": 30.3322,
+      "longitude": -81.6557
     },
-    "serviceType": ["Roofing", "Windows and Doors", "Electrical", "Solar Installation", "Plumbing", "HVAC", "Cleaning", "Home Remodeling", "Kitchen and Bath", "Home Maintenance"],
-    "sameAs": []
+    "areaServed": [
+      { "@type": "City", "name": "Jacksonville" },
+      { "@type": "City", "name": "Orange Park" },
+      { "@type": "City", "name": "Fleming Island" },
+      { "@type": "City", "name": "Ponte Vedra" },
+      { "@type": "City", "name": "St. Augustine" },
+      { "@type": "City", "name": "Fernandina Beach" }
+    ],
+    "openingHoursSpecification": [
+      { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "opens": "08:00", "closes": "18:00" },
+      { "@type": "OpeningHoursSpecification", "dayOfWeek": "Saturday", "opens": "09:00", "closes": "14:00" }
+    ],
+    "hasOfferCatalog": {
+      "@type": "OfferCatalog",
+      "name": "Home Services",
+      "itemListElement": [
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Roofing" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Windows and Doors" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Electrical" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Solar Installation" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Plumbing" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "HVAC" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "House Cleaning" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Home Remodeling" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Kitchen and Bath" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Pest Control" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Landscaping" } },
+        { "@type": "Offer", "itemOffered": { "@type": "Service", "name": "Handyman Services" } }
+      ]
+    },
+    "sameAs": [
+      "https://www.facebook.com/elitehomeservicesusa",
+      "https://www.instagram.com/elitehomeservicesusa"
+    ],
+    "priceRange": "$$",
+    "currenciesAccepted": "USD",
+    "paymentAccepted": "Cash, Credit Card, Check",
+    "slogan": "Vetted vendors for every home improvement need."
   }
   </script>
 
