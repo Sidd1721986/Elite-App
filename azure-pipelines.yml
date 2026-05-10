@@ -34,11 +34,10 @@
 # Local prod-like container: docker-compose.prod.yml + copy .env.prod.example → .env.prod
 #
 # Create a Variable Group "EliteApp-Production" (or rename below) with:
-#   acrLoginServer                   = myregistry.azurecr.io
-#   imageRepository                  = eliteapp-api
-#   webAppName                       = your App Service name
-#   dockerRegistryServiceConnection = the NAME of your Docker Registry service connection
-#   azureSubscription               = the NAME of your Azure Resource Manager service connection
+#   GHCR_USERNAME        = your GitHub username (lowercase), e.g. siddharthsengar
+#   GHCR_TOKEN           = GitHub PAT with write:packages + read:packages scope  (mark as secret)
+#   webAppName           = your Azure App Service name
+#   azureSubscription    = the NAME of your Azure Resource Manager service connection
 #
 # Link the variable group to this pipeline in Azure DevOps: Edit pipeline → Variables → Variable groups.
 #
@@ -92,6 +91,12 @@ pr:
 
 variables:
   - group: EliteApp-Production
+  # Variable group must contain (mark GHCR_TOKEN as secret):
+  #   GHCR_USERNAME       = your GitHub username (lowercase)
+  #   GHCR_TOKEN          = GitHub PAT with write:packages scope
+  #   webAppName          = Azure App Service name
+  #   azureSubscription   = Azure Resource Manager service connection name
+  #   APPLICATIONINSIGHTS_CONNECTION_STRING  (optional, from App Insights portal)
   - name: dockerfilePath
     value: backend/Dockerfile
   - name: buildContext
@@ -99,10 +104,10 @@ variables:
 
 stages:
   - stage: BuildAndPush
-    displayName: Build image and push to ACR
+    displayName: Build image and push to GHCR
     jobs:
       - job: BuildTestAndPush
-        displayName: Test, build Docker image, push to ACR
+        displayName: Test, build Docker image, push to GHCR
         timeoutInMinutes: 30
         pool:
           vmImage: ubuntu-24.04
@@ -135,17 +140,20 @@ stages:
             inputs:
               testResultsFormat: 'VSTest'
               testResultsFiles: '**/testresults.trx'
-          - task: Docker@2
-            displayName: Build and push
-            inputs:
-              command: buildAndPush
-              repository: $(imageRepository)
-              dockerfile: $(dockerfilePath)
-              buildContext: $(buildContext)
-              containerRegistry: $(dockerRegistryServiceConnection)
-              tags: |
-                $(Build.BuildId)
-                latest
+          - script: |
+              echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+              IMAGE=ghcr.io/$(GHCR_USERNAME)/eliteapp-api
+              docker build -f $(dockerfilePath) $(buildContext) \
+                -t $IMAGE:$(Build.BuildId) \
+                -t $IMAGE:latest
+              docker push $IMAGE:$(Build.BuildId)
+              docker push $IMAGE:latest
+              echo "##vso[task.setvariable variable=DOCKER_IMAGE;isOutput=true]$IMAGE:$(Build.BuildId)"
+            displayName: Build and push to GitHub Container Registry
+            env:
+              GHCR_TOKEN: $(GHCR_TOKEN)
+              GHCR_USERNAME: $(GHCR_USERNAME)
+            name: dockerBuild
 
   - stage: Deploy
     displayName: Deploy to Azure App Service
@@ -166,12 +174,27 @@ stages:
           vmImage: ubuntu-24.04
         steps:
           - task: AzureAppServiceSettings@1
-            displayName: Inject App Insights connection string
+            displayName: Configure GHCR credentials and App Insights
             inputs:
               azureSubscription: $(azureSubscription)
               appName: $(webAppName)
               appSettings: |
                 [
+                  {
+                    "name": "DOCKER_REGISTRY_SERVER_URL",
+                    "value": "https://ghcr.io",
+                    "slotSetting": false
+                  },
+                  {
+                    "name": "DOCKER_REGISTRY_SERVER_USERNAME",
+                    "value": "$(GHCR_USERNAME)",
+                    "slotSetting": false
+                  },
+                  {
+                    "name": "DOCKER_REGISTRY_SERVER_PASSWORD",
+                    "value": "$(GHCR_TOKEN)",
+                    "slotSetting": false
+                  },
                   {
                     "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
                     "value": "$(APPLICATIONINSIGHTS_CONNECTION_STRING)",
@@ -185,11 +208,11 @@ stages:
                 ]
 
           - task: AzureWebAppContainer@1
-            displayName: Deploy container
+            displayName: Deploy container from GitHub Container Registry
             inputs:
               azureSubscription: $(azureSubscription)
               appName: $(webAppName)
-              containers: $(acrLoginServer)/$(imageRepository):$(Build.BuildId)
+              containers: ghcr.io/$(GHCR_USERNAME)/eliteapp-api:$(Build.BuildId)
 
           - script: |
               set -e
