@@ -142,20 +142,19 @@ stages:
               testResultsFiles: '**/testresults.trx'
           - script: |
               set -euo pipefail
-              # Docker requires all-lowercase image names
-              GHCR_USER_LC="${GHCR_USERNAME,,}"
-              echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER_LC" --password-stdin
-              IMAGE="ghcr.io/${GHCR_USER_LC}/eliteapp-api"
+              # Push to Docker Hub (public image — no auth needed for App Service to pull)
+              echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+              IMAGE="$(DOCKERHUB_USERNAME)/eliteapp-api"
               docker build -f $(dockerfilePath) $(buildContext) \
                 -t "$IMAGE:$(Build.BuildId)" \
                 -t "$IMAGE:latest"
               docker push "$IMAGE:$(Build.BuildId)"
               docker push "$IMAGE:latest"
               echo "##vso[task.setvariable variable=DOCKER_IMAGE;isOutput=true]$IMAGE:$(Build.BuildId)"
-            displayName: Build and push to GitHub Container Registry
+            displayName: Build and push to Docker Hub
             env:
-              GHCR_TOKEN: $(GHCR_TOKEN)
-              GHCR_USERNAME: $(GHCR_USERNAME)
+              DOCKERHUB_TOKEN: $(DOCKERHUB_TOKEN)
+              DOCKERHUB_USERNAME: $(DOCKERHUB_USERNAME)
             name: dockerBuild
 
   - stage: Deploy
@@ -177,7 +176,7 @@ stages:
           vmImage: ubuntu-24.04
         steps:
           - task: AzureAppServiceSettings@1
-            displayName: Configure GHCR credentials and App Insights
+            displayName: Configure Docker Hub registry and App Insights
             inputs:
               azureSubscription: $(azureSubscription)
               appName: $(webAppName)
@@ -185,17 +184,17 @@ stages:
                 [
                   {
                     "name": "DOCKER_REGISTRY_SERVER_URL",
-                    "value": "https://ghcr.io",
+                    "value": "https://index.docker.io",
                     "slotSetting": false
                   },
                   {
                     "name": "DOCKER_REGISTRY_SERVER_USERNAME",
-                    "value": "sidd1721986",
+                    "value": "$(DOCKERHUB_USERNAME)",
                     "slotSetting": false
                   },
                   {
                     "name": "DOCKER_REGISTRY_SERVER_PASSWORD",
-                    "value": "$(GHCR_TOKEN)",
+                    "value": "$(DOCKERHUB_TOKEN)",
                     "slotSetting": false
                   },
                   {
@@ -211,11 +210,11 @@ stages:
                 ]
 
           - task: AzureWebAppContainer@1
-            displayName: Deploy container from GitHub Container Registry
+            displayName: Deploy container from Docker Hub
             inputs:
               azureSubscription: $(azureSubscription)
               appName: $(webAppName)
-              containers: ghcr.io/sidd1721986/eliteapp-api:$(Build.BuildId)
+              containers: $(DOCKERHUB_USERNAME)/eliteapp-api:$(Build.BuildId)
 
           - script: |
               set -e
