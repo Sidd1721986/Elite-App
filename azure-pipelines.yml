@@ -141,13 +141,16 @@ stages:
               testResultsFormat: 'VSTest'
               testResultsFiles: '**/testresults.trx'
           - script: |
-              echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-              IMAGE=ghcr.io/$(GHCR_USERNAME)/eliteapp-api
+              set -euo pipefail
+              # Docker requires all-lowercase image names
+              GHCR_USER_LC="${GHCR_USERNAME,,}"
+              echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER_LC" --password-stdin
+              IMAGE="ghcr.io/${GHCR_USER_LC}/eliteapp-api"
               docker build -f $(dockerfilePath) $(buildContext) \
-                -t $IMAGE:$(Build.BuildId) \
-                -t $IMAGE:latest
-              docker push $IMAGE:$(Build.BuildId)
-              docker push $IMAGE:latest
+                -t "$IMAGE:$(Build.BuildId)" \
+                -t "$IMAGE:latest"
+              docker push "$IMAGE:$(Build.BuildId)"
+              docker push "$IMAGE:latest"
               echo "##vso[task.setvariable variable=DOCKER_IMAGE;isOutput=true]$IMAGE:$(Build.BuildId)"
             displayName: Build and push to GitHub Container Registry
             env:
@@ -187,7 +190,7 @@ stages:
                   },
                   {
                     "name": "DOCKER_REGISTRY_SERVER_USERNAME",
-                    "value": "$(GHCR_USERNAME)",
+                    "value": "sidd1721986",
                     "slotSetting": false
                   },
                   {
@@ -212,7 +215,7 @@ stages:
             inputs:
               azureSubscription: $(azureSubscription)
               appName: $(webAppName)
-              containers: ghcr.io/$(GHCR_USERNAME)/eliteapp-api:$(Build.BuildId)
+              containers: ghcr.io/sidd1721986/eliteapp-api:$(Build.BuildId)
 
           - script: |
               set -e
