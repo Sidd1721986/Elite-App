@@ -77,9 +77,6 @@ trigger:
   paths:
     include:
       - backend/**
-      - android/**
-      - src/**
-      - package.json
       - azure-pipelines.yml
 
 pr:
@@ -90,9 +87,6 @@ pr:
   paths:
     include:
       - backend/**
-      - android/**
-      - src/**
-      - package.json
       - azure-pipelines.yml
 
 variables:
@@ -107,9 +101,6 @@ variables:
     value: backend/Dockerfile
   - name: buildContext
     value: backend
-  # Android version name — bump manually for store release notes (versionCode = Build.BuildId auto-set in build.gradle)
-  - name: ANDROID_VERSION_NAME
-    value: '1.0.$(Build.BuildId)'
 
 stages:
   - stage: BuildAndPush
@@ -242,155 +233,3 @@ stages:
               exit 1
             displayName: Post-deploy health check
             retryCountOnTaskFailure: 3
-
-  # ---------------------------------------------------------------------------
-  # Android: build release AAB → upload to Google Play Internal Testing track
-  #
-  # Prerequisites (one-time setup):
-  #  1) Variable group "EliteApp-Production" — add these variables:
-  #       ANDROID_KEYSTORE_SECURE_FILE      = filename of your .jks in Secure Files
-  #       ANDROID_KEYSTORE_PASSWORD         = keystore password        (mark secret)
-  #       ANDROID_KEY_ALIAS                 = key alias inside keystore
-  #       ANDROID_KEY_PASSWORD              = key password             (mark secret)
-  #       GOOGLE_PLAY_JSON_KEY_SECURE_FILE  = filename of service account JSON in Secure Files
-  #       ENABLE_MOBILE_ANDROID             = true  (set to false to skip)
-  #
-  #  2) Azure DevOps → Pipelines → Library → Secure files:
-  #       - Upload your release keystore (.jks)
-  #       - Upload your Google Play service account JSON key
-  #         (Google Play Console → Setup → API access → Create service account → JSON key)
-  #
-  #  3) Grant the service account "Release manager" role in Google Play Console.
-  #
-  #  4) The app must already have at least one manual upload to Play Console before
-  #     the API can push updates (Google Play requirement for new apps).
-  # ---------------------------------------------------------------------------
-  - stage: BuildAndroidAAB
-    displayName: Build Android AAB
-    dependsOn: []   # runs in parallel with backend build — no dependency
-    condition: |
-      and(
-        succeeded(),
-        eq(variables['ENABLE_MOBILE_ANDROID'], 'true')
-      )
-    jobs:
-      - job: BuildAndroid
-        displayName: React Native → AAB (release)
-        timeoutInMinutes: 45
-        pool:
-          vmImage: ubuntu-24.04
-        steps:
-          - task: NodeTool@0
-            displayName: Install Node.js 20
-            inputs:
-              versionSpec: '20.x'
-
-          - task: Cache@2
-            displayName: Cache npm cache
-            inputs:
-              key: 'npm | "$(Agent.OS)" | package-lock.json'
-              restoreKeys: |
-                npm | "$(Agent.OS)"
-              path: $(HOME)/.npm
-
-          - script: npm install --ignore-scripts
-            displayName: Install JS dependencies (skip iOS postinstall)
-
-          - script: |
-              cat > src/config/env.ts <<EOF
-              export const PRODUCTION_API_BASE_URL = '$(PROD_API_URL)';
-              export const SENTRY_DSN = '$(SENTRY_DSN)';
-              EOF
-            displayName: Generate src/config/env.ts from pipeline variables
-            env:
-              PROD_API_URL: $(PROD_API_URL)
-              SENTRY_DSN: $(SENTRY_DSN)
-
-          - task: JavaToolInstaller@0
-            displayName: Use Java 17 (required for React Native 0.76 / AGP 8)
-            inputs:
-              versionSpec: '17'
-              jdkArchitectureOption: 'x64'
-              jdkSourceOption: 'PreInstalled'
-
-          - task: DownloadSecureFile@1
-            displayName: Download release keystore
-            name: androidKeystore
-            inputs:
-              secureFile: $(ANDROID_KEYSTORE_SECURE_FILE)
-
-          - script: |
-              set -euo pipefail
-              cat > android/keystore.properties <<EOF
-              storeFile=$(androidKeystore.secureFilePath)
-              storePassword=$(ANDROID_KEYSTORE_PASSWORD)
-              keyAlias=$(ANDROID_KEY_ALIAS)
-              keyPassword=$(ANDROID_KEY_PASSWORD)
-              EOF
-            displayName: Write keystore.properties
-            env:
-              ANDROID_KEYSTORE_PASSWORD: $(ANDROID_KEYSTORE_PASSWORD)
-              ANDROID_KEY_PASSWORD: $(ANDROID_KEY_PASSWORD)
-
-          - script: |
-              set -euo pipefail
-              cd android
-              chmod +x gradlew
-              ./gradlew bundleRelease \
-                -PBUILD_BUILDID=$(Build.BuildId) \
-                -PVERSION_NAME=$(ANDROID_VERSION_NAME) \
-                --no-daemon \
-                --stacktrace
-            displayName: Build release AAB
-            env:
-              BUILD_BUILDID: $(Build.BuildId)
-              VERSION_NAME: $(ANDROID_VERSION_NAME)
-
-          - task: CopyFiles@2
-            displayName: Stage AAB artifact
-            inputs:
-              sourceFolder: android/app/build/outputs/bundle/release
-              contents: '*.aab'
-              targetFolder: $(Build.ArtifactStagingDirectory)/android
-
-          - task: PublishBuildArtifacts@1
-            displayName: Publish AAB artifact
-            inputs:
-              pathToPublish: $(Build.ArtifactStagingDirectory)/android
-              artifactName: android-aab
-
-  - stage: DeployAndroidToPlay
-    displayName: Deploy AAB to Google Play (Internal Testing)
-    dependsOn: BuildAndroidAAB
-    condition: |
-      and(
-        succeeded(),
-        eq(variables['ENABLE_MOBILE_ANDROID'], 'true'),
-        or(
-          eq(variables['Build.SourceBranch'], 'refs/heads/main'),
-          eq(variables['Build.SourceBranch'], 'refs/heads/master')
-        )
-      )
-    jobs:
-      - job: PublishToPlay
-        displayName: Upload to Google Play Internal Testing
-        timeoutInMinutes: 20
-        pool:
-          vmImage: ubuntu-24.04
-        steps:
-          - task: DownloadBuildArtifacts@1
-            displayName: Download AAB artifact
-            inputs:
-              buildType: current
-              artifactName: android-aab
-              downloadPath: $(System.ArtifactsDirectory)
-
-          - task: GooglePlayRelease@4
-            displayName: Upload AAB to Internal Testing track
-            inputs:
-              serviceConnection: $(GOOGLE_PLAY_SERVICE_CONN)
-              applicationId: 'com.elitehomeservicesusa.app'
-              action: 'SingleBundle'
-              bundleFile: '$(System.ArtifactsDirectory)/android-aab/*.aab'
-              track: 'internal'
-              rolloutToUserFraction: false
