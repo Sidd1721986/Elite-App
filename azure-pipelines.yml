@@ -293,7 +293,7 @@ stages:
                 npm | "$(Agent.OS)"
               path: $(HOME)/.npm
 
-          - script: npm ci
+          - script: npm install
             displayName: Install JS dependencies
 
           - task: JavaToolInstaller@0
