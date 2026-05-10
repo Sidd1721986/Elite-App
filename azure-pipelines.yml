@@ -293,8 +293,8 @@ stages:
                 npm | "$(Agent.OS)"
               path: $(HOME)/.npm
 
-          - script: npm install
-            displayName: Install JS dependencies
+          - script: npm install --ignore-scripts
+            displayName: Install JS dependencies (skip iOS postinstall)
 
           - task: JavaToolInstaller@0
             displayName: Use Java 17 (required for React Native 0.76 / AGP 8)
