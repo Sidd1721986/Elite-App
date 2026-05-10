@@ -296,6 +296,16 @@ stages:
           - script: npm install --ignore-scripts
             displayName: Install JS dependencies (skip iOS postinstall)
 
+          - script: |
+              cat > src/config/env.ts <<EOF
+              export const PRODUCTION_API_BASE_URL = '$(PROD_API_URL)';
+              export const SENTRY_DSN = '$(SENTRY_DSN)';
+              EOF
+            displayName: Generate src/config/env.ts from pipeline variables
+            env:
+              PROD_API_URL: $(PROD_API_URL)
+              SENTRY_DSN: $(SENTRY_DSN)
+
           - task: JavaToolInstaller@0
             displayName: Use Java 17 (required for React Native 0.76 / AGP 8)
             inputs:
