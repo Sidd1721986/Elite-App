@@ -375,19 +375,12 @@ stages:
               artifactName: android-aab
               downloadPath: $(System.ArtifactsDirectory)
 
-          - task: DownloadSecureFile@1
-            displayName: Download Google Play service account JSON
-            name: googlePlayJson
-            inputs:
-              secureFile: $(GOOGLE_PLAY_JSON_KEY_SECURE_FILE)
-
           - task: GooglePlayRelease@4
             displayName: Upload AAB to Internal Testing track
             inputs:
-              serviceConnection: 'Google Play'
+              serviceConnection: $(GOOGLE_PLAY_SERVICE_CONN)
               applicationId: 'com.elitehomeservicesusa.app'
               action: 'SingleBundle'
               bundleFile: '$(System.ArtifactsDirectory)/android-aab/*.aab'
               track: 'internal'
               rolloutToUserFraction: false
-              jsonAuthFilePath: $(googlePlayJson.secureFilePath)
