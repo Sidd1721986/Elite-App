@@ -415,19 +415,38 @@ const JobFormModal: React.FC<Props> = ({
                     <View style={styles.photoSection}>
                         <View style={styles.photoHeader}>
                             <Text variant="labelLarge" style={styles.urgencyLabel}>Work Photos</Text>
-                            <Menu
+                            <Button mode="text" compact icon="camera-plus" onPress={() => setShowPhotoMenu(true)}>
+                                Add Pictures
+                            </Button>
+                        </View>
+
+                        {/* Photo picker bottom sheet */}
+                        <Portal>
+                            <Modal
                                 visible={showPhotoMenu}
                                 onDismiss={() => setShowPhotoMenu(false)}
-                                anchor={
-                                    <Button mode="text" compact icon="camera-plus" onPress={() => setShowPhotoMenu(true)}>
-                                        Add Pictures
-                                    </Button>
-                                }
+                                contentContainerStyle={styles.photoPickerSheet}
                             >
-                                <Menu.Item leadingIcon="camera"         onPress={handleTakePhoto}  title="Take Photo" />
-                                <Menu.Item leadingIcon="image-multiple" onPress={handlePickImage}  title="Choose from Gallery" />
-                            </Menu>
-                        </View>
+                                <Text variant="titleMedium" style={styles.photoPickerTitle}>Add Photo</Text>
+                                <View style={styles.photoPickerRow}>
+                                    <TouchableOpacity style={styles.photoPickerOption} onPress={handleTakePhoto}>
+                                        <View style={styles.photoPickerIcon}>
+                                            <IconButton icon="camera" size={32} iconColor="#6366F1" />
+                                        </View>
+                                        <Text variant="labelMedium" style={styles.photoPickerLabel}>Camera</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.photoPickerOption} onPress={handlePickImage}>
+                                        <View style={styles.photoPickerIcon}>
+                                            <IconButton icon="image-multiple" size={32} iconColor="#6366F1" />
+                                        </View>
+                                        <Text variant="labelMedium" style={styles.photoPickerLabel}>Gallery</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <Button mode="text" onPress={() => setShowPhotoMenu(false)} style={{ marginTop: 4 }}>
+                                    Cancel
+                                </Button>
+                            </Modal>
+                        </Portal>
                         {photos.length > 0 ? (
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
                                 {photos.map((uri, index) => (
@@ -550,6 +569,43 @@ const styles = StyleSheet.create({
         backgroundColor: '#F8FAFC',
     },
     submitBtn: { marginTop: 8, borderRadius: 16 },
+    photoPickerSheet: {
+        backgroundColor: '#FFFFFF',
+        marginHorizontal: 24,
+        marginBottom: 40,
+        borderRadius: 20,
+        padding: 24,
+        alignSelf: 'flex-end',
+        width: '88%',
+    },
+    photoPickerTitle: {
+        textAlign: 'center',
+        marginBottom: 20,
+        fontWeight: '600',
+        color: '#1E293B',
+    },
+    photoPickerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 8,
+    },
+    photoPickerOption: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    photoPickerIcon: {
+        width: 72,
+        height: 72,
+        borderRadius: 16,
+        backgroundColor: '#EEF2FF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    photoPickerLabel: {
+        color: '#1E293B',
+        fontWeight: '500',
+    },
 });
 
 export default memo(JobFormModal);

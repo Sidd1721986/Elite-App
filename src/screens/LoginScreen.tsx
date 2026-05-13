@@ -25,6 +25,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.CUSTOMER);
     const [showRoleMenu, setShowRoleMenu] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -137,7 +138,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                     placeholder="••••••••"
                                     value={password}
                                     onChangeText={setPassword}
-                                    secureTextEntry
+                                    secureTextEntry={!showPassword}
                                     mode="outlined"
                                     style={styles.input}
                                     outlineColor="#E2E8F0"
@@ -146,6 +147,13 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                     onSubmitEditing={handleLogin}
                                     blurOnSubmit
                                     left={<TextInput.Icon icon="lock-outline" color="#94A3B8" />}
+                                    right={
+                                        <TextInput.Icon
+                                            icon={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                                            color="#94A3B8"
+                                            onPress={() => setShowPassword(prev => !prev)}
+                                        />
+                                    }
                                     testID="login_password_input"
                                 />
 
