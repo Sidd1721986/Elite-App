@@ -197,7 +197,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                             style={styles.signupButton}
                                             labelStyle={styles.signupButtonLabel}
                                         >
-                                            New to Elite? <Text style={styles.signupAccent}>Join Now</Text>
+                                            New to Elite? <Text style={styles.signupAccent}>Create Account</Text>
                                         </Button>
                                     </View>
                                 )}

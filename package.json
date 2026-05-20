@@ -1,6 +1,6 @@
 {
   "name": "multiuserauthapp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.js",
   "scripts": {
     "prestart": "node scripts/ensure-node-version.cjs && node scripts/ensure-project-root.cjs && npm run metro:kill",
