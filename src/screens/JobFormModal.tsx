@@ -21,7 +21,8 @@ import FastImage from 'react-native-fast-image';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { Urgency, Job, User } from '../types/types';
 import { AVAILABLE_SERVICES } from '../config/services';
-import { formatAddress, parseAddress, US_STATES } from '../utils/addressUtils';
+import { formatAddress, parseAddress } from '../utils/addressUtils';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,6 @@ const JobFormModal: React.FC<Props> = ({
 
     // Menu visibility
     const [showUrgencyMenu, setShowUrgencyMenu]   = useState(false);
-    const [showStateMenu, setShowStateMenu]       = useState(false);
     const [showServicesMenu, setShowServicesMenu] = useState(false);
     const [showPhotoMenu, setShowPhotoMenu]       = useState(false);
 
@@ -238,56 +238,17 @@ const JobFormModal: React.FC<Props> = ({
 
                 <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                     {/* Address */}
-                    <TextInput
-                        label="Service Street Address *"
-                        value={street}
-                        onChangeText={setStreet}
-                        mode="outlined"
-                        style={styles.input}
-                        left={<TextInput.Icon icon="map-marker-outline" />}
-                        testID="job_street_input"
+                    <AddressAutocomplete
+                        label="Service Address *"
+                        hasError={false}
+                        initialValue={formatAddress({ street, city, zip, state })}
+                        onAddressSelect={({ street: s, city: c, zip: z, state: st }) => {
+                            setStreet(s);
+                            setCity(c);
+                            setZip(z);
+                            setState(st);
+                        }}
                     />
-                    <View style={styles.addressRow}>
-                        <TextInput
-                            label="City *"
-                            value={city}
-                            onChangeText={setCity}
-                            mode="outlined"
-                            style={[styles.input, { flex: 2 }]}
-                        />
-                        <TextInput
-                            label="Zip *"
-                            value={zip}
-                            onChangeText={setZip}
-                            mode="outlined"
-                            style={[styles.input, { flex: 1.2 }]}
-                            keyboardType="numeric"
-                        />
-                        <Menu
-                            visible={showStateMenu}
-                            onDismiss={() => setShowStateMenu(false)}
-                            anchor={
-                                <TouchableOpacity onPress={() => setShowStateMenu(true)} activeOpacity={1} style={{ flex: 1 }}>
-                                    <View pointerEvents="none">
-                                        <TextInput
-                                            label="State *"
-                                            value={state}
-                                            mode="outlined"
-                                            style={styles.input}
-                                            right={<TextInput.Icon icon="chevron-down" />}
-                                            editable={false}
-                                        />
-                                    </View>
-                                </TouchableOpacity>
-                            }
-                        >
-                            <ScrollView style={{ maxHeight: 250 }}>
-                                {US_STATES.map(s => (
-                                    <Menu.Item key={s} onPress={() => { setState(s); setShowStateMenu(false); }} title={s} />
-                                ))}
-                            </ScrollView>
-                        </Menu>
-                    </View>
 
                     {/* Services */}
                     <Text variant="titleSmall" style={styles.sectionLabel}>Select Services Needed *</Text>

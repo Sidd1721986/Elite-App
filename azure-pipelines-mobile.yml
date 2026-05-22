@@ -116,7 +116,8 @@ stages:
           - script: |
               printf 'export const PRODUCTION_API_BASE_URL = "%s";\n' "$(PROD_API_URL)" > src/config/env.ts
               printf 'export const SENTRY_DSN = "%s";\n' "$(SENTRY_DSN)" >> src/config/env.ts
-            displayName: Inject production API URL and Sentry DSN
+              printf 'export const GOOGLE_PLACES_API_KEY = "%s";\n' "$(GOOGLE_PLACES_API_KEY)" >> src/config/env.ts
+            displayName: Inject production API URL, Sentry DSN, and Google Places API key
           - script: |
               set -e
               printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$AGENT_TEMPDIRECTORY/elite-release.keystore"

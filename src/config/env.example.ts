@@ -21,3 +21,7 @@ export const PRODUCTION_API_BASE_URL =
 
 // Sentry DSN — get from sentry.io → your project → Settings → Client Keys
 export const SENTRY_DSN = 'https://YOUR_KEY@oXXXXXX.ingest.sentry.io/XXXXXXX';
+
+// Google Places API key — get from console.cloud.google.com → Credentials
+// Restrict to your Android package name + iOS bundle ID for security
+export const GOOGLE_PLACES_API_KEY = 'YOUR_GOOGLE_PLACES_API_KEY';

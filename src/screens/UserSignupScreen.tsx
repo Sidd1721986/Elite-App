@@ -9,7 +9,8 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
 import AppLogo from '../components/AppLogo';
 import LegalConsentFooter from '../components/LegalConsentFooter';
-import { formatAddress, US_STATES } from '../utils/addressUtils';
+import AddressAutocomplete from '../components/AddressAutocomplete';
+import { formatAddress } from '../utils/addressUtils';
 
 type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, 'UserSignup'>;
 
@@ -24,7 +25,6 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
     const [city, setCity] = useState('');
     const [zip, setZip] = useState('');
     const [state, setState] = useState('');
-    const [showStateMenu, setShowStateMenu] = useState(false);
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -42,10 +42,6 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
     const signupTimeoutRef = React.useRef<any>(null);
 
     const nameRef = React.useRef<any>(null);
-    const streetRef = React.useRef<any>(null);
-    const cityRef = React.useRef<any>(null);
-    const zipRef = React.useRef<any>(null);
-    const stateRef = React.useRef<any>(null);
     const emailRef = React.useRef<any>(null);
     const phoneRef = React.useRef<any>(null);
     const passwordRef = React.useRef<any>(null);
@@ -174,81 +170,17 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
                                         error={submitted && !name}
                                     />
 
-                                    <TextInput
-                                        ref={streetRef}
-                                        label={submitted && !street ? 'Street Address *' : 'Street Address'}
-                                        value={street}
-                                        onChangeText={setStreet}
-                                        mode="outlined"
-                                        style={styles.input}
-                                        returnKeyType="next"
-                                        onSubmitEditing={() => cityRef.current?.focus()}
-                                        error={submitted && !street}
+                                    <AddressAutocomplete
+                                        label="Street Address *"
+                                        hasError={submitted && !street}
+                                        initialValue={formatAddress({ street, city, zip, state })}
+                                        onAddressSelect={({ street: s, city: c, zip: z, state: st }) => {
+                                            setStreet(s);
+                                            setCity(c);
+                                            setZip(z);
+                                            setState(st);
+                                        }}
                                     />
-
-                                    <View style={styles.formRow}>
-                                        <TextInput
-                                            ref={cityRef}
-                                            label={submitted && !city ? 'City *' : 'City'}
-                                            value={city}
-                                            onChangeText={setCity}
-                                            mode="outlined"
-                                            style={[styles.input, { flex: 2, marginRight: 8 }]}
-                                            returnKeyType="next"
-                                            onSubmitEditing={() => zipRef.current?.focus()}
-                                            error={submitted && !city}
-                                        />
-                                        <TextInput
-                                            ref={zipRef}
-                                            label={submitted && !zip ? 'Zip *' : 'Zip'}
-                                            value={zip}
-                                            onChangeText={setZip}
-                                            mode="outlined"
-                                            style={[styles.input, { flex: 1.2, marginRight: 8 }]}
-                                            keyboardType="numeric"
-                                            returnKeyType="next"
-                                            onSubmitEditing={() => stateRef.current?.focus()}
-                                            error={submitted && !zip}
-                                        />
-                                        <Menu
-                                            visible={showStateMenu}
-                                            onDismiss={() => setShowStateMenu(false)}
-                                            anchor={
-                                                <TouchableOpacity
-                                                    onPress={() => setShowStateMenu(true)}
-                                                    activeOpacity={1}
-                                                    style={{ flex: 1.2 }}
-                                                >
-                                                    <View pointerEvents="none">
-                                                        <TextInput
-                                                            ref={stateRef}
-                                                            label={submitted && !state ? 'State *' : 'State'}
-                                                            value={state}
-                                                            mode="outlined"
-                                                            style={styles.input}
-                                                            right={<TextInput.Icon icon="chevron-down" />}
-                                                            error={submitted && !state}
-                                                            editable={false}
-                                                        />
-                                                    </View>
-                                                </TouchableOpacity>
-                                            }
-                                        >
-                                            <ScrollView style={{ maxHeight: 250 }}>
-                                                {US_STATES.map((s) => (
-                                                    <Menu.Item
-                                                        key={s}
-                                                        onPress={() => {
-                                                            setState(s);
-                                                            setShowStateMenu(false);
-                                                            emailRef.current?.focus();
-                                                        }}
-                                                        title={s}
-                                                    />
-                                                ))}
-                                            </ScrollView>
-                                        </Menu>
-                                    </View>
 
                                     <TextInput
                                         ref={emailRef}
