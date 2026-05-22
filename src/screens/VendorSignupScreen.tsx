@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TextInput, Button, Text, Card, Snackbar, Divider, Menu } from 'react-native-paper';
+import { TextInput, Button, Text, Card, Snackbar, Divider } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types/types';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -152,7 +152,7 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
                                         mode="outlined"
                                         style={styles.input}
                                         returnKeyType="next"
-                                        onSubmitEditing={() => streetRef.current?.focus()}
+                                        onSubmitEditing={() => emailRef.current?.focus()}
                                         error={submitted && !name}
                                     />
 

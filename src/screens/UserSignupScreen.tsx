@@ -166,7 +166,7 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
                                         mode="outlined"
                                         style={styles.input}
                                         returnKeyType="next"
-                                        onSubmitEditing={() => streetRef.current?.focus()}
+                                        onSubmitEditing={() => emailRef.current?.focus()}
                                         error={submitted && !name}
                                     />
 
