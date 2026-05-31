@@ -1,24 +1,28 @@
 /**
- * AddressAutocomplete — Google Places-powered address search field.
+ * AddressAutocomplete — Street address field with Google Places suggestions.
  *
- * Replaces the manual Street / City / Zip / State fields with a single
- * smart input that auto-suggests and auto-fills all address parts.
+ * Uses the Places Autocomplete + Place Details REST APIs directly so the
+ * suggestion list is absolutely-positioned (floats above the form) and
+ * there is no FlatList-inside-ScrollView nesting warning.
  *
  * Usage:
  *   <AddressAutocomplete
- *     label="Service Address"
+ *     label="Street Address"
  *     hasError={submitted && !street}
- *     onAddressSelect={({ street, city, zip, state }) => {
- *       setStreet(street); setCity(city); setZip(zip); setState(state);
- *     }}
- *     initialValue={formatAddress({ street, city, zip, state })}
+ *     initialValue={street}
+ *     onAddressSelect={({ street, city, zip, state }) => { ... }}
  *   />
  */
 
-import React, { useRef, useState } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { Text } from 'react-native-paper';
-import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import { GOOGLE_PLACES_API_KEY } from '../config/env';
 
 export interface AddressParts {
@@ -28,24 +32,28 @@ export interface AddressParts {
     state: string;
 }
 
+interface Prediction {
+    place_id: string;
+    description: string;
+}
+
 interface Props {
     label?: string;
     hasError?: boolean;
     initialValue?: string;
     onAddressSelect: (parts: AddressParts) => void;
-    onClear?: () => void;
 }
 
-/** Parse Google Places address_components into our AddressParts shape. */
-function parseGoogleComponents(components: any[]): AddressParts {
+/** Parse Google Place Details address_components into AddressParts. */
+function parseComponents(components: any[]): AddressParts {
     const get = (type: string) =>
         components.find((c: any) => c.types.includes(type))?.short_name ?? '';
     const getLong = (type: string) =>
         components.find((c: any) => c.types.includes(type))?.long_name ?? '';
 
-    const streetNumber = get('street_number');
-    const route = getLong('route');
-    const street = [streetNumber, route].filter(Boolean).join(' ');
+    const street = [get('street_number'), getLong('route')]
+        .filter(Boolean)
+        .join(' ');
     const city =
         getLong('locality') ||
         getLong('sublocality') ||
@@ -58,123 +66,226 @@ function parseGoogleComponents(components: any[]): AddressParts {
 }
 
 const AddressAutocomplete: React.FC<Props> = ({
-    label = 'Address',
+    label = 'Street Address',
     hasError = false,
     initialValue = '',
     onAddressSelect,
-    onClear,
 }) => {
-    const ref = useRef<any>(null);
-    const [selected, setSelected] = useState(false);
+    const [query, setQuery] = useState(initialValue);
+    const [predictions, setPredictions] = useState<Prediction[]>([]);
+    const [focused, setFocused] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const borderColor = hasError ? '#B00020' : selected ? '#6366F1' : '#E2E8F0';
-    const labelColor  = hasError ? '#B00020' : '#6366F1';
+    // Keep query in sync if parent resets initialValue (e.g. after correction)
+    useEffect(() => {
+        setQuery(initialValue);
+    }, [initialValue]);
+
+    const fetchPredictions = (text: string) => {
+        if (debounceRef.current) { clearTimeout(debounceRef.current); }
+        if (text.length < 2) { setPredictions([]); return; }
+
+        debounceRef.current = setTimeout(async () => {
+            setLoading(true);
+            try {
+                const url =
+                    `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
+                    `?input=${encodeURIComponent(text)}` +
+                    `&key=${GOOGLE_PLACES_API_KEY}` +
+                    `&components=country:us` +
+                    `&types=address` +
+                    `&language=en`;
+                const res = await fetch(url);
+                const data = await res.json();
+                setPredictions(data.predictions ?? []);
+            } catch {
+                setPredictions([]);
+            } finally {
+                setLoading(false);
+            }
+        }, 300);
+    };
+
+    const selectPrediction = async (prediction: Prediction) => {
+        setQuery(prediction.description);
+        setPredictions([]);
+        setLoading(true);
+        try {
+            const url =
+                `https://maps.googleapis.com/maps/api/place/details/json` +
+                `?place_id=${prediction.place_id}` +
+                `&fields=address_components` +
+                `&key=${GOOGLE_PLACES_API_KEY}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            const parts = parseComponents(data.result?.address_components ?? []);
+            // Show just the street in the input box
+            setQuery(parts.street || prediction.description);
+            onAddressSelect(parts);
+        } catch {
+            onAddressSelect({ street: prediction.description, city: '', zip: '', state: '' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const borderColor = hasError ? '#B00020' : focused ? '#6366F1' : '#79747E';
+    const labelColor  = hasError ? '#B00020' : focused ? '#6366F1' : '#49454F';
+    const borderWidth = focused || hasError ? 2 : 1;
 
     return (
-        <View style={[styles.wrapper, { borderColor, borderWidth: selected || hasError ? 2 : 1 }]}>
-            {/* Floating label */}
-            <Text style={[styles.floatingLabel, { color: labelColor }]}>{label}</Text>
+        <View style={styles.container}>
+            {/* Outlined TextInput look */}
+            <View style={[styles.inputBox, { borderColor, borderWidth }]}>
+                {/* Floating label */}
+                <Text style={[styles.label, { color: labelColor }]}>{label}</Text>
 
-            <GooglePlacesAutocomplete
-                ref={ref}
-                placeholder="Search address…"
-                fetchDetails
-                enablePoweredByContainer={false}
-                query={{
-                    key: GOOGLE_PLACES_API_KEY,
-                    language: 'en',
-                    components: 'country:us',
-                    types: 'address',
-                }}
-                textInputProps={{
-                    defaultValue: initialValue,
-                    placeholderTextColor: '#94A3B8',
-                    style: styles.textInput,
-                    clearButtonMode: 'while-editing',
-                    onFocus: () => setSelected(true),
-                    onBlur: () => setSelected(false),
-                }}
-                styles={{
-                    container: { flex: 0 },
-                    textInput: styles.textInput,
-                    listView: styles.listView,
-                    row: styles.row,
-                    description: styles.description,
-                    separator: styles.separator,
-                    poweredContainer: { display: 'none' },
-                }}
-                onPress={(data, details) => {
-                    if (!details?.address_components) {return;}
-                    const parts = parseGoogleComponents(details.address_components);
-                    onAddressSelect(parts);
-                    setSelected(false);
-                }}
-                onFail={(err) => console.warn('[AddressAutocomplete] error:', err)}
-            />
+                <View style={styles.row}>
+                    <TextInput
+                        style={styles.input}
+                        value={query}
+                        onChangeText={(text) => {
+                            setQuery(text);
+                            fetchPredictions(text);
+                        }}
+                        onFocus={() => setFocused(true)}
+                        onBlur={() => {
+                            setFocused(false);
+                            // Small delay so tap on suggestion registers first
+                            setTimeout(() => setPredictions([]), 150);
+                        }}
+                        placeholder={focused ? 'e.g. 88 Main St' : ''}
+                        placeholderTextColor="#94A3B8"
+                        autoCorrect={false}
+                        autoComplete="street-address"
+                        returnKeyType="next"
+                    />
+                    {loading && (
+                        <ActivityIndicator
+                            size="small"
+                            color="#6366F1"
+                            style={{ marginRight: 8 }}
+                        />
+                    )}
+                    {!loading && query.length > 0 && (
+                        <TouchableOpacity
+                            onPress={() => { setQuery(''); setPredictions([]); }}
+                            style={styles.clearBtn}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                            <Text style={styles.clearText}>✕</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            </View>
 
             {hasError && (
-                <Text style={styles.errorText}>Address is required</Text>
+                <Text style={styles.errorText}>Street address is required</Text>
+            )}
+
+            {/* Absolutely-positioned dropdown — floats above all other fields */}
+            {predictions.length > 0 && (
+                <View style={styles.dropdown}>
+                    {predictions.map((p, index) => (
+                        <TouchableOpacity
+                            key={p.place_id}
+                            style={[
+                                styles.suggestionRow,
+                                index < predictions.length - 1 && styles.suggestionBorder,
+                            ]}
+                            onPress={() => selectPrediction(p)}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.suggestionIcon}>📍</Text>
+                            <Text style={styles.suggestionText} numberOfLines={2}>
+                                {p.description}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
             )}
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    wrapper: {
+    container: {
+        marginBottom: 16,
+        zIndex: 100,
+    },
+    inputBox: {
         borderRadius: 4,
         backgroundColor: '#FFFFFF',
-        marginBottom: 16,
-        paddingTop: 8,
         paddingHorizontal: 12,
-        paddingBottom: 4,
-        position: 'relative',
+        paddingTop: 6,
+        paddingBottom: 8,
     },
-    floatingLabel: {
+    label: {
         fontSize: 12,
-        fontWeight: '600',
+        fontWeight: '500',
         marginBottom: 2,
-        letterSpacing: 0.2,
-    },
-    textInput: {
-        fontSize: 16,
-        color: '#1E293B',
-        paddingVertical: Platform.OS === 'ios' ? 4 : 2,
-        paddingHorizontal: 0,
-        backgroundColor: 'transparent',
-        borderWidth: 0,
-        height: 40,
-    },
-    listView: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        marginTop: 4,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-        elevation: 8,
-        zIndex: 999,
     },
     row: {
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        backgroundColor: '#FFFFFF',
+        flexDirection: 'row',
+        alignItems: 'center',
     },
-    description: {
-        fontSize: 14,
+    input: {
+        flex: 1,
+        fontSize: 16,
         color: '#1E293B',
+        paddingVertical: 4,
+        paddingHorizontal: 0,
+        backgroundColor: 'transparent',
     },
-    separator: {
-        height: 1,
-        backgroundColor: '#F1F5F9',
+    clearBtn: {
+        padding: 4,
+    },
+    clearText: {
+        fontSize: 14,
+        color: '#94A3B8',
     },
     errorText: {
         fontSize: 12,
         color: '#B00020',
-        marginTop: 2,
-        marginBottom: 4,
+        marginTop: 4,
+        marginLeft: 12,
+    },
+    dropdown: {
+        position: 'absolute',
+        top: '100%',
+        left: 0,
+        right: 0,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 8,
+        zIndex: 999,
+    },
+    suggestionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        gap: 10,
+    },
+    suggestionBorder: {
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    suggestionIcon: {
+        fontSize: 14,
+    },
+    suggestionText: {
+        flex: 1,
+        fontSize: 14,
+        color: '#1E293B',
+        lineHeight: 20,
     },
 });
 

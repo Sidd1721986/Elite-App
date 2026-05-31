@@ -78,6 +78,9 @@ minimal.js
 debug_index.js
 test_metro.js
 
+# Claude Code worktrees (local only — stale after project moves)
+.claude/worktrees/
+
 # Accidental duplicate / local junk (do not commit)
 * 2.lock
 * 3.lock

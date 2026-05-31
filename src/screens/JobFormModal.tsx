@@ -11,7 +11,7 @@
 
 import React, { useState, useCallback, useEffect, memo } from 'react';
 import {
-    View, StyleSheet, ScrollView, TouchableOpacity,
+    View, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform,
 } from 'react-native';
 import {
     Text, Button, Portal, Modal, TextInput,
@@ -137,19 +137,64 @@ const JobFormModal: React.FC<Props> = ({
     // ── Photo handlers ────────────────────────────────────────────────────────
     const handlePickImage = useCallback(async () => {
         setShowPhotoMenu(false);
-        const result = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 5, includeBase64: false });
-        if (result.assets) {
-            const uris = result.assets.map(a => a.uri).filter(Boolean) as string[];
-            setPhotos(prev => [...prev, ...uris]);
+        // Give the modal time to dismiss before opening the native picker
+        await new Promise(resolve => setTimeout(resolve, Platform.OS === 'ios' ? 400 : 200));
+        try {
+            const result = await launchImageLibrary({
+                mediaType: 'photo',
+                selectionLimit: 5,
+                includeBase64: false,
+                quality: 0.8,
+            });
+            if (result.didCancel) { return; }
+            if (result.errorCode) {
+                Alert.alert('Gallery Error', result.errorMessage || 'Could not open gallery. Please check permissions in Settings.');
+                return;
+            }
+            if (result.assets) {
+                const uris = result.assets.map(a => a.uri).filter(Boolean) as string[];
+                setPhotos(prev => [...prev, ...uris]);
+            }
+        } catch (err) {
+            Alert.alert('Error', 'Could not open photo gallery.');
         }
     }, []);
 
     const handleTakePhoto = useCallback(async () => {
         setShowPhotoMenu(false);
-        const result = await launchCamera({ mediaType: 'photo', saveToPhotos: true, quality: 0.8, includeBase64: false });
-        if (result.assets) {
-            const uris = result.assets.map(a => a.uri).filter(Boolean) as string[];
-            setPhotos(prev => [...prev, ...uris]);
+        // Give the modal time to dismiss before opening the native camera
+        await new Promise(resolve => setTimeout(resolve, Platform.OS === 'ios' ? 400 : 200));
+        try {
+            const result = await launchCamera({
+                mediaType: 'photo',
+                saveToPhotos: true,
+                quality: 0.8,
+                includeBase64: false,
+                cameraType: 'back',
+            });
+            if (result.didCancel) { return; }
+            if (result.errorCode === 'camera_unavailable') {
+                Alert.alert('Camera Unavailable', 'No camera found on this device.');
+                return;
+            }
+            if (result.errorCode === 'permission') {
+                Alert.alert(
+                    'Camera Permission Required',
+                    'Please allow camera access in Settings → Privacy → Camera → Elite Home Services.',
+                    [{ text: 'OK' }]
+                );
+                return;
+            }
+            if (result.errorCode) {
+                Alert.alert('Camera Error', result.errorMessage || 'Could not open camera.');
+                return;
+            }
+            if (result.assets) {
+                const uris = result.assets.map(a => a.uri).filter(Boolean) as string[];
+                setPhotos(prev => [...prev, ...uris]);
+            }
+        } catch (err) {
+            Alert.alert('Error', 'Could not open camera.');
         }
     }, []);
 

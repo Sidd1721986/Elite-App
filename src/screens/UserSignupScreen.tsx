@@ -9,8 +9,9 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
 import AppLogo from '../components/AppLogo';
 import LegalConsentFooter from '../components/LegalConsentFooter';
+import { formatAddress, validateAddressWithGoogle, AddressParts, US_STATES } from '../utils/addressUtils';
+import { GOOGLE_PLACES_API_KEY } from '../config/env';
 import AddressAutocomplete from '../components/AddressAutocomplete';
-import { formatAddress } from '../utils/addressUtils';
 
 type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, 'UserSignup'>;
 
@@ -33,10 +34,15 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
     const [referralSource, setReferralSource] = useState('');
 
     const [showRoleMenu, setShowRoleMenu] = useState(false);
+    const [showStateMenu, setShowStateMenu] = useState(false);
     const [loading, setLoading] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [submitted, setSubmitted] = useState(false);
+    const [addressValidating, setAddressValidating] = useState(false);
+    const [addressValid, setAddressValid] = useState<boolean | null>(null);
+    const [addressSuggestion, setAddressSuggestion] = useState<string | undefined>();
+    const [addressCorrectedParts, setAddressCorrectedParts] = useState<AddressParts | undefined>();
     const [agreeLegal, setAgreeLegal] = useState(false);
     const { signup } = useAuth();
     const signupTimeoutRef = React.useRef<any>(null);
@@ -49,12 +55,56 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
     const roleOtherRef = React.useRef<any>(null);
     const referralSourceRef = React.useRef<any>(null);
 
+    const handleAddressBlur = async () => {
+        if (!street || !city || !zip || !state) { return; }
+        // Already validated (e.g. picked from autocomplete) — don't re-validate
+        if (addressValid === true) { return; }
+        setAddressValidating(true);
+        setAddressValid(null);
+        setAddressSuggestion(undefined);
+        setAddressCorrectedParts(undefined);
+        const result = await validateAddressWithGoogle({ street, city, zip, state }, GOOGLE_PLACES_API_KEY);
+        setAddressValid(result.valid);
+        setAddressSuggestion(result.suggestion);
+        setAddressCorrectedParts(result.correctedParts);
+        setAddressValidating(false);
+    };
+
+    const applyAddressCorrection = () => {
+        if (!addressCorrectedParts) { return; }
+        setStreet(addressCorrectedParts.street);
+        setCity(addressCorrectedParts.city);
+        setState(addressCorrectedParts.state);
+        setZip(addressCorrectedParts.zip);
+        setAddressValid(true);
+        setAddressCorrectedParts(undefined);
+    };
+
     const handleSignup = async () => {
         setSubmitted(true);
         const address = formatAddress({ street, city, zip, state });
 
         if (!name || !email || !street || !city || !zip || !state || !phone || !password || !confirmPassword || !referralSource || (selectedRole === UserRole.OTHER && !roleOther)) {
             setSnackbarMessage('Please fill in all required fields');
+            setSnackbarVisible(true);
+            return;
+        }
+
+        // Validate address with Google if not already validated
+        if (addressValid === null) {
+            setAddressValidating(true);
+            const result = await validateAddressWithGoogle({ street, city, zip, state }, GOOGLE_PLACES_API_KEY);
+            setAddressValid(result.valid);
+            setAddressSuggestion(result.suggestion);
+            setAddressCorrectedParts(result.correctedParts);
+            setAddressValidating(false);
+            if (!result.valid) {
+                setSnackbarMessage('Please enter a valid address');
+                setSnackbarVisible(true);
+                return;
+            }
+        } else if (addressValid === false) {
+            setSnackbarMessage('Please enter a valid address');
             setSnackbarVisible(true);
             return;
         }
@@ -171,16 +221,109 @@ const UserSignupScreen: React.FC<Props> = ({ navigation }) => {
                                     />
 
                                     <AddressAutocomplete
-                                        label="Street Address *"
+                                        label={submitted && !street ? 'Street Address *' : 'Street Address'}
                                         hasError={submitted && !street}
-                                        initialValue={formatAddress({ street, city, zip, state })}
+                                        initialValue={street}
                                         onAddressSelect={({ street: s, city: c, zip: z, state: st }) => {
                                             setStreet(s);
                                             setCity(c);
                                             setZip(z);
                                             setState(st);
+                                            // Address came from Google autocomplete — already validated
+                                            setAddressValid(true);
+                                            setAddressSuggestion(undefined);
+                                            setAddressCorrectedParts(undefined);
                                         }}
                                     />
+                                    <TextInput
+                                        label={submitted && !city ? 'City *' : 'City'}
+                                        value={city}
+                                        onChangeText={(v) => { setCity(v); setAddressValid(null); }}
+                                        mode="outlined"
+                                        style={styles.input}
+                                        returnKeyType="next"
+                                        error={submitted && !city}
+                                    />
+                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                        <View style={{ flex: 1 }}>
+                                            <Menu
+                                                visible={showStateMenu}
+                                                onDismiss={() => setShowStateMenu(false)}
+                                                anchor={
+                                                    <Button
+                                                        mode="outlined"
+                                                        onPress={() => setShowStateMenu(true)}
+                                                        style={[styles.dropdownButton, submitted && !state && { borderColor: '#B00020' }]}
+                                                        contentStyle={styles.dropdownButtonContent}
+                                                        labelStyle={{ color: state ? '#1E293B' : '#94A3B8' }}
+                                                    >
+                                                        {state || (submitted && !state ? 'State *' : 'State')}
+                                                    </Button>
+                                                }
+                                            >
+                                                {US_STATES.map((s) => (
+                                                    <Menu.Item
+                                                        key={s}
+                                                        title={s}
+                                                        onPress={() => {
+                                                            setState(s);
+                                                            setAddressValid(null);
+                                                            setShowStateMenu(false);
+                                                        }}
+                                                    />
+                                                ))}
+                                            </Menu>
+                                            {submitted && !state && (
+                                                <Text style={{ fontSize: 12, color: '#B00020', marginTop: 2 }}>State is required</Text>
+                                            )}
+                                        </View>
+                                        <TextInput
+                                            label={submitted && !zip ? 'Zip *' : 'Zip'}
+                                            value={zip}
+                                            onChangeText={(v) => { setZip(v); setAddressValid(null); }}
+                                            onBlur={handleAddressBlur}
+                                            mode="outlined"
+                                            style={[styles.input, { flex: 1 }]}
+                                            keyboardType="number-pad"
+                                            returnKeyType="next"
+                                            error={submitted && !zip}
+                                        />
+                                    </View>
+                                    {addressValidating && (
+                                        <Text style={{ fontSize: 12, color: '#6366F1', marginBottom: 8 }}>
+                                            🔍 Validating address…
+                                        </Text>
+                                    )}
+                                    {!addressValidating && addressValid === true && (
+                                        <Text style={{ fontSize: 12, color: '#16A34A', marginBottom: 8 }}>
+                                            ✓ Address verified
+                                            {addressSuggestion ? `: ${addressSuggestion}` : ''}
+                                        </Text>
+                                    )}
+                                    {!addressValidating && addressValid === false && (
+                                        <View style={{ marginBottom: 8 }}>
+                                            <Text style={{ fontSize: 12, color: '#B00020', marginBottom: 4 }}>
+                                                ✗ Address not found — did you mean:
+                                            </Text>
+                                            {addressSuggestion && addressCorrectedParts ? (
+                                                <TouchableOpacity
+                                                    onPress={applyAddressCorrection}
+                                                    style={{ backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', borderRadius: 6, padding: 10 }}
+                                                >
+                                                    <Text style={{ fontSize: 13, color: '#1E293B', fontWeight: '500' }}>
+                                                        {addressSuggestion}
+                                                    </Text>
+                                                    <Text style={{ fontSize: 11, color: '#6366F1', marginTop: 2 }}>
+                                                        Tap to use this address
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ) : (
+                                                <Text style={{ fontSize: 12, color: '#B00020' }}>
+                                                    Please check street, city, state, and zip
+                                                </Text>
+                                            )}
+                                        </View>
+                                    )}
 
                                     <TextInput
                                         ref={emailRef}
@@ -386,6 +529,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 10,
         elevation: 3,
+        overflow: 'visible',
     },
     input: {
         marginBottom: 16,
