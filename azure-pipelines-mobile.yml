@@ -153,13 +153,13 @@ stages:
               pathToPublish: android/app/build/outputs/bundle/release/app-release.aab
               artifactName: android-aab
           - task: GooglePlayRelease@4
-            displayName: Publish AAB to Google Play (closed testing - alpha)
+            displayName: Publish AAB to Google Play (production)
             inputs:
               serviceConnection: $(GOOGLE_PLAY_SERVICE_CONN)
               applicationId: $(GOOGLE_PLAY_PACKAGE_NAME)
               action: SingleBundle
               bundleFile: android/app/build/outputs/bundle/release/app-release.aab
-              track: alpha
+              track: production
               isDraftRelease: false
               releaseName: '$(Build.BuildNumber)'
               changeLogFile: $(PLAY_RELEASE_NOTES_FILE)
