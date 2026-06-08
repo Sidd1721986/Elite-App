@@ -164,6 +164,7 @@ stages:
               releaseName: '$(Build.BuildNumber)'
               changeLogFile: $(PLAY_RELEASE_NOTES_FILE)
               languageCode: en-US
+              changesNotSentForReview: true
 
   - stage: FirebaseTestLab
     displayName: Firebase Test Lab — Robo test (virtual Pixel 6)
