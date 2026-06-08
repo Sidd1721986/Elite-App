@@ -107,6 +107,13 @@ android {
             }
         }
     }
+    // 16 KB memory page size support (required for Android 15+, enforced Oct 2025)
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
