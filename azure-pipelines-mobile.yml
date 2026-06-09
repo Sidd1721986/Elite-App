@@ -41,13 +41,9 @@
 #  Shared:
 #   PROD_API_URL                 = https://eliteapp-api-prod.azurewebsites.net/api
 
-trigger:
-  branches:
-    include:
-      - main
-      - master
+trigger: none  # Manual runs only — prevents auto-builds on every push (saves pipeline minutes / cost)
 
-pr: none  # builds only on push to main; PR-merge refs are deleted too fast to checkout
+pr: none  # no PR builds either
 
 variables:
   - group: EliteApp-Production
