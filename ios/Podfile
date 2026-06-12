@@ -59,10 +59,15 @@ target 'multiuserauthapp' do
         # private UIKit API that changed). Exclude the file — disables view hierarchy in crash
         # reports but compiles cleanly. Also suppress non-fatal warnings.
         if target.name == 'Sentry'
-          # These files all use SentrySwizzleInstanceMethod macros which use GCC variadic
-          # syntax that Xcode 16 / Clang 16 rejects as a hard compile error.
-          # Excluding them disables auto-instrumentation swizzling (perf tracing) but
-          # crash reporting and manual error capture still work normally.
+          # Xcode 16 no longer auto-discovers module maps from header search paths.
+          # Explicitly point Clang to Sentry's module.modulemap so @import _SentryPrivate
+          # in the generated Sentry-Swift.h is resolvable.
+          sentry_modulemap = '${PODS_ROOT}/Sentry/Sources/Sentry/include/module.modulemap'
+          config.build_settings['OTHER_CFLAGS'] = "$(inherited) -fmodule-map-file=\"#{sentry_modulemap}\""
+          config.build_settings['MODULEMAP_FILE'] = sentry_modulemap
+          # These files use SentrySwizzleInstanceMethod with GCC variadic syntax that
+          # Clang 16 rejects as a hard compile error. Excluding them disables
+          # auto-instrumentation swizzling but crash/error reporting still works.
           excluded = %w[
             SentryViewHierarchyProviderHelper.m
             SentryUIViewControllerSwizzlingHelper.m
