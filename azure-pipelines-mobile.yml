@@ -278,7 +278,7 @@ stages:
               certSecureFile: $(IOS_DISTRIBUTION_P12_SECURE_FILE)
               certPwd: $(IOS_P12_PASSWORD)
               keychain: temp
-          - task: InstallProvisioningProfile@1
+          - task: InstallAppleProvisioningProfile@1
             displayName: Install Provisioning Profile
             inputs:
               provisioningProfileLocation: secureFiles
