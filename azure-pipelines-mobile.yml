@@ -72,9 +72,95 @@ stages:
             displayName: eslint
           - script: npm test -- --passWithNoTests
             displayName: jest
+  - stage: MobileiOS
+    displayName: Mobile — iOS App Store build + upload
+    dependsOn: LintAndTest
+    condition: |
+      and(
+        succeeded(),
+        or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')),
+        eq(variables['ENABLE_MOBILE_IOS'], 'true')
+      )
+    jobs:
+      - job: iOSAppStoreBuild
+        pool:
+          vmImage: macos-14
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 20.x
+          - task: Cache@2
+            displayName: Cache node_modules
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: node_modules
+          - script: npm ci --ignore-scripts --legacy-peer-deps
+            displayName: npm ci
+          - script: |
+              printf 'export const PRODUCTION_API_BASE_URL = "%s";\n' "$(PROD_API_URL)" > src/config/env.ts
+              printf 'export const SENTRY_DSN = "%s";\n' "$(SENTRY_DSN)" >> src/config/env.ts
+              printf 'export const GOOGLE_PLACES_API_KEY = "%s";\n' "$(GOOGLE_PLACES_API_KEY)" >> src/config/env.ts
+            displayName: Inject production config
+          - script: |
+              XCODE15=$(ls /Applications/ | grep 'Xcode_15' | sort -r | head -1)
+              if [ -n "$XCODE15" ]; then
+                sudo xcode-select -s "/Applications/$XCODE15/Contents/Developer"
+                echo "Using $XCODE15"
+              else
+                echo "Xcode 15 not found, using default: $(xcode-select -p)"
+              fi
+              xcodebuild -version
+            displayName: Select Xcode 15 (Sentry compatibility)
+          - task: CocoaPods@0
+            displayName: pod install
+            inputs:
+              workingDirectory: ios
+          - task: InstallAppleCertificate@2
+            displayName: Install Distribution Certificate
+            name: installCert
+            inputs:
+              certSecureFile: $(IOS_DISTRIBUTION_P12_SECURE_FILE)
+              certPwd: $(IOS_P12_PASSWORD)
+              keychain: temp
+          - task: InstallAppleProvisioningProfile@1
+            displayName: Install Provisioning Profile
+            name: installProfile
+            inputs:
+              provisioningProfileLocation: secureFiles
+              provProfileSecureFile: $(IOS_PROVISIONING_PROFILE_SECURE_FILE)
+          - task: Xcode@5
+            displayName: Build & Archive iOS app
+            inputs:
+              actions: archive
+              scheme: multiuserauthapp
+              sdk: iphoneos
+              configuration: Release
+              xcWorkspacePath: ios/multiuserauthapp.xcworkspace
+              packageApp: true
+              archivePath: $(Build.ArtifactStagingDirectory)/EliteApp.xcarchive
+              exportOptions: plist
+              exportOptionsPlist: ios/ExportOptions.plist
+              signingOption: manual
+              signingIdentity: $(installCert.signingIdentity)
+              provisioningProfileUuid: $(installProfile.provisioningProfileUuid)
+          - task: PublishBuildArtifacts@1
+            displayName: Publish IPA artifact
+            inputs:
+              pathToPublish: $(Build.ArtifactStagingDirectory)
+              artifactName: ios-ipa
+          - task: AppStoreRelease@1
+            displayName: Upload IPA to App Store Connect (TestFlight)
+            inputs:
+              serviceEndpoint: $(APPLE_SERVICE_CONN)
+              appIdentifier: com.elitehomeservicesusa.app
+              ipaPath: '$(Build.ArtifactStagingDirectory)/**/*.ipa'
+              shouldSkipWaitingForProcessing: true
+              shouldSkipSubmission: true
   - stage: MobileAndroid
     displayName: Mobile — Android Play bundle (AAB)
-    dependsOn: LintAndTest
+    dependsOn: MobileiOS
     condition: |
       and(
         succeeded(),
@@ -236,90 +322,3 @@ stages:
               TEST_VENDOR_PASSWORD: $(TEST_VENDOR_PASSWORD)
               TEST_USER_EMAIL: $(TEST_USER_EMAIL)
               TEST_USER_PASSWORD: $(TEST_USER_PASSWORD)
-
-  - stage: MobileiOS
-    displayName: Mobile — iOS App Store build + upload
-    dependsOn: LintAndTest
-    condition: |
-      and(
-        succeeded(),
-        or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')),
-        eq(variables['ENABLE_MOBILE_IOS'], 'true')
-      )
-    jobs:
-      - job: iOSAppStoreBuild
-        pool:
-          vmImage: macos-14
-        steps:
-          - task: NodeTool@0
-            inputs:
-              versionSpec: 20.x
-          - task: Cache@2
-            displayName: Cache node_modules
-            inputs:
-              key: 'npm | "$(Agent.OS)" | package-lock.json'
-              restoreKeys: |
-                npm | "$(Agent.OS)"
-              path: node_modules
-          - script: npm ci --ignore-scripts --legacy-peer-deps
-            displayName: npm ci
-          - script: |
-              printf 'export const PRODUCTION_API_BASE_URL = "%s";\n' "$(PROD_API_URL)" > src/config/env.ts
-              printf 'export const SENTRY_DSN = "%s";\n' "$(SENTRY_DSN)" >> src/config/env.ts
-              printf 'export const GOOGLE_PLACES_API_KEY = "%s";\n' "$(GOOGLE_PLACES_API_KEY)" >> src/config/env.ts
-            displayName: Inject production config
-          - script: |
-              XCODE15=$(ls /Applications/ | grep 'Xcode_15' | sort -r | head -1)
-              if [ -n "$XCODE15" ]; then
-                sudo xcode-select -s "/Applications/$XCODE15/Contents/Developer"
-                echo "Using $XCODE15"
-              else
-                echo "Xcode 15 not found, using default: $(xcode-select -p)"
-              fi
-              xcodebuild -version
-            displayName: Select Xcode 15 (Sentry compatibility)
-          - task: CocoaPods@0
-            displayName: pod install
-            inputs:
-              workingDirectory: ios
-          - task: InstallAppleCertificate@2
-            displayName: Install Distribution Certificate
-            name: installCert
-            inputs:
-              certSecureFile: $(IOS_DISTRIBUTION_P12_SECURE_FILE)
-              certPwd: $(IOS_P12_PASSWORD)
-              keychain: temp
-          - task: InstallAppleProvisioningProfile@1
-            displayName: Install Provisioning Profile
-            name: installProfile
-            inputs:
-              provisioningProfileLocation: secureFiles
-              provProfileSecureFile: $(IOS_PROVISIONING_PROFILE_SECURE_FILE)
-          - task: Xcode@5
-            displayName: Build & Archive iOS app
-            inputs:
-              actions: archive
-              scheme: multiuserauthapp
-              sdk: iphoneos
-              configuration: Release
-              xcWorkspacePath: ios/multiuserauthapp.xcworkspace
-              packageApp: true
-              archivePath: $(Build.ArtifactStagingDirectory)/EliteApp.xcarchive
-              exportOptions: plist
-              exportOptionsPlist: ios/ExportOptions.plist
-              signingOption: manual
-              signingIdentity: $(installCert.signingIdentity)
-              provisioningProfileUuid: $(installProfile.provisioningProfileUuid)
-          - task: PublishBuildArtifacts@1
-            displayName: Publish IPA artifact
-            inputs:
-              pathToPublish: $(Build.ArtifactStagingDirectory)
-              artifactName: ios-ipa
-          - task: AppStoreRelease@1
-            displayName: Upload IPA to App Store Connect (TestFlight)
-            inputs:
-              serviceEndpoint: $(APPLE_SERVICE_CONN)
-              appIdentifier: com.elitehomeservicesusa.app
-              ipaPath: '$(Build.ArtifactStagingDirectory)/**/*.ipa'
-              shouldSkipWaitingForProcessing: true
-              shouldSkipSubmission: true
