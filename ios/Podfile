@@ -64,7 +64,6 @@ target 'multiuserauthapp' do
           # in the generated Sentry-Swift.h is resolvable.
           sentry_modulemap = '${PODS_ROOT}/Sentry/Sources/Sentry/include/module.modulemap'
           config.build_settings['OTHER_CFLAGS'] = "$(inherited) -fmodule-map-file=\"#{sentry_modulemap}\""
-          config.build_settings['MODULEMAP_FILE'] = sentry_modulemap
           # These files use SentrySwizzleInstanceMethod with GCC variadic syntax that
           # Clang 16 rejects as a hard compile error. Excluding them disables
           # auto-instrumentation swizzling but crash/error reporting still works.
