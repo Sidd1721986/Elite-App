@@ -249,7 +249,7 @@ stages:
     jobs:
       - job: iOSAppStoreBuild
         pool:
-          vmImage: macos-14
+          vmImage: macos-13
         steps:
           - task: NodeTool@0
             inputs:
