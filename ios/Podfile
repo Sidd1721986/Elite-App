@@ -59,7 +59,21 @@ target 'multiuserauthapp' do
         # private UIKit API that changed). Exclude the file — disables view hierarchy in crash
         # reports but compiles cleanly. Also suppress non-fatal warnings.
         if target.name == 'Sentry'
-          config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = 'SentryViewHierarchyProviderHelper.m'
+          # These files all use SentrySwizzleInstanceMethod macros which use GCC variadic
+          # syntax that Xcode 16 / Clang 16 rejects as a hard compile error.
+          # Excluding them disables auto-instrumentation swizzling (perf tracing) but
+          # crash reporting and manual error capture still work normally.
+          excluded = %w[
+            SentryViewHierarchyProviderHelper.m
+            SentryUIViewControllerSwizzlingHelper.m
+            SentryCoreDataSwizzlingHelper.m
+            SentryNSDataSwizzlingHelper.m
+            SentryNSFileManagerSwizzlingHelper.m
+            SentrySwizzleWrapperHelper.m
+            SentryUncaughtNSExceptions.m
+            SentryDefaultUIViewControllerPerformanceTracker.m
+          ].join(' ')
+          config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = excluded
           config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
           config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
           config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
