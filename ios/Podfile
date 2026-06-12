@@ -58,32 +58,8 @@ target 'multiuserauthapp' do
         # Fix Sentry compilation errors on Xcode 16 (SentryViewHierarchyProviderHelper.m uses
         # private UIKit API that changed). Exclude the file — disables view hierarchy in crash
         # reports but compiles cleanly. Also suppress non-fatal warnings.
-        if target.name == 'Sentry'
-          # Xcode 16 no longer auto-discovers module maps from header search paths.
-          # Explicitly point Clang to Sentry's module.modulemap so @import _SentryPrivate
-          # in the generated Sentry-Swift.h is resolvable.
-          sentry_modulemap = '${PODS_ROOT}/Sentry/Sources/Sentry/include/module.modulemap'
-          config.build_settings['OTHER_CFLAGS'] = "$(inherited) -fmodule-map-file=\"#{sentry_modulemap}\""
-          # These files use SentrySwizzleInstanceMethod with GCC variadic syntax that
-          # Clang 16 rejects as a hard compile error. Excluding them disables
-          # auto-instrumentation swizzling but crash/error reporting still works.
-          excluded = %w[
-            SentryViewHierarchyProviderHelper.m
-            SentryUIViewControllerSwizzlingHelper.m
-            SentryCoreDataSwizzlingHelper.m
-            SentryNSDataSwizzlingHelper.m
-            SentryNSFileManagerSwizzlingHelper.m
-            SentrySwizzleWrapperHelper.m
-            SentryUncaughtNSExceptions.m
-            SentryDefaultUIViewControllerPerformanceTracker.m
-          ].join(' ')
-          config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = excluded
-          config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-          config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-          config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
-          config.build_settings['WARNING_CFLAGS'] = '-w'
-        end
-        if target.name == 'RNSentry'
+        # Sentry 9.16 requires Xcode 16; just keep warnings from failing the build.
+        if target.name == 'Sentry' || target.name == 'RNSentry'
           config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
           config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
         end

@@ -104,15 +104,15 @@ stages:
               printf 'export const GOOGLE_PLACES_API_KEY = "%s";\n' "$(GOOGLE_PLACES_API_KEY)" >> src/config/env.ts
             displayName: Inject production config
           - script: |
-              XCODE15=$(ls /Applications/ | grep 'Xcode_15' | sort -r | head -1)
-              if [ -n "$XCODE15" ]; then
-                sudo xcode-select -s "/Applications/$XCODE15/Contents/Developer"
-                echo "Using $XCODE15"
+              XCODE16=$(ls /Applications/ | grep -E 'Xcode_16(\.[0-9]+)*\.app' | sort -rV | head -1)
+              if [ -n "$XCODE16" ]; then
+                sudo xcode-select -s "/Applications/$XCODE16/Contents/Developer"
+                echo "Using $XCODE16"
               else
-                echo "Xcode 15 not found, using default: $(xcode-select -p)"
+                echo "Xcode 16 not found, using default: $(xcode-select -p)"
               fi
               xcodebuild -version
-            displayName: Select Xcode 15 (Sentry compatibility)
+            displayName: Select Xcode 16 (required by Sentry 9.16)
           - task: CocoaPods@0
             displayName: pod install
             inputs:
