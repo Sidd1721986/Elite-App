@@ -93,6 +93,7 @@ target 'multiuserauthapp' do
         '#elif defined(__apple_build_version__) && __apple_build_version__ < 14000029L',
         '#elif defined(__apple_build_version__) // Patched: disable consteval on all Apple Clang (Xcode 26 bug)'
       )
+      File.chmod(0644, fmt_base_h)
       File.write(fmt_base_h, patched)
       puts "[Podfile patch] fmt/base.h consteval disabled for Apple Clang"
     end
