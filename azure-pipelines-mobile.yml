@@ -145,6 +145,7 @@ stages:
               signingOption: manual
               signingIdentity: $(installCert.signingIdentity)
               provisioningProfileUuid: $(installProfile.provisioningProfileUuid)
+              useXcpretty: false  # raw xcodebuild output so real compiler errors are visible in logs
           - task: PublishBuildArtifacts@1
             displayName: Publish IPA artifact
             inputs:

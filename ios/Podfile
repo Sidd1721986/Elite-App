@@ -63,6 +63,12 @@ target 'multiuserauthapp' do
           config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
           config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
         end
+        # SentryViewHierarchyProviderHelper.m fails to compile on the CI agent's
+        # Xcode 16.2. Excluding it only disables view-hierarchy attachments in
+        # crash reports; everything else in Sentry works.
+        if target.name == 'Sentry'
+          config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = 'SentryViewHierarchyProviderHelper.m'
+        end
       end
     end
 
