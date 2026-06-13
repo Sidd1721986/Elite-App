@@ -140,6 +140,7 @@ stages:
               xcWorkspacePath: ios/multiuserauthapp.xcworkspace
               packageApp: true
               archivePath: $(Build.ArtifactStagingDirectory)/EliteApp.xcarchive
+              exportPath: $(Build.ArtifactStagingDirectory)  # export IPA here so the upload step's $(Build.ArtifactStagingDirectory)/**/*.ipa glob finds it
               exportOptions: plist
               exportOptionsPlist: ios/ExportOptions.plist
               signingOption: manual
