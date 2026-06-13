@@ -63,11 +63,11 @@ target 'multiuserauthapp' do
           config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
           config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
         end
-        # SentryViewHierarchyProviderHelper.m fails to compile on the CI agent's
-        # Xcode 16.2. Excluding it only disables view-hierarchy attachments in
-        # crash reports; everything else in Sentry works.
+        # The generated Sentry-Swift.h does `@import _SentryPrivate;` but clang can't
+        # locate that module on its own — point it at Sentry's module.modulemap explicitly.
         if target.name == 'Sentry'
-          config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = 'SentryViewHierarchyProviderHelper.m'
+          sentry_modulemap = '${PODS_ROOT}/Sentry/Sources/Sentry/include/module.modulemap'
+          config.build_settings['OTHER_CFLAGS'] = "$(inherited) -fmodule-map-file=\"#{sentry_modulemap}\""
         end
       end
     end
