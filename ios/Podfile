@@ -44,8 +44,12 @@ target 'multiuserauthapp' do
       target.user_project.targets.each do |p_target|
         p_target.build_configurations.each do |config|
           config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
+          # Make `@import Sentry` resolvable from the app target too (Sentry-Swift.h
+          # references the _SentryPrivate module, which clang can't find unaided).
+          config.build_settings['OTHER_CFLAGS'] = '$(inherited) -fmodule-map-file="${PODS_ROOT}/Sentry/Sources/Sentry/include/module.modulemap"'
         end
       end
+      target.user_project.save
     end
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
@@ -65,7 +69,8 @@ target 'multiuserauthapp' do
         end
         # The generated Sentry-Swift.h does `@import _SentryPrivate;` but clang can't
         # locate that module on its own — point it at Sentry's module.modulemap explicitly.
-        if target.name == 'Sentry'
+        # Needed by Sentry itself AND any target that does `@import Sentry` (RNSentry).
+        if target.name == 'Sentry' || target.name == 'RNSentry'
           sentry_modulemap = '${PODS_ROOT}/Sentry/Sources/Sentry/include/module.modulemap'
           config.build_settings['OTHER_CFLAGS'] = "$(inherited) -fmodule-map-file=\"#{sentry_modulemap}\""
         end
