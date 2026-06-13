@@ -37,7 +37,7 @@ target 'multiuserauthapp' do
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      :ccache_enabled => true
+      :ccache_enabled => false  # ccache binary isn't installed on the CI macOS agent; using it makes the app target's compile fail with "ccache: not found"
     )
     # Disable Explicit Modules (Definitive fix for Xcode 16 / Yoga errors)
     installer.aggregate_targets.each do |target|
