@@ -44,12 +44,8 @@ target 'multiuserauthapp' do
       target.user_project.targets.each do |p_target|
         p_target.build_configurations.each do |config|
           config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
-          # Make `@import Sentry` resolvable from the app target too (Sentry-Swift.h
-          # references the _SentryPrivate module, which clang can't find unaided).
-          config.build_settings['OTHER_CFLAGS'] = '$(inherited) -fmodule-map-file="${PODS_ROOT}/Sentry/Sources/Sentry/include/module.modulemap"'
         end
       end
-      target.user_project.save
     end
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
@@ -58,21 +54,6 @@ target 'multiuserauthapp' do
         # Fix Yoga / glog C++20 strict errors with Xcode 26
         if target.name == 'Yoga' || target.name == 'glog'
           config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
-        end
-        # Fix Sentry compilation errors on Xcode 16 (SentryViewHierarchyProviderHelper.m uses
-        # private UIKit API that changed). Exclude the file — disables view hierarchy in crash
-        # reports but compiles cleanly. Also suppress non-fatal warnings.
-        # Sentry 9.16 requires Xcode 16; just keep warnings from failing the build.
-        if target.name == 'Sentry' || target.name == 'RNSentry'
-          config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-          config.build_settings['SWIFT_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-        end
-        # The generated Sentry-Swift.h does `@import _SentryPrivate;` but clang can't
-        # locate that module on its own — point it at Sentry's module.modulemap explicitly.
-        # Needed by Sentry itself AND any target that does `@import Sentry` (RNSentry).
-        if target.name == 'Sentry' || target.name == 'RNSentry'
-          sentry_modulemap = '${PODS_ROOT}/Sentry/Sources/Sentry/include/module.modulemap'
-          config.build_settings['OTHER_CFLAGS'] = "$(inherited) -fmodule-map-file=\"#{sentry_modulemap}\""
         end
       end
     end
@@ -88,22 +69,6 @@ target 'multiuserauthapp' do
       )
       File.write(project_path, pbxproj)
       puts "[Podfile patch] Fixed Generate Specs path-spaces quoting for Xcode 26"
-    end
-
-    # Patch Sentry 9.16.1 nullability mismatch that errors on Xcode 16.2:
-    # the setter param must be _Nullable to match the nullable startTimestamp declaration.
-    sdk_internal = "#{installer.sandbox.root}/Sentry/Sources/Sentry/SentrySDKInternal.m"
-    if File.exist?(sdk_internal)
-      content = File.read(sdk_internal)
-      patched = content.gsub(
-        '+ (void)setStartTimestamp:(NSDate *)value',
-        '+ (void)setStartTimestamp:(NSDate *_Nullable)value'
-      )
-      if content != patched
-        File.chmod(0644, sdk_internal)
-        File.write(sdk_internal, patched)
-        puts "[Podfile patch] SentrySDKInternal.m setStartTimestamp nullability fixed"
-      end
     end
 
     # Patch fmt/base.h to disable consteval on ALL Apple Clang (Xcode 26 has a bug with it)
