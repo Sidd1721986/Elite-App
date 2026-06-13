@@ -85,6 +85,22 @@ target 'multiuserauthapp' do
       puts "[Podfile patch] Fixed Generate Specs path-spaces quoting for Xcode 26"
     end
 
+    # Patch Sentry 9.16.1 nullability mismatch that errors on Xcode 16.2:
+    # the setter param must be _Nullable to match the nullable startTimestamp declaration.
+    sdk_internal = "#{installer.sandbox.root}/Sentry/Sources/Sentry/SentrySDKInternal.m"
+    if File.exist?(sdk_internal)
+      content = File.read(sdk_internal)
+      patched = content.gsub(
+        '+ (void)setStartTimestamp:(NSDate *)value',
+        '+ (void)setStartTimestamp:(NSDate *_Nullable)value'
+      )
+      if content != patched
+        File.chmod(0644, sdk_internal)
+        File.write(sdk_internal, patched)
+        puts "[Podfile patch] SentrySDKInternal.m setStartTimestamp nullability fixed"
+      end
+    end
+
     # Patch fmt/base.h to disable consteval on ALL Apple Clang (Xcode 26 has a bug with it)
     fmt_base_h = "#{installer.sandbox.root}/fmt/include/fmt/base.h"
     if File.exist?(fmt_base_h)
