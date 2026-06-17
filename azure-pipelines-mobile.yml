@@ -131,13 +131,14 @@ stages:
               provisioningProfileLocation: secureFiles
               provProfileSecureFile: $(IOS_PROVISIONING_PROFILE_SECURE_FILE)
           - script: |
+              rm -rf ~/Library/Developer/Xcode/DerivedData/multiuserauthapp-*
               security unlock-keychain -p "$(installCert.keychainPassword)" "$(installCert.keychainPath)"
               security set-keychain-settings -t 3600 -l "$(installCert.keychainPath)"
-            displayName: Unlock keychain before archive
+            displayName: Clean DerivedData and unlock keychain
           - task: Xcode@5
             displayName: Build & Archive iOS app
             inputs:
-              actions: archive
+              actions: clean archive
               scheme: multiuserauthapp
               sdk: iphoneos
               configuration: Release
