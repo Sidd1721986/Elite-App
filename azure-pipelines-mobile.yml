@@ -1,6 +1,6 @@
 # Azure DevOps pipeline for Mobile Builds + Store Deployments + Firebase Test Lab
 #
-# On every push to main (and manual runs) this pipeline will:
+# On manual runs this pipeline will:
 #   1) Lint + test
 #   2) Build signed Android AAB (versionCode = Azure Build.BuildId so each upload is unique)
 #   3) Publish that AAB to Google Play internal track — testers get the update automatically
@@ -21,16 +21,21 @@
 #   GOOGLE_PLAY_SERVICE_CONN     = name of your Azure DevOps Google Play service connection
 #                                  (Project Settings → Service connections → Google Play)
 #   GOOGLE_PLAY_PACKAGE_NAME     = com.elitehomeservicesusa.app
+#   GOOGLE_PLACES_API_KEY        = Google Places API key
 #
 #  Firebase Test Lab:
 #   FIREBASE_PROJECT_ID          = elite-testlab-personal
 #   FIREBASE_RESULTS_BUCKET      = elite-testlab-results
 #   TEST_ADMIN_EMAIL             = admin email for Robo login test (secret)
 #   TEST_ADMIN_PASSWORD          = admin password for Robo login test (secret)
+#   TEST_VENDOR_EMAIL            = vendor email for Robo login test (secret)
+#   TEST_VENDOR_PASSWORD         = vendor password for Robo login test (secret)
+#   TEST_USER_EMAIL              = user email for Robo login test (secret)
+#   TEST_USER_PASSWORD           = user password for Robo login test (secret)
 #   Secure file: firebase-testlab-key.json  (Library → Secure files → Upload)
 #                                  (firebase-testlab-ci@elite-testlab-personal.iam.gserviceaccount.com)
 #
-#  iOS (add once Apple Developer account is active):
+#  iOS:
 #   ENABLE_MOBILE_IOS            = true
 #   IOS_DISTRIBUTION_P12_SECURE_FILE    = EliteApp-Distribution.p12  (upload to Library → Secure files)
 #   IOS_P12_PASSWORD             = p12 export password
@@ -84,7 +89,7 @@ stages:
     jobs:
       - job: iOSAppStoreBuild
         pool:
-          vmImage: macos-15
+          name: ARM64
         steps:
           - task: NodeTool@0
             inputs:
@@ -100,24 +105,10 @@ stages:
             displayName: npm ci
           - script: |
               printf 'export const PRODUCTION_API_BASE_URL = "%s";\n' "$(PROD_API_URL)" > src/config/env.ts
-              printf 'export const SENTRY_DSN = "%s";\n' "$(SENTRY_DSN)" >> src/config/env.ts
               printf 'export const GOOGLE_PLACES_API_KEY = "%s";\n' "$(GOOGLE_PLACES_API_KEY)" >> src/config/env.ts
             displayName: Inject production config
-          - script: |
-              # App Store now requires the iOS 26 SDK (Xcode 26). Prefer Xcode 26; fall back to newest.
-              XCODE=$(ls /Applications/ | grep -E 'Xcode_26(\.[0-9]+)*\.app' | sort -rV | head -1)
-              if [ -z "$XCODE" ]; then
-                XCODE=$(ls /Applications/ | grep -E 'Xcode_[0-9]+(\.[0-9]+)*\.app' | sort -rV | head -1)
-              fi
-              if [ -n "$XCODE" ]; then
-                sudo xcode-select -s "/Applications/$XCODE/Contents/Developer"
-                echo "Using $XCODE"
-              else
-                echo "No versioned Xcode found, using default: $(xcode-select -p)"
-              fi
-              echo "Available Xcodes:"; ls /Applications/ | grep -i xcode
-              xcodebuild -version
-            displayName: Select Xcode 26 (App Store iOS 26 SDK requirement)
+          - script: xcodebuild -version
+            displayName: Verify Xcode
           - task: CocoaPods@0
             displayName: pod install
             inputs:
@@ -167,7 +158,7 @@ stages:
               shouldSkipSubmission: true
   - stage: MobileAndroid
     displayName: Mobile — Android Play bundle (AAB)
-    dependsOn: MobileiOS
+    dependsOn: LintAndTest
     condition: |
       and(
         succeeded(),
@@ -204,9 +195,8 @@ stages:
             displayName: npm ci
           - script: |
               printf 'export const PRODUCTION_API_BASE_URL = "%s";\n' "$(PROD_API_URL)" > src/config/env.ts
-              printf 'export const SENTRY_DSN = "%s";\n' "$(SENTRY_DSN)" >> src/config/env.ts
               printf 'export const GOOGLE_PLACES_API_KEY = "%s";\n' "$(GOOGLE_PLACES_API_KEY)" >> src/config/env.ts
-            displayName: Inject production API URL, Sentry DSN, and Google Places API key
+            displayName: Inject production config
           - script: |
               set -e
               printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$AGENT_TEMPDIRECTORY/elite-release.keystore"
@@ -256,10 +246,13 @@ stages:
 
   - stage: FirebaseTestLab
     displayName: Firebase Test Lab — Robo test (virtual Pixel 6)
-    dependsOn: MobileAndroid
+    dependsOn:
+      - MobileiOS
+      - MobileAndroid
     condition: |
       and(
-        succeeded(),
+        in(dependencies.MobileAndroid.result, 'Succeeded', 'Skipped'),
+        in(dependencies.MobileiOS.result, 'Succeeded', 'Skipped'),
         or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master')),
         eq(variables['ENABLE_MOBILE_ANDROID'], 'true')
       )
