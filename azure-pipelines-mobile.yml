@@ -132,24 +132,23 @@ stages:
               provisioningProfileLocation: secureFiles
               provProfileSecureFile: $(IOS_PROVISIONING_PROFILE_SECURE_FILE)
           - script: |
+              set -e
               rm -rf ~/Library/Developer/Xcode/DerivedData/multiuserauthapp-*
               security unlock-keychain -p "$(installCert.keychainPassword)" "$(installCert.keychainPath)"
               security set-keychain-settings -t 3600 -l "$(installCert.keychainPath)"
-            displayName: Clean DerivedData and unlock keychain
-          - task: Xcode@5
+              xcodebuild clean archive \
+                -workspace ios/multiuserauthapp.xcworkspace \
+                -scheme multiuserauthapp \
+                -configuration Release \
+                -sdk iphoneos \
+                -destination 'generic/platform=iOS' \
+                -archivePath "$(Build.ArtifactStagingDirectory)/EliteApp.xcarchive" \
+                CODE_SIGN_STYLE=Manual \
+                CODE_SIGN_IDENTITY="$(installCert.signingIdentity)" \
+                PROVISIONING_PROFILE_SPECIFIER="$(installProfile.provisioningProfileUuid)"
+              echo "Archive created at: $(Build.ArtifactStagingDirectory)/EliteApp.xcarchive"
+              ls -la "$(Build.ArtifactStagingDirectory)/EliteApp.xcarchive/Products/Applications/"
             displayName: Build & Archive iOS app
-            inputs:
-              actions: clean archive
-              scheme: multiuserauthapp
-              sdk: iphoneos
-              configuration: Release
-              xcWorkspacePath: ios/multiuserauthapp.xcworkspace
-              packageApp: false
-              archivePath: $(Build.ArtifactStagingDirectory)/EliteApp.xcarchive
-              signingOption: manual
-              signingIdentity: $(installCert.signingIdentity)
-              provisioningProfileUuid: $(installProfile.provisioningProfileUuid)
-              useXcpretty: false
           - script: |
               set -e
               ARCHIVE="$(Build.ArtifactStagingDirectory)/EliteApp.xcarchive"
