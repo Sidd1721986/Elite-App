@@ -109,6 +109,10 @@ stages:
             displayName: Inject production config
           - script: xcodebuild -version
             displayName: Verify Xcode
+          - script: |
+              /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(Build.BuildId)" ios/multiuserauthapp/Info.plist
+              echo "CFBundleVersion set to $(Build.BuildId)"
+            displayName: Set CFBundleVersion to Build.BuildId
           - task: CocoaPods@0
             displayName: pod install
             inputs:
