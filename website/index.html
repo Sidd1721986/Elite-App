@@ -357,6 +357,13 @@
     .app-btn .store-text .top    { font-size: 0.72rem; opacity: 0.75; }
     .app-btn .store-text .bottom { font-size: 1.05rem; font-weight: 700; }
     .app-note { margin-top: 16px; font-size: 0.84rem; color: var(--gray); }
+    .app-qr { margin-top: 28px; display: flex; flex-direction: column; align-items: center; }
+    .app-qr img {
+      width: 190px; height: 190px; padding: 14px;
+      background: #fff; border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    }
+    .app-qr-cap { margin-top: 12px; max-width: 320px; font-size: 0.84rem; color: var(--gray); line-height: 1.5; }
 
     /* FOOTER */
     footer {
@@ -561,22 +568,29 @@
         Everything runs through the app — request services, track jobs, manage your home, all in one place. Available for iPhone and Android.
       </p>
       <div class="app-buttons">
-        <a href="mailto:info@elitehomeservicesusa.com" class="app-btn">
+        <a href="https://apps.apple.com/app/elite-home-services-usa/id6779766867" class="app-btn">
           <div class="store-icon">🍎</div>
           <div class="store-text">
-            <div class="top">Coming soon on the</div>
+            <div class="top">Download on the</div>
             <div class="bottom">App Store</div>
           </div>
         </a>
-        <a href="mailto:info@elitehomeservicesusa.com" class="app-btn">
+        <a href="https://play.google.com/store/apps/details?id=com.elitehomeservicesusa.app" class="app-btn">
           <div class="store-icon">▶</div>
           <div class="store-text">
-            <div class="top">Coming soon on</div>
+            <div class="top">Get it on</div>
             <div class="bottom">Google Play</div>
           </div>
         </a>
       </div>
-      <p class="app-note">App launching soon! Contact us at <a href="mailto:info@elitehomeservicesusa.com" style="color:var(--gold);">info@elitehomeservicesusa.com</a> to be notified.</p>
+
+      <!-- Scan-to-download QR: opens the right store automatically based on the phone -->
+      <div class="app-qr">
+        <img src="qr-download.svg" alt="Scan with your phone to download the Elite Home Services USA app" width="190" height="190" />
+        <p class="app-qr-cap">Scan with your phone camera — it opens the App&nbsp;Store or Google&nbsp;Play automatically.</p>
+      </div>
+
+      <p class="app-note">Available now for iPhone and Android. Questions? <a href="mailto:info@elitehomeservicesusa.com" style="color:var(--gold);">info@elitehomeservicesusa.com</a></p>
     </div>
   </section>
 

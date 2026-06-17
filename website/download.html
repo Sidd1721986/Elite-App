@@ -59,6 +59,20 @@
     .store-btn .label { font-size: 1rem; font-weight: 700; }
     .back { margin-top: 20px; font-size: 0.82rem; }
     .back a { color: #c9a84c; text-decoration: none; }
+    .qr { margin-top: 26px; }
+    .qr img {
+      width: 180px; height: 180px;
+      padding: 12px; background: #fff;
+      border: 1px solid #eee; border-radius: 12px;
+    }
+    .qr-cap { margin-top: 10px; font-size: 0.82rem; color: #888; }
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 26px 0 0; color: #bbb; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px;
+    }
+    .divider::before, .divider::after {
+      content: ""; flex: 1; height: 1px; background: #eee;
+    }
   </style>
 </head>
 <body>
@@ -86,12 +100,18 @@
     </a>
   </div>
 
+  <!-- QR code — shown on desktop so phone users can scan straight to the right store -->
+  <div class="qr" id="qr" style="display:none">
+    <div class="divider">Or scan to download</div>
+    <img src="qr-download.svg" alt="Scan with your phone to download Elite Home Services USA" />
+    <div class="qr-cap">Point your phone camera here — it opens the right store automatically.</div>
+  </div>
+
   <div class="back"><a href="index.html">← Back to website</a></div>
 </div>
 
 <script>
-  // ✏️ Replace these with real store URLs once apps are approved
-  var IOS_URL     = "https://apps.apple.com/app/elite-home-services-usa/id000000000";
+  var IOS_URL     = "https://apps.apple.com/app/elite-home-services-usa/id6779766867";
   var ANDROID_URL = "https://play.google.com/store/apps/details?id=com.elitehomeservicesusa.app";
 
   var iosbtn     = document.getElementById('ios-btn');
@@ -116,11 +136,12 @@
       document.getElementById('subtitle').textContent = 'Redirecting you to Google Play.';
       window.location.href = ANDROID_URL;
     } else {
-      // Desktop — show both buttons
+      // Desktop — show both buttons + QR code to scan with a phone
       document.getElementById('spinner').style.display = 'none';
       document.getElementById('title').textContent = 'Get the App';
       document.getElementById('subtitle').textContent = 'Choose your platform below.';
       document.getElementById('buttons').style.display = 'flex';
+      document.getElementById('qr').style.display = 'block';
     }
   }, 1200);
 </script>
