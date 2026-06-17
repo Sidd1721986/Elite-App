@@ -149,8 +149,10 @@ stages:
               pathToPublish: $(Build.ArtifactStagingDirectory)
               artifactName: ios-ipa
           - script: |
-              sudo gem install fastlane --no-document 2>/dev/null || true
-            displayName: Ensure fastlane installed
+              export PATH="$(brew --prefix ruby)/bin:$PATH"
+              gem install fastlane --no-document --user-install
+              echo "##vso[task.setvariable variable=PATH]$(brew --prefix ruby)/bin:$(ruby -e 'puts Gem.user_dir')/bin:$PATH"
+            displayName: Install fastlane (Homebrew Ruby)
           - task: AppStoreRelease@1
             displayName: Upload IPA to App Store Connect (TestFlight)
             inputs:
