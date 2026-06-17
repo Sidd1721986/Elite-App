@@ -130,6 +130,10 @@ stages:
             inputs:
               provisioningProfileLocation: secureFiles
               provProfileSecureFile: $(IOS_PROVISIONING_PROFILE_SECURE_FILE)
+          - script: |
+              security unlock-keychain -p "$(installCert.keychainPassword)" "$(installCert.keychainPath)"
+              security set-keychain-settings -t 3600 -l "$(installCert.keychainPath)"
+            displayName: Unlock keychain before archive
           - task: Xcode@5
             displayName: Build & Archive iOS app
             inputs:
