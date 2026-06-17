@@ -91,3 +91,7 @@ build/
 build-test.bundle
 debug_codegen.json
 agentDebugEarly.js
+
+# iOS asset-catalog images (app icons, launch images) MUST be committed —
+# override the broad "*.png" ignore above so CI can compile them.
+!ios/multiuserauthapp/Images.xcassets/**/*.png
