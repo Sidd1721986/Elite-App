@@ -85,6 +85,7 @@ public class UsersController : ControllerBase
 
         var user = await _context.Users.FindAsync(id);
         if (user == null) return NotFound();
+        if (user.Role != "Vendor") return BadRequest(new { message = "Target user is not a vendor." });
 
         var adminId = User.FindFirst("id")?.Value;
         user.IsApproved = true;
@@ -101,6 +102,7 @@ public class UsersController : ControllerBase
 
         var user = await _context.Users.FindAsync(id);
         if (user == null) return NotFound();
+        if (user.Role != "Vendor") return BadRequest(new { message = "Target user is not a vendor." });
 
         // Soft-delete: mark as inactive instead of hard-deleting.
         // Benefits:
@@ -144,6 +146,7 @@ public class UsersController : ControllerBase
 
         var user = await _context.Users.FindAsync(id);
         if (user == null) return NotFound();
+        if (user.Role != "Vendor") return BadRequest(new { message = "Target user is not a vendor." });
 
         // Soft-delete — preserves the record for audit, prevents FK cascade errors
         // on Jobs and Messages, and mirrors the pattern used by DenyVendor and DeleteSelf.

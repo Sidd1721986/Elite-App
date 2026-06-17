@@ -6,7 +6,8 @@ import { Surface } from 'react-native-paper';
  * In-app logo component.
  * Displays the company logo from assets/logo.png
  */
-export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = ({
+// Pure presentational component — memoized so it never re-renders when parents do.
+export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = React.memo(({
     size = 60,
     showSurface = true,
 }) => {
@@ -28,7 +29,8 @@ export const AppLogo: React.FC<{ size?: number; showSurface?: boolean }> = ({
         );
     }
     return content;
-};
+});
+AppLogo.displayName = 'AppLogo';
 
 const styles = StyleSheet.create({
     surface: {

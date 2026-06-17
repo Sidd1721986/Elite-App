@@ -14,8 +14,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const checkSession = useCallback(async () => {
         try {
-            const currentUser = await authService.getCurrentUser();
-            setUser(normalizeUser(currentUser) || null);
+            // Show the cached user immediately for a fast cold start...
+            const cachedUser = await authService.getCurrentUser();
+            if (cachedUser) {
+                setUser(normalizeUser(cachedUser) || null);
+            }
+            // ...then re-validate against the server so a changed role / vendor-approval
+            // status (or a token revoked server-side) takes effect on launch instead of
+            // trusting potentially stale AsyncStorage. getProfile() swallows network errors
+            // (returns null) and a 401 fires the global unauthorized handler, so we only
+            // overwrite the session when the server actually answers.
+            const freshUser = await authService.getProfile();
+            if (freshUser) {
+                setUser(normalizeUser(freshUser) || null);
+            } else if (!cachedUser) {
+                setUser(null);
+            }
             setIsOffline(false);
         } catch (error: any) {
             // Network errors (no connection, timeout) should not log the user out —

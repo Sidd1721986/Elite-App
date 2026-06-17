@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, AppState } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { messageService } from '../services/messageService';
 import type { Conversation } from '../types/types';
@@ -7,12 +7,11 @@ import type { Conversation } from '../types/types';
 const POLL_MS = 30000;
 
 /**
- * Loads message threads, shows a badge count, and alerts when unread count increases
- * (e.g. admin replied) while this screen is focused.
+ * Loads message threads and exposes an unread total for the badge.
+ * Unread state is surfaced via the badge only — no intrusive blocking Alert.
  */
 export function useChatInboxNotifications() {
     const [conversations, setConversations] = useState<Conversation[]>([]);
-    const prevUnreadRef = useRef<number | null>(null);
 
     const messageUnreadTotal = useMemo(
         () => conversations.reduce((n, c) => n + (c.unreadCount || 0), 0),
@@ -26,12 +25,6 @@ export function useChatInboxNotifications() {
                 (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
             );
             setConversations(sorted);
-
-            const total = sorted.reduce((n, c) => n + (c.unreadCount || 0), 0);
-            if (prevUnreadRef.current !== null && total > prevUnreadRef.current) {
-                Alert.alert('New message', 'Someone replied to your chat. Tap the message icon to read.');
-            }
-            prevUnreadRef.current = total;
         } catch {
             /* ignore */
         }

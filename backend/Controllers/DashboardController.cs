@@ -21,8 +21,11 @@ public class DashboardController : ControllerBase
 
     private bool IsAdmin()
     {
-        var role = User.FindFirstValue("role");
-        return string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
+        // Use IsInRole (reads the configured RoleClaimType = ClaimTypes.Role) like the rest of
+        // the app. The previous FindFirstValue("role") read the short claim, which JWT's default
+        // inbound claim-mapping renames — so every dashboard endpoint silently 403'd for admins.
+        return User.IsInRole("Admin") ||
+            string.Equals(User.FindFirstValue("role"), "Admin", StringComparison.OrdinalIgnoreCase);
     }
 
     // ── Summary KPIs ─────────────────────────────────────────────────────────
@@ -31,24 +34,31 @@ public class DashboardController : ControllerBase
     {
         if (!IsAdmin()) return Forbid();
 
-        var jobs = await _context.Jobs.Where(j => j.ParentJobId == null).ToListAsync();
-        var vendors = await _context.Users.Where(u => u.Role == "Vendor").ToListAsync();
-        var customers = await _context.Users.Where(u => u.Role == "Customer").ToListAsync();
-
-        var totalJobs       = jobs.Count;
-        var completedJobs   = jobs.Count(j => j.Status == "Completed" || j.Status == "Invoiced");
-        var salesJobs       = jobs.Count(j => j.Status == "Sale" || j.Status == "Completed" || j.Status == "Invoiced" || j.Status == "InvoiceRequested");
-        var cancelledJobs   = jobs.Count(j => j.Status == "Expired");
-        var activeJobs      = jobs.Count(j => j.Status != "Expired" && j.Status != "Completed" && j.Status != "Invoiced");
-        var conversionRate  = totalJobs > 0 ? Math.Round((double)salesJobs / totalJobs * 100, 1) : 0;
-        var totalRevenue    = jobs.Where(j => j.ContractAmount.HasValue).Sum(j => j.ContractAmount!.Value);
-        var approvedVendors = vendors.Count(v => v.IsApproved);
-        var pendingVendors  = vendors.Count(v => !v.IsApproved);
-        var totalCustomers  = customers.Count;
-
-        // Jobs this week
+        // Aggregate in the DB instead of materializing whole Jobs/Users tables into memory.
         var weekAgo = DateTime.UtcNow.AddDays(-7);
-        var jobsThisWeek = jobs.Count(j => j.CreatedAt >= weekAgo);
+        var parentJobs = _context.Jobs.Where(j => j.ParentJobId == null);
+
+        // One grouped query returns only (status, count) pairs — not every job row.
+        var statusGroups = await parentJobs
+            .GroupBy(j => j.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        int CountOf(params string[] statuses) =>
+            statusGroups.Where(g => statuses.Contains(g.Status)).Sum(g => g.Count);
+
+        var totalJobs       = statusGroups.Sum(g => g.Count);
+        var completedJobs   = CountOf("Completed", "Invoiced");
+        var salesJobs       = CountOf("Sale", "Completed", "Invoiced", "InvoiceRequested");
+        var cancelledJobs   = CountOf("Expired");
+        var activeJobs      = totalJobs - CountOf("Expired", "Completed", "Invoiced");
+        var conversionRate  = totalJobs > 0 ? Math.Round((double)salesJobs / totalJobs * 100, 1) : 0;
+        var totalRevenue    = await parentJobs.Where(j => j.ContractAmount.HasValue).SumAsync(j => j.ContractAmount!.Value);
+        var jobsThisWeek    = await parentJobs.CountAsync(j => j.CreatedAt >= weekAgo);
+
+        var approvedVendors = await _context.Users.CountAsync(u => u.Role == "Vendor" && u.IsApproved);
+        var pendingVendors  = await _context.Users.CountAsync(u => u.Role == "Vendor" && !u.IsApproved);
+        var totalCustomers  = await _context.Users.CountAsync(u => u.Role == "Customer");
 
         return Ok(new
         {
@@ -99,15 +109,17 @@ public class DashboardController : ControllerBase
             .Where(u => u.Role == "Vendor")
             .ToListAsync();
 
-        var jobCounts = await _context.Jobs
+        // O(1) lookups instead of an O(vendors × groups) in-memory FirstOrDefault join.
+        var jobCounts = (await _context.Jobs
             .Where(j => j.VendorId != null)
             .GroupBy(j => j.VendorId)
             .Select(g => new { VendorId = g.Key, Total = g.Count(), Completed = g.Count(j => j.Status == "Completed" || j.Status == "Invoiced"), Revenue = g.Where(j => j.ContractAmount.HasValue).Sum(j => j.ContractAmount!.Value) })
-            .ToListAsync();
+            .ToListAsync())
+            .ToDictionary(j => j.VendorId!.Value);
 
         var result = vendors.Select(v =>
         {
-            var stats = jobCounts.FirstOrDefault(j => j.VendorId == v.Id);
+            jobCounts.TryGetValue(v.Id, out var stats);
             return new
             {
                 id         = v.Id,
@@ -188,22 +200,32 @@ public class DashboardController : ControllerBase
 
         var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
 
-        var jobs = await _context.Jobs
+        // Aggregate per month in the DB (returns ~6 rows) instead of materializing 6 months of jobs.
+        var grouped = await _context.Jobs
             .Where(j => j.ParentJobId == null && j.CreatedAt >= sixMonthsAgo)
-            .ToListAsync();
-
-        var trend = jobs
             .GroupBy(j => new { j.CreatedAt.Year, j.CreatedAt.Month })
             .Select(g => new
             {
                 year     = g.Key.Year,
                 month    = g.Key.Month,
-                label    = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM yyyy"),
                 requests = g.Count(),
                 sales    = g.Count(j => j.Status == "Sale" || j.Status == "Completed" || j.Status == "Invoiced"),
                 revenue  = g.Where(j => j.ContractAmount.HasValue).Sum(j => j.ContractAmount!.Value)
             })
+            .ToListAsync();
+
+        // Build month labels client-side (ToString isn't SQL-translatable) from the small result.
+        var trend = grouped
             .OrderBy(g => g.year).ThenBy(g => g.month)
+            .Select(g => new
+            {
+                g.year,
+                g.month,
+                label    = new DateTime(g.year, g.month, 1).ToString("MMM yyyy"),
+                g.requests,
+                g.sales,
+                g.revenue
+            })
             .ToList();
 
         return Ok(trend);

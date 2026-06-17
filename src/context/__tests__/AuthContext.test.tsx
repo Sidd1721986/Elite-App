@@ -11,6 +11,7 @@ jest.mock('../../services/authService', () => {
         authService: {
             ...actual.authService,
             getCurrentUser: jest.fn(),
+            getProfile: jest.fn().mockResolvedValue(null),
             login: jest.fn(),
             logout: jest.fn(),
         },

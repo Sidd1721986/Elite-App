@@ -333,7 +333,7 @@ const UserDashboard: React.FC = () => {
         <View style={{ flex: 1 }}>
             <FlashListCompat
                 data={isLoading ? [] : activeJobs}
-                keyExtractor={(item: Job) => item.id}
+                keyExtractor={(item: Job, index: number) => item.id || `job-${index}`}
                 renderItem={renderJobItem}
                 estimatedItemSize={250}
                 ListHeaderComponent={ListHeader}

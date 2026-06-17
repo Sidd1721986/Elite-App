@@ -84,7 +84,7 @@ stages:
     jobs:
       - job: iOSAppStoreBuild
         pool:
-          vmImage: macos-14
+          vmImage: macos-15
         steps:
           - task: NodeTool@0
             inputs:
@@ -104,15 +104,20 @@ stages:
               printf 'export const GOOGLE_PLACES_API_KEY = "%s";\n' "$(GOOGLE_PLACES_API_KEY)" >> src/config/env.ts
             displayName: Inject production config
           - script: |
-              XCODE16=$(ls /Applications/ | grep -E 'Xcode_16(\.[0-9]+)*\.app' | sort -rV | head -1)
-              if [ -n "$XCODE16" ]; then
-                sudo xcode-select -s "/Applications/$XCODE16/Contents/Developer"
-                echo "Using $XCODE16"
-              else
-                echo "Xcode 16 not found, using default: $(xcode-select -p)"
+              # App Store now requires the iOS 26 SDK (Xcode 26). Prefer Xcode 26; fall back to newest.
+              XCODE=$(ls /Applications/ | grep -E 'Xcode_26(\.[0-9]+)*\.app' | sort -rV | head -1)
+              if [ -z "$XCODE" ]; then
+                XCODE=$(ls /Applications/ | grep -E 'Xcode_[0-9]+(\.[0-9]+)*\.app' | sort -rV | head -1)
               fi
+              if [ -n "$XCODE" ]; then
+                sudo xcode-select -s "/Applications/$XCODE/Contents/Developer"
+                echo "Using $XCODE"
+              else
+                echo "No versioned Xcode found, using default: $(xcode-select -p)"
+              fi
+              echo "Available Xcodes:"; ls /Applications/ | grep -i xcode
               xcodebuild -version
-            displayName: Select Xcode 16 (required by Sentry 9.16)
+            displayName: Select Xcode 26 (App Store iOS 26 SDK requirement)
           - task: CocoaPods@0
             displayName: pod install
             inputs:

@@ -1096,6 +1096,13 @@ const AdminDashboard: React.FC = () => {
         }
     }, [navigation, getTimelineBarColor, handleApproval, handleRemoveVendor, updateSectionY, conversations, messageUnreadTotal, jobsDeduped, vendorSearch, setVendorSearch, filteredApprovedVendors, approvedVendors, inProgressSearch, setInProgressSearch, filteredActiveProjects, activeProjects, showAllRequests, setShowAllRequests, showAllInProgress, setShowAllInProgress]);
 
+    // Stable extraData ref — only changes when its contents change, so FlashList
+    // doesn't re-render the whole list on every unrelated parent render.
+    const adminExtraData = React.useMemo(
+        () => [pendingVendors, approvedVendors, filteredApprovedVendors, vendorSearch, filteredActiveProjects, inProgressSearch, showAllRequests, showAllInProgress, conversations, filteredJobs, refreshing],
+        [pendingVendors, approvedVendors, filteredApprovedVendors, vendorSearch, filteredActiveProjects, inProgressSearch, showAllRequests, showAllInProgress, conversations, filteredJobs, refreshing]
+    );
+
     return (
         <SafeAreaView style={styles.container} edges={['top']} testID="admin_dashboard_screen">
             <AdminList
@@ -1110,7 +1117,7 @@ const AdminDashboard: React.FC = () => {
                 estimatedItemSize={200}
                 ListHeaderComponent={renderHeader}
                 contentContainerStyle={styles.scrollContent}
-                extraData={[pendingVendors, approvedVendors, filteredApprovedVendors, vendorSearch, filteredActiveProjects, inProgressSearch, showAllRequests, showAllInProgress, conversations, filteredJobs, refreshing]}
+                extraData={adminExtraData}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
                 }

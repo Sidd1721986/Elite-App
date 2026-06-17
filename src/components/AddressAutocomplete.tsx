@@ -98,6 +98,11 @@ const AddressAutocomplete: React.FC<Props> = ({
                     `&language=en`;
                 const res = await fetch(url);
                 const data = await res.json();
+                // A denied/over-quota key returns HTTP 200 with status REQUEST_DENIED /
+                // OVER_QUERY_LIMIT and no predictions — don't let that look like "no address found".
+                if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+                    console.warn('Places autocomplete error:', data.status, data.error_message);
+                }
                 setPredictions(data.predictions ?? []);
             } catch {
                 setPredictions([]);

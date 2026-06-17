@@ -1,7 +1,7 @@
 import * as React from 'react';
-import { View, ScrollView, StyleSheet, Linking, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import FastImage from 'react-native-fast-image';
-import { Text, Card, Button, Avatar, Divider, List, Chip, Surface, IconButton, ProgressBar, TextInput, Menu, Portal } from 'react-native-paper';
+import { Text, Card, Button, Avatar, Divider, List, Chip, Surface, IconButton, ProgressBar, TextInput, Menu, Portal, Dialog } from 'react-native-paper';
 import { useJobs } from '../context/JobContext';
 import { useAuth } from '../context/AuthContext';
 import { jobService } from '../services/jobService';
@@ -10,6 +10,7 @@ import DocumentPicker, { types } from 'react-native-document-picker';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { RootStackParamList, JobStatus, Urgency, User } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { openExternalUrl } from '../utils/openExternalUrl';
 
 type JobDetailsRouteProp = RouteProp<RootStackParamList, 'JobDetails'>;
 
@@ -65,6 +66,51 @@ const JobDetailsScreen: React.FC = () => {
     const [isUploading, setIsUploading] = React.useState(false);
     const [uploadProgress, setUploadProgress] = React.useState(0);
     const [isProcessing, setIsProcessing] = React.useState(false);
+
+    // "Mark as Sale" dialog — collects the REAL contract amount + work start date
+    // (previously both were hardcoded to $1,500 / today, corrupting all revenue reporting).
+    const [saleDialogVisible, setSaleDialogVisible] = React.useState(false);
+    const [saleAmount, setSaleAmount] = React.useState('');
+    const [saleStartDate, setSaleStartDate] = React.useState('');
+
+    // Surface action failures to the user instead of swallowing them in console.error
+    // (previously a failed accept/reach-out/appointment/invoice left the spinner stopped
+    // and the screen unchanged, so vendors just re-tapped into stuck jobs).
+    const showError = (e: any, fallback = 'Something went wrong. Please try again.') =>
+        Alert.alert('Action failed', e?.message || fallback);
+
+    const openSaleDialog = () => {
+        setSaleAmount('');
+        setSaleStartDate(new Date().toISOString().slice(0, 10)); // YYYY-MM-DD, editable
+        setSaleDialogVisible(true);
+    };
+
+    const submitSale = async () => {
+        const amount = parseFloat(saleAmount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            Alert.alert('Invalid amount', 'Please enter the contract amount (a number greater than 0).');
+            return;
+        }
+        const parsedDate = new Date(saleStartDate);
+        if (isNaN(parsedDate.getTime())) {
+            Alert.alert('Invalid date', 'Please enter the work start date as YYYY-MM-DD.');
+            return;
+        }
+        if (!job) { return; }
+        setSaleDialogVisible(false);
+        setIsProcessing(true);
+        try {
+            await completeSale(job.id, {
+                scopeOfWork: job.description,
+                contractAmount: amount,
+                workStartDate: parsedDate.toISOString(),
+            });
+        } catch (e: any) {
+            Alert.alert('Could not record sale', e?.message || 'Something went wrong. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const job = jobId ? getJobById(jobId) : undefined;
 
@@ -365,7 +411,7 @@ const JobDetailsScreen: React.FC = () => {
                                                 try {
                                                     await uploadInvoice(job.id, invoiceUrl);
                                                     setInvoiceUrl('');
-                                                } catch (e) { console.error(e); }
+                                                } catch (e) { showError(e); }
                                                 finally { setIsProcessing(false); }
                                             }}
                                         >
@@ -392,7 +438,7 @@ const JobDetailsScreen: React.FC = () => {
                                 <Button
                                     mode="outlined"
                                     icon="open-in-new"
-                                    onPress={() => job.invoiceDocumentUrl && Linking.openURL(job.invoiceDocumentUrl)}
+                                    onPress={() => { if (job.invoiceDocumentUrl) { void openExternalUrl(job.invoiceDocumentUrl); } }}
                                     style={{ borderRadius: 12 }}
                                 >
                                     View
@@ -560,7 +606,7 @@ const JobDetailsScreen: React.FC = () => {
                                                         await addJobPhotos(job.id, [newPhotoUrl]);
                                                         setNewPhotoUrl('');
                                                         setShowPhotoInput(false);
-                                                    } catch (e) { console.error(e); }
+                                                    } catch (e) { showError(e); }
                                                     finally { setIsProcessing(false); }
                                                 }}
                                                 disabled={!newPhotoUrl.trim() || isProcessing}
@@ -772,7 +818,7 @@ const JobDetailsScreen: React.FC = () => {
                                 try {
                                     await acceptJob(job.id);
                                 } catch (e) {
-                                    console.error(e);
+                                    showError(e);
                                 } finally {
                                     setIsProcessing(false);
                                 }
@@ -797,7 +843,7 @@ const JobDetailsScreen: React.FC = () => {
                                     await reachOut(job.id);
                                     // Removed goBack() to show the updated status in-place
                                 } catch (e) {
-                                    console.error(e);
+                                    showError(e);
                                 } finally {
                                     setIsProcessing(false);
                                 }
@@ -812,20 +858,7 @@ const JobDetailsScreen: React.FC = () => {
                             contentStyle={{ height: 56 }}
                             buttonColor="#10B981"
                             icon="currency-usd"
-                            onPress={async () => {
-                                setIsProcessing(true);
-                                try {
-                                    await completeSale(job.id, {
-                                        scopeOfWork: job.description,
-                                        contractAmount: 1500,
-                                        workStartDate: new Date().toISOString(),
-                                    });
-                                } catch (e) {
-                                    console.error(e);
-                                } finally {
-                                    setIsProcessing(false);
-                                }
-                            }}
+                            onPress={openSaleDialog}
                             loading={isProcessing}
                         >
                             Mark as Sale
@@ -844,7 +877,7 @@ const JobDetailsScreen: React.FC = () => {
                             try {
                                 await setAppointment(job.id);
                             } catch (e) {
-                                console.error(e);
+                                showError(e);
                             } finally {
                                 setIsProcessing(false);
                             }
@@ -860,20 +893,7 @@ const JobDetailsScreen: React.FC = () => {
                         contentStyle={{ height: 56 }}
                         buttonColor="#10B981"
                         icon="currency-usd"
-                        onPress={async () => {
-                            setIsProcessing(true);
-                            try {
-                                await completeSale(job.id, {
-                                    scopeOfWork: job.description,
-                                    contractAmount: 1500,
-                                    workStartDate: new Date().toISOString(),
-                                });
-                            } catch (e) {
-                                console.error(e);
-                            } finally {
-                                setIsProcessing(false);
-                            }
-                        }}
+                        onPress={openSaleDialog}
                         loading={isProcessing}
                     >
                         Submit Sale
@@ -891,7 +911,7 @@ const JobDetailsScreen: React.FC = () => {
                             try {
                                 await completeJob(job.id, []);
                             } catch (e) {
-                                console.error(e);
+                                showError(e);
                             } finally {
                                 setIsProcessing(false);
                             }
@@ -922,7 +942,7 @@ const JobDetailsScreen: React.FC = () => {
                                             try {
                                                 await completeJob(job.id, []);
                                             } catch (e) {
-                                                console.error(e);
+                                                showError(e);
                                                 Alert.alert('Error', 'Could not mark the job complete. Please try again.');
                                             } finally {
                                                 setIsProcessing(false);
@@ -947,7 +967,7 @@ const JobDetailsScreen: React.FC = () => {
                             setIsProcessing(true);
                             try {
                                 await requestInvoice(job.id);
-                            } catch (e) { console.error(e); }
+                            } catch (e) { showError(e); }
                             finally { setIsProcessing(false); }
                         }}
                         loading={isProcessing}
@@ -978,6 +998,34 @@ const JobDetailsScreen: React.FC = () => {
                     </Button>
                 )}
             </View>
+
+            <Portal>
+                <Dialog visible={saleDialogVisible} onDismiss={() => setSaleDialogVisible(false)}>
+                    <Dialog.Title>Record Sale</Dialog.Title>
+                    <Dialog.Content>
+                        <TextInput
+                            label="Contract amount ($)"
+                            value={saleAmount}
+                            onChangeText={setSaleAmount}
+                            keyboardType="decimal-pad"
+                            mode="outlined"
+                            left={<TextInput.Affix text="$" />}
+                            style={{ marginBottom: 12 }}
+                        />
+                        <TextInput
+                            label="Work start date (YYYY-MM-DD)"
+                            value={saleStartDate}
+                            onChangeText={setSaleStartDate}
+                            mode="outlined"
+                            placeholder="2026-06-13"
+                        />
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setSaleDialogVisible(false)}>Cancel</Button>
+                        <Button mode="contained" onPress={submitSale} loading={isProcessing}>Confirm Sale</Button>
+                    </Dialog.Actions>
+                </Dialog>
+            </Portal>
         </SafeAreaView>
     );
 };

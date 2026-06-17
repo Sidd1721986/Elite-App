@@ -223,12 +223,25 @@ static string ResolveJwtSigningKey(IConfiguration configuration, IHostEnvironmen
             throw new InvalidOperationException("Jwt:Key must be configured in Production (minimum 32 characters).");
         if (key.Length < 32)
             throw new InvalidOperationException("Jwt:Key must be at least 32 characters in Production.");
+        // Fail closed: reject the committed placeholder / known dev keys so an unset
+        // env var can never silently sign Production tokens with a publicly-known secret.
+        if (key.Contains("REPLACE_", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("dev-only", StringComparison.OrdinalIgnoreCase) ||
+            key == "supersecretsupersecretsupersecret123!")
+            throw new InvalidOperationException("Jwt:Key is set to a placeholder/dev value. Set a unique strong secret from env/Key Vault in Production.");
         return key;
     }
 
-    return string.IsNullOrWhiteSpace(key)
-        ? "supersecretsupersecretsupersecret123!"
-        : key;
+    // Non-production: only the Development environment may use the throwaway fallback.
+    // Staging / any other environment must supply a real key (prevents token forgery there too).
+    if (string.IsNullOrWhiteSpace(key))
+    {
+        if (environment.IsDevelopment())
+            return "supersecretsupersecretsupersecret123!";
+        throw new InvalidOperationException("Jwt:Key must be configured for this environment.");
+    }
+    return key;
 }
 
 if (builder.Environment.IsProduction())
@@ -373,7 +386,19 @@ app.Use(async (context, next) =>
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        // #13 Force user-uploaded files to download rather than render inline in the app
+        // origin — a crafted PDF/HTML could otherwise execute active content same-origin.
+        if (ctx.Context.Request.Path.StartsWithSegments("/uploads"))
+        {
+            ctx.Context.Response.Headers["Content-Disposition"] = "attachment";
+            ctx.Context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        }
+    }
+});
 app.UseResponseCompression();
 app.UseResponseCaching();
 
@@ -417,6 +442,17 @@ using (var scope = app.Services.CreateScope())
     else
         Log.Warning(
             "Database:RunMigrations is false; skipping EF migrations at startup. Apply pending migrations before serving traffic.");
+
+    // Performance indexes applied idempotently (CREATE INDEX IF NOT EXISTS can never fail or
+    // block a deploy). Speeds up the role-based lookups (dashboard / vendor list / admin-id)
+    // and case-insensitive email lookups (login / reset / invite) that previously seq-scanned.
+    if (runMigrations)
+    {
+        await context.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS ix_users_role_approved_active ON \"Users\" (\"Role\", \"IsApproved\", \"IsActive\");");
+        await context.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS ix_users_email_lower ON \"Users\" (LOWER(\"Email\"));");
+    }
 
     // Clean up expired password reset tokens older than 7 days to prevent table bloat.
     var deleted = await context.PasswordResetTokens

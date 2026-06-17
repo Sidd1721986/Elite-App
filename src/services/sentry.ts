@@ -8,7 +8,9 @@
 // To re-enable later: re-add "@sentry/react-native" to package.json, restore the
 // real implementation below, and resolve the iOS module build issue.
 
-export const navigationIntegration = null;
+// Typed so optional-chained call sites (navigationIntegration?.registerNavigationContainer(...))
+// still typecheck while the value is a no-op null at runtime.
+export const navigationIntegration: { registerNavigationContainer: (ref: unknown) => void } | null = null;
 
 export function initSentry(): void {
     // no-op — crash reporting disabled

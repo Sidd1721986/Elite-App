@@ -14,7 +14,6 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     Alert,
-    Linking,
     Pressable,
 } from 'react-native';
 import { Text, Avatar, IconButton, Surface, useTheme, Button, Menu } from 'react-native-paper';
@@ -43,9 +42,8 @@ const MessageItem = memo(({ item, isMe, otherUserName }: {
     const parsed = parseChatMessageContent(item.content);
     const openImage = () => {
         if (parsed.kind !== 'image') {return;}
-        Linking.openURL(parsed.url).catch(() => {
-            Alert.alert('Unable to open', 'This image link could not be opened.');
-        });
+        // Route through the validated opener — rejects non-https schemes from a peer's message.
+        void openExternalUrl(parsed.url);
     };
     return (
         <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
@@ -103,6 +101,9 @@ const ChatScreen: React.FC = () => {
     const [attachMenuVisible, setAttachMenuVisible] = useState(false);
     const [headerMenuVisible, setHeaderMenuVisible] = useState(false);
     const [loading, setLoading] = useState(true);
+    // Set when the "chat with support/admin" target can't be resolved (no active admin),
+    // so we show an explicit message instead of a blank screen with a dead input.
+    const [supportUnavailable, setSupportUnavailable] = useState(false);
     const flatListRef = useRef<any>(null);
     /** Array of pending scroll timeouts — cleared on unmount to prevent setState-after-unmount. */
     const scrollTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -119,7 +120,9 @@ const ChatScreen: React.FC = () => {
         if (!resolvedOtherUserId) {return;}
         try {
             const data = await messageService.getMessages(resolvedOtherUserId);
-            setMessages(data);
+            // Guard against a malformed-but-200 payload (proxy error page / version skew):
+            // FlashList would otherwise hard-crash dereferencing item.id on a non-array.
+            setMessages(Array.isArray(data) ? data : []);
             // Reset backoff on success.
             pollFailCountRef.current = 0;
         } catch (error) {
@@ -135,10 +138,16 @@ const ChatScreen: React.FC = () => {
             if (otherUserId === 'admin') {
                 try {
                     const id = await messageService.getDefaultAdminId();
+                    if (!id) {
+                        setSupportUnavailable(true);
+                        setLoading(false);
+                        return;
+                    }
                     setResolvedOtherUserId(id);
                 } catch (error) {
                     if (__DEV__) {console.error('Failed to resolve admin ID:', error);}
-                    // Release the spinner so the user isn't stuck on a blank screen.
+                    // No reachable admin — show an explicit message instead of a blank screen.
+                    setSupportUnavailable(true);
                     setLoading(false);
                 }
             }
@@ -274,6 +283,20 @@ const ChatScreen: React.FC = () => {
             <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
                 <View style={styles.centered}>
                     <Text variant="titleMedium" style={{ marginBottom: 16 }}>Invalid conversation</Text>
+                    <Button mode="contained" onPress={() => navigation.goBack()}>Go back</Button>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (supportUnavailable) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+                <View style={styles.centered}>
+                    <Text variant="titleMedium" style={{ marginBottom: 8 }}>Support is currently unavailable</Text>
+                    <Text variant="bodyMedium" style={{ marginBottom: 16, textAlign: 'center', opacity: 0.7 }}>
+                        No support agent is available to chat right now. Please try again later.
+                    </Text>
                     <Button mode="contained" onPress={() => navigation.goBack()}>Go back</Button>
                 </View>
             </SafeAreaView>

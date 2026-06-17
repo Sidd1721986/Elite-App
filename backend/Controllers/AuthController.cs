@@ -29,15 +29,33 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
+        // #29 Server-side validation (EF entity annotations don't run on save).
+        if (string.IsNullOrWhiteSpace(request.Name) ||
+            string.IsNullOrWhiteSpace(request.Email) ||
+            string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { message = "Name, email, and password are required." });
+
+        var email = request.Email.Trim().ToLowerInvariant(); // #22 normalize on write
+        if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(email))
+            return BadRequest(new { message = "Please enter a valid email address." });
+        if (request.Password.Length < 8)
+            return BadRequest(new { message = "Password must be at least 8 characters." });
+
+        // #28 Public registration may only create Customer or Vendor accounts — never Admin
+        // or arbitrary role strings (over-posting guard).
+        var role = request.Role?.Trim() ?? string.Empty;
+        if (role != UserRole.Customer.ToString() && role != UserRole.Vendor.ToString())
+            return BadRequest(new { message = "Invalid account type." });
+
         var user = new User
         {
             Id = Guid.NewGuid(),
-            Email = request.Email,
-            Name = request.Name,
-            Role = request.Role,
+            Email = email,
+            Name = request.Name.Trim(),
+            Role = role,
             Address = request.Address,
             Phone = request.Phone,
-            IsApproved = request.Role != UserRole.Vendor.ToString() // Authors approve non-vendors
+            IsApproved = role != UserRole.Vendor.ToString() // Authors approve non-vendors
         };
 
         var (newUser, error) = await _authService.RegisterAsync(user, request.Password);

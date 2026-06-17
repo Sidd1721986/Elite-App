@@ -32,15 +32,18 @@ const ForgotPasswordScreen: React.FC = () => {
     const [snackbarMessage, setSnackbarMessage] = useState('');
 
     const handleSendCode = useCallback(async () => {
-        if (!email.trim()) {
-            setSnackbarMessage('Enter your email address');
-            setSnackbarVisible(true);
-            return;
-        }
-        if (deliveryMethod === 'Phone' && !phone.trim()) {
-            setSnackbarMessage('Enter your phone number');
-            setSnackbarVisible(true);
-            return;
+        if (deliveryMethod === 'Phone') {
+            if (!phone.trim()) {
+                setSnackbarMessage('Enter your phone number');
+                setSnackbarVisible(true);
+                return;
+            }
+        } else {
+            if (!email.trim()) {
+                setSnackbarMessage('Enter your email address');
+                setSnackbarVisible(true);
+                return;
+            }
         }
 
         setLoading(true);

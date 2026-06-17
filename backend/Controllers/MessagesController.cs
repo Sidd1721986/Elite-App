@@ -62,10 +62,21 @@ public class MessagesController : ControllerBase
         if (messageDto.ReceiverId == currentUserId)
             return BadRequest(new { message = "Cannot send a message to yourself." });
 
-        var receiverExists = await _context.Users.AsNoTracking()
-            .AnyAsync(u => u.Id == messageDto.ReceiverId && u.IsActive);
-        if (!receiverExists)
+        var receiver = await _context.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == messageDto.ReceiverId && u.IsActive);
+        if (receiver == null)
             return BadRequest(new { message = "Recipient not found." });
+
+        // #26 Relationship guard — prevent unsolicited DMs. Allowed only when one party is an
+        // Admin (support), or the two share a job (customer ↔ assigned vendor).
+        if (!User.IsInRole("Admin") && receiver.Role != "Admin")
+        {
+            var shareJob = await _context.Jobs.AsNoTracking().AnyAsync(j =>
+                (j.CustomerId == currentUserId && j.VendorId == messageDto.ReceiverId) ||
+                (j.CustomerId == messageDto.ReceiverId && j.VendorId == currentUserId));
+            if (!shareJob)
+                return StatusCode(403, new { message = "You can only message users you share a job with." });
+        }
 
         var message = new Message
         {

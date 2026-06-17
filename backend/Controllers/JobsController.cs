@@ -180,11 +180,22 @@ public class JobsController : ControllerBase
         int nextJobNumber;
         string? suffix = null;
 
+        // Serialize JobNumber assignment so two concurrent CreateJob requests can't read the
+        // same Max()+1 (or same child suffix) and write duplicate human-facing job numbers.
+        // A transaction-scoped Postgres advisory lock is released automatically on commit/rollback.
+        await using var jobNumberTx = await _context.Database.BeginTransactionAsync();
+        await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(727274)");
+
         if (request.ParentJobId != null)
         {
             var parentJob = await _context.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == request.ParentJobId);
             if (parentJob == null) return BadRequest(new { message = "Parent job not found." });
-            
+
+            // IDOR guard: a non-admin may only attach a child under their OWN parent job.
+            // Without this, any customer could pollute another customer's job tree by guessing a GUID.
+            if (!isAdmin && parentJob.CustomerId != userId)
+                return BadRequest(new { message = "Parent job not found." });
+
             nextJobNumber = parentJob.JobNumber;
             // Find how many sub-jobs this parent already has to determine the suffix (A, B, C...)
             int existingKids = await _context.Jobs.CountAsync(j => j.ParentJobId == request.ParentJobId);
@@ -237,6 +248,7 @@ public class JobsController : ControllerBase
 
         _context.Jobs.Add(job);
         await _context.SaveChangesAsync();
+        await jobNumberTx.CommitAsync(); // releases the advisory lock for the next creator
 
         // Populate the Customer navigation property on the tracked entity
         // instead of issuing a second SELECT round-trip.
