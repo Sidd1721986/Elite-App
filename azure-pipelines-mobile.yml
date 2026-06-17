@@ -144,15 +144,31 @@ stages:
               sdk: iphoneos
               configuration: Release
               xcWorkspacePath: ios/multiuserauthapp.xcworkspace
-              packageApp: true
+              packageApp: false
               archivePath: $(Build.ArtifactStagingDirectory)/EliteApp.xcarchive
-              exportPath: $(Build.ArtifactStagingDirectory)  # export IPA here so the upload step's $(Build.ArtifactStagingDirectory)/**/*.ipa glob finds it
-              exportOptions: plist
-              exportOptionsPlist: ios/ExportOptions.plist
               signingOption: manual
               signingIdentity: $(installCert.signingIdentity)
               provisioningProfileUuid: $(installProfile.provisioningProfileUuid)
-              useXcpretty: false  # raw xcodebuild output so real compiler errors are visible in logs
+              useXcpretty: false
+          - script: |
+              set -e
+              PLIST="$(Build.ArtifactStagingDirectory)/EliteApp.xcarchive/Products/Applications/multiuserauthapp.app/Info.plist"
+              # Ensure CFBundleIconName is set
+              /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$PLIST" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$PLIST"
+              # Remove LSMinimumSystemVersion (macOS-only key injected by CocoaPods pods)
+              /usr/libexec/PlistBuddy -c "Delete :LSMinimumSystemVersion" "$PLIST" 2>/dev/null || true
+              echo "Info.plist patched"
+              /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST"
+            displayName: Patch xcarchive Info.plist
+          - script: |
+              set -e
+              security unlock-keychain -p "$(installCert.keychainPassword)" "$(installCert.keychainPath)"
+              xcodebuild -exportArchive \
+                -archivePath "$(Build.ArtifactStagingDirectory)/EliteApp.xcarchive" \
+                -exportPath "$(Build.ArtifactStagingDirectory)" \
+                -exportOptionsPlist "ios/ExportOptions.plist"
+            displayName: Export IPA
           - task: PublishBuildArtifacts@1
             displayName: Publish IPA artifact
             inputs:
