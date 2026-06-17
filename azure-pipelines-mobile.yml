@@ -148,6 +148,9 @@ stages:
             inputs:
               pathToPublish: $(Build.ArtifactStagingDirectory)
               artifactName: ios-ipa
+          - script: |
+              sudo gem install fastlane --no-document 2>/dev/null || true
+            displayName: Ensure fastlane installed
           - task: AppStoreRelease@1
             displayName: Upload IPA to App Store Connect (TestFlight)
             inputs:
