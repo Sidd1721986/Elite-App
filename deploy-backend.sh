@@ -55,13 +55,23 @@ docker buildx build --platform linux/amd64 \
   -f backend/Dockerfile backend \
   --push
 
+# Small retry wrapper — `az` occasionally drops the connection mid-call.
+retry() {
+  local n=0
+  until "$@"; do
+    n=$((n+1))
+    if [ "$n" -ge 4 ]; then echo "   (command failed after $n attempts)"; return 1; fi
+    echo "   transient error — retrying ($n)…"; sleep 5
+  done
+}
+
 # --- point the web app at the new image + restart ---------------------------
 echo "==> Pointing ${WEBAPP} at ${IMAGE}:${NEW_TAG} and restarting…"
-az webapp config container set \
+retry az webapp config container set \
   --name "$WEBAPP" --resource-group "$RG" \
   --container-image-name "${IMAGE}:${NEW_TAG}" \
   --container-registry-url "$REGISTRY" >/dev/null
-az webapp restart --name "$WEBAPP" --resource-group "$RG"
+retry az webapp restart --name "$WEBAPP" --resource-group "$RG"
 
 # --- health check -----------------------------------------------------------
 echo "==> Waiting for ${HEALTH_URL} (cold start can take ~90s)…"
