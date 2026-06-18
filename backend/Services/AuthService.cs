@@ -18,8 +18,8 @@ public interface IAuthService
     Task<(string? Token, User? User, string Error)> LoginAsync(string email, string password, string role);
     Task<bool> CanShowForgotPasswordAsync(string email, string role);
     Task<ForgotPasswordRequestResult> RequestPasswordResetAsync(string email, string role, string deliveryMethod, string? phone = null);
-    Task<(bool Ok, string Error)> VerifyResetCodeAsync(string email, string token);
-    Task<(bool Ok, string Error)> ResetPasswordAsync(string email, string token, string newPassword);
+    Task<(bool Ok, string Error)> VerifyResetCodeAsync(string email, string token, string? phone = null);
+    Task<(bool Ok, string Error)> ResetPasswordAsync(string email, string token, string newPassword, string? phone = null);
 }
 
 public class AuthService : IAuthService
@@ -165,16 +165,38 @@ public class AuthService : IAuthService
     public async Task<ForgotPasswordRequestResult> RequestPasswordResetAsync(string email, string role, string deliveryMethod, string? phone = null)
     {
         const string genericOk =
-            "If an account exists for this email and role, password reset instructions have been sent.";
+            "If an account matches the details provided, password reset instructions have been sent.";
 
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(role))
+        var isPhone = deliveryMethod.Equals("Phone", StringComparison.OrdinalIgnoreCase);
+
+        // Phone is a full identifier: the user is looked up by phone number alone.
+        // Email flow continues to identify the account by email address.
+        User? user;
+        if (isPhone)
         {
-            return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.InvalidInput,
-                "Email and role are required.");
+            if (string.IsNullOrWhiteSpace(phone) || string.IsNullOrWhiteSpace(role))
+            {
+                return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.InvalidInput,
+                    "Phone number and role are required.");
+            }
+            // Match on digits only (last 10) so "+1 617-794-6854" and "6177946854"
+            // resolve to the same account regardless of how the number was stored.
+            var wanted = NormalizePhone(phone);
+            var candidates = await _context.Users
+                .Where(u => u.Phone != null && u.Phone != "")
+                .ToListAsync();
+            user = candidates.FirstOrDefault(u => NormalizePhone(u.Phone!) == wanted);
         }
-
-        var user = await _context.Users.FirstOrDefaultAsync(u =>
-            u.Email.ToLower() == email.Trim().ToLower());
+        else
+        {
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(role))
+            {
+                return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.InvalidInput,
+                    "Email and role are required.");
+            }
+            user = await _context.Users.FirstOrDefaultAsync(u =>
+                u.Email.ToLower() == email.Trim().ToLower());
+        }
 
         if (user == null)
             return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
@@ -187,16 +209,6 @@ public class AuthService : IAuthService
 
         if (user.Role == UserRole.Vendor.ToString() && !user.IsApproved)
             return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
-
-        // If Phone is selected, we should theoretically check if the provided phone matches.
-        // For security, if it doesn't match, we still return "Success" but don't send anything.
-        if (deliveryMethod.Equals("Phone", StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(user.Phone) || !string.Equals(user.Phone.Trim(), phone?.Trim()))
-            {
-                return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
-            }
-        }
 
         var expiryHours = Math.Clamp(_configuration.GetValue("PasswordReset:TokenExpiryHours", 1), 1, 72);
 
@@ -229,8 +241,7 @@ public class AuthService : IAuthService
             }
             var smsBody = $"Your Elite password reset code is {plaintextCode}. Valid for {expiryHours} hour(s). Do not share this code.";
             await _smsService.SendAsync(user.Phone, smsBody);
-            return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed,
-                "If an account exists for this email and role, password reset instructions have been sent.");
+            return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
         }
         else
         {
@@ -255,10 +266,11 @@ public class AuthService : IAuthService
         return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
     }
 
-    public async Task<(bool Ok, string Error)> VerifyResetCodeAsync(string email, string token)
+    public async Task<(bool Ok, string Error)> VerifyResetCodeAsync(string email, string token, string? phone = null)
     {
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token))
-            return (false, "Email and reset code are required.");
+        var byPhone = !string.IsNullOrWhiteSpace(phone);
+        if (string.IsNullOrWhiteSpace(token) || (!byPhone && string.IsNullOrWhiteSpace(email)))
+            return (false, "A reset code and your email or phone are required.");
 
         var tokenHash = HashResetCode(token.Trim());
         var entry = await _context.PasswordResetTokens
@@ -269,10 +281,29 @@ public class AuthService : IAuthService
         if (entry?.User == null)
             return (false, "Invalid or expired reset code.");
 
-        if (!string.Equals(entry.User.Email, email.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (!ResetIdentityMatches(entry.User, email, phone))
             return (false, "Invalid or expired reset code.");
 
         return (true, string.Empty);
+    }
+
+    // The reset code is tied to a user; confirm the supplied identifier (phone for the
+    // phone flow, email otherwise) belongs to that same user so a code can't be replayed
+    // against a different account.
+    private static bool ResetIdentityMatches(User user, string email, string? phone)
+    {
+        if (!string.IsNullOrWhiteSpace(phone))
+            return !string.IsNullOrWhiteSpace(user.Phone) && NormalizePhone(user.Phone) == NormalizePhone(phone);
+        return string.Equals(user.Email, email.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Reduce a phone number to comparable digits: strip everything non-numeric and,
+    // for 11-digit numbers, drop a leading country code so US numbers match with or
+    // without "+1". Returns the last 10 digits when available.
+    private static string NormalizePhone(string phone)
+    {
+        var digits = new string(phone.Where(char.IsDigit).ToArray());
+        return digits.Length > 10 ? digits[^10..] : digits;
     }
 
     private string HashResetCode(string plaintext)
@@ -282,11 +313,12 @@ public class AuthService : IAuthService
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    public async Task<(bool Ok, string Error)> ResetPasswordAsync(string email, string token, string newPassword)
+    public async Task<(bool Ok, string Error)> ResetPasswordAsync(string email, string token, string newPassword, string? phone = null)
     {
         var minLen = Math.Clamp(_configuration.GetValue("Security:MinPasswordLength", 8), 8, 128);
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(newPassword))
-            return (false, "Email, reset code, and new password are required.");
+        var byPhone = !string.IsNullOrWhiteSpace(phone);
+        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(newPassword) || (!byPhone && string.IsNullOrWhiteSpace(email)))
+            return (false, "A reset code, new password, and your email or phone are required.");
         if (newPassword.Length < minLen)
             return (false, $"Password must be at least {minLen} characters.");
 
@@ -299,7 +331,7 @@ public class AuthService : IAuthService
         if (entry?.User == null)
             return (false, "Invalid or expired reset code.");
 
-        if (!string.Equals(entry.User.Email, email.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (!ResetIdentityMatches(entry.User, email, phone))
             return (false, "Invalid or expired reset code.");
 
         entry.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, 12);

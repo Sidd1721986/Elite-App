@@ -134,7 +134,8 @@ public class AuthController : ControllerBase
         var (ok, error) = await _authService.ResetPasswordAsync(
             body.Email ?? string.Empty,
             body.Token ?? string.Empty,
-            body.NewPassword ?? string.Empty);
+            body.NewPassword ?? string.Empty,
+            body.Phone);
 
         if (!ok)
             return BadRequest(new { message = error });
@@ -149,7 +150,8 @@ public class AuthController : ControllerBase
     {
         var (ok, error) = await _authService.VerifyResetCodeAsync(
             body.Email ?? string.Empty,
-            body.Token ?? string.Empty);
+            body.Token ?? string.Empty,
+            body.Phone);
 
         if (!ok)
             return BadRequest(new { message = error });
@@ -253,12 +255,14 @@ public class ResetPasswordWithTokenRequest
     public string Email { get; set; } = string.Empty;
     public string Token { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
+    public string? Phone { get; set; }
 }
 
 public class VerifyResetCodeRequest
 {
     public string Email { get; set; } = string.Empty;
     public string Token { get; set; } = string.Empty;
+    public string? Phone { get; set; }
 }
 
 public class AdminRegisterRequest
