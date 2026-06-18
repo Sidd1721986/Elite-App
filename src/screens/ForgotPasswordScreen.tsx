@@ -76,7 +76,11 @@ const ForgotPasswordScreen: React.FC = () => {
             return;
         }
         setLoading(true);
-        const result = await authService.verifyResetCode(email, code);
+        const result = await authService.verifyResetCode(
+            email,
+            code,
+            deliveryMethod === 'Phone' ? phone : undefined,
+        );
         setLoading(false);
 
         if (!result.ok) {
@@ -87,15 +91,16 @@ const ForgotPasswordScreen: React.FC = () => {
         setIsCodeVerified(true);
         setSnackbarMessage('Code verified! You can now reset your password.');
         setSnackbarVisible(true);
-    }, [email, code]);
+    }, [email, code, phone, deliveryMethod]);
 
     const handleProceedToReset = useCallback(() => {
         navigation.navigate('ResetPassword', {
             email: email.trim(),
             role: toApiRole(selectedRole),
             resetToken: code.trim(),
+            phone: deliveryMethod === 'Phone' ? phone.trim() : undefined,
         });
-    }, [email, selectedRole, code, navigation]);
+    }, [email, selectedRole, code, phone, deliveryMethod, navigation]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

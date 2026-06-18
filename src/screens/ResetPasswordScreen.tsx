@@ -14,7 +14,7 @@ type R = RouteProp<RootStackParamList, 'ResetPassword'>;
 const ResetPasswordScreen: React.FC = () => {
     const navigation = useNavigation<Nav>();
     const route = useRoute<R>();
-    const { email, resetToken: initialToken } = route.params;
+    const { email, resetToken: initialToken, phone } = route.params;
 
     const [token, setToken] = useState(initialToken ?? '');
     const [password, setPassword] = useState('');
@@ -41,7 +41,7 @@ const ResetPasswordScreen: React.FC = () => {
         }
 
         setLoading(true);
-        const result = await authService.resetPassword(email, token, password);
+        const result = await authService.resetPassword(email, token, password, phone);
         setLoading(false);
 
         if (!result.ok) {
@@ -56,7 +56,7 @@ const ResetPasswordScreen: React.FC = () => {
                 routes: [{ name: 'Login', params: { passwordResetOk: true } }],
             }),
         );
-    }, [email, token, password, confirm, navigation]);
+    }, [email, token, password, confirm, phone, navigation]);
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -73,7 +73,7 @@ const ResetPasswordScreen: React.FC = () => {
                         Choose new password
                     </Text>
                     <Text variant="bodyMedium" style={styles.subtitle}>
-                        Identity verified for <Text style={styles.emailEm}>{email}</Text>. Please choose your new password below.
+                        Identity verified for <Text style={styles.emailEm}>{email || phone}</Text>. Please choose your new password below.
                     </Text>
 
                     <Card style={styles.card} elevation={0}>

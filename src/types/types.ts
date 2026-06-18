@@ -161,7 +161,7 @@ export type RootStackParamList = {
   Landing: undefined;
   Login: { passwordResetOk?: boolean; initialRole?: UserRole } | undefined;
   ForgotPassword: { initialEmail?: string; initialRole?: UserRole } | undefined;
-  ResetPassword: { email: string; role: string; resetToken?: string };
+  ResetPassword: { email: string; role: string; resetToken?: string; phone?: string };
   UserSignup: undefined;
   VendorSignup: undefined;
   AdminDashboard: undefined;

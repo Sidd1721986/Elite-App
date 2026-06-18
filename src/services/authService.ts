@@ -201,12 +201,14 @@ export const authService = {
         email: string,
         token: string,
         newPassword: string,
+        phone?: string,
     ): Promise<{ ok: boolean; message?: string }> {
         try {
             await apiClient.post('/auth/reset-password', {
                 email: email.trim(),
                 token: token.trim(),
                 newPassword,
+                phone: phone?.trim() || undefined,
             });
             return { ok: true };
         } catch (error: any) {
@@ -214,11 +216,12 @@ export const authService = {
         }
     },
 
-    async verifyResetCode(email: string, token: string): Promise<{ ok: boolean; message?: string }> {
+    async verifyResetCode(email: string, token: string, phone?: string): Promise<{ ok: boolean; message?: string }> {
         try {
             await apiClient.post('/auth/verify-reset-code', {
                 email: email.trim(),
                 token: token.trim(),
+                phone: phone?.trim() || undefined,
             });
             return { ok: true };
         } catch (error: any) {
