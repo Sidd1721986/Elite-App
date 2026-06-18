@@ -240,7 +240,14 @@ public class AuthService : IAuthService
                 return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
             }
             var smsBody = $"Your Elite password reset code is {plaintextCode}. Valid for {expiryHours} hour(s). Do not share this code.";
-            await _smsService.SendAsync(user.Phone, smsBody);
+            try
+            {
+                await _smsService.SendAsync(user.Phone, smsBody);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Password reset SMS failed for user {UserId}", user.Id);
+            }
             return new ForgotPasswordRequestResult(ForgotPasswordRequestStatus.Processed, genericOk);
         }
         else
