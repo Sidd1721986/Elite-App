@@ -18,9 +18,8 @@ namespace EliteApp.API.Controllers
         {
             string userAgent = Request.Headers["User-Agent"].ToString().ToLower();
             
-            // Store URLs — update iOSStoreUrl with the real App ID once the app is live on the App Store.
-            // Android URL uses the correct bundle ID (com.elitehomeservicesusa.app).
-            string iOSStoreUrl     = "https://apps.apple.com/app/id123456789"; // TODO: replace id123456789 with real App Store ID after first submission
+            // Store URLs use the live App Store Connect app id and the Android bundle id.
+            string iOSStoreUrl     = "https://apps.apple.com/app/id6779766867";
             string androidStoreUrl = "https://play.google.com/store/apps/details?id=com.elitehomeservicesusa.app";
             string fallbackUrl     = "https://elitehomeservicesusa.com";
 
