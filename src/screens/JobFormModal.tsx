@@ -20,6 +20,7 @@ import {
 import FastImage from 'react-native-fast-image';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { Urgency, Job, User } from '../types/types';
+import { jobService } from '../services/jobService';
 import { AVAILABLE_SERVICES } from '../config/services';
 import { formatAddress, parseAddress } from '../utils/addressUtils';
 import AddressAutocomplete from '../components/AddressAutocomplete';
@@ -90,10 +91,10 @@ const JobFormModal: React.FC<Props> = ({
 }) => {
     // ── Form state — isolated here so keystrokes don't touch UserDashboard ──
     const defaults = buildDefaults(user, initialValues);
-    const [street, setStreet]               = useState(defaults.street);
-    const [city, setCity]                   = useState(defaults.city);
-    const [zip, setZip]                     = useState(defaults.zip);
-    const [state, setState]                 = useState(defaults.state);
+    // Single source of truth for the address. It holds whatever is visible in the field —
+    // whether it came from a Google suggestion or was typed by hand — so a manually typed
+    // address can never be silently dropped at submit time.
+    const [addressText, setAddressText]     = useState(() => formatAddress(defaults));
     const [description, setDescription]     = useState(defaults.description);
     const [urgency, setUrgency]             = useState<Urgency>(defaults.urgency);
     const [otherDetails, setOtherDetails]   = useState(defaults.otherDetails);
@@ -114,10 +115,7 @@ const JobFormModal: React.FC<Props> = ({
     useEffect(() => {
         if (!visible) {return;}
         const d = buildDefaults(user, initialValues);
-        setStreet(d.street);
-        setCity(d.city);
-        setZip(d.zip);
-        setState(d.state);
+        setAddressText(formatAddress(d));
         setDescription(d.description);
         setUrgency(d.urgency);
         setOtherDetails(d.otherDetails);
@@ -198,13 +196,29 @@ const JobFormModal: React.FC<Props> = ({
         }
     }, []);
 
+    // Local picker/camera URIs (file://…) only exist on this device — they must be uploaded
+    // and swapped for server URLs before submit, or admin/vendor devices render blank images.
+    const uploadLocalPhotos = useCallback(async (uris: string[]): Promise<string[]> => {
+        const out: string[] = [];
+        for (const uri of uris) {
+            if (/^https?:\/\//i.test(uri)) { out.push(uri); continue; }
+            const ext = (uri.split('.').pop() || 'jpg').toLowerCase();
+            const type =
+                ext === 'png' ? 'image/png' :
+                ext === 'webp' ? 'image/webp' :
+                ext === 'heic' || ext === 'heif' ? `image/${ext}` :
+                'image/jpeg';
+            const { url } = await jobService.uploadFile({ uri, type, name: `photo.${ext}` });
+            out.push(url);
+        }
+        return out;
+    }, []);
+
     // ── Submit ────────────────────────────────────────────────────────────────
     const handleSubmit = useCallback(async () => {
+        const address = addressText.trim();
         const missingFields: string[] = [];
-        if (!street.trim())        {missingFields.push('Address');}
-        if (!city.trim())          {missingFields.push('City');}
-        if (!zip.trim())           {missingFields.push('Zip');}
-        if (!state.trim())         {missingFields.push('State');}
+        if (!address)              {missingFields.push('Address');}
         if (!selectedServices.length) {missingFields.push('Services');}
         if (!description.trim())   {missingFields.push('What needs fixing');}
         if (!contactPhone.trim())  {missingFields.push('Contact Phone');}
@@ -227,16 +241,23 @@ const JobFormModal: React.FC<Props> = ({
         setSubmitting(true);
         setError(null);
         try {
+            let uploadedPhotos: string[];
+            try {
+                uploadedPhotos = await uploadLocalPhotos(photos);
+            } catch {
+                setError('Photo upload failed. Check your connection and try again.');
+                return;
+            }
             await onSubmit(
                 {
-                    address: formatAddress({ street, city, zip, state }),
-                    street, city, zip, state,
+                    address,
+                    ...parseAddress(address),
                     description,
                     urgency,
                     otherDetails,
                     contactPhone,
                     contactEmail,
-                    photos,
+                    photos: uploadedPhotos,
                     selectedServices,
                     services: selectedServices,
                     customerId: user?.id || user?.email || 'anon',
@@ -249,9 +270,10 @@ const JobFormModal: React.FC<Props> = ({
             setSubmitting(false);
         }
     }, [
-        street, city, zip, state, description, urgency,
+        addressText, description, urgency,
         otherDetails, contactPhone, contactEmail, photos,
         selectedServices, isCustomer, editingJobId, onSubmit, user,
+        uploadLocalPhotos,
     ]);
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -286,13 +308,9 @@ const JobFormModal: React.FC<Props> = ({
                     <AddressAutocomplete
                         label="Service Address *"
                         hasError={false}
-                        initialValue={formatAddress({ street, city, zip, state })}
-                        onAddressSelect={({ street: s, city: c, zip: z, state: st }) => {
-                            setStreet(s);
-                            setCity(c);
-                            setZip(z);
-                            setState(st);
-                        }}
+                        initialValue={addressText}
+                        onChangeText={setAddressText}
+                        onAddressSelect={(parts) => setAddressText(formatAddress(parts))}
                     />
 
                     {/* Services */}

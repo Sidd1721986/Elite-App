@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Diagnostics;
@@ -35,6 +36,11 @@ if (!string.IsNullOrEmpty(aiConnectionString))
 
 // ── Serilog — structured logs → Console + Application Insights ───────────────
 var serilogConfig = new LoggerConfiguration()
+    // UseSerilog bypasses the appsettings "Logging" section, so per-request framework
+    // noise must be filtered here or it floods Console/App Insights at Information level.
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
     .WriteTo.Console()
     .Enrich.FromLogContext()
     .Enrich.WithProperty("Application", "EliteApp.API")
@@ -97,7 +103,54 @@ builder.Services.AddSingleton<IEmailSender>(sp =>
         sp.GetRequiredService<ILogger<LoggingEmailSender>>(),
         env);
 });
+// Background queue for fire-and-forget notification email — keeps SMTP round-trips
+// (seconds each) out of HTTP request handlers and the Stripe webhook path.
+builder.Services.AddSingleton<EmailQueue>();
+builder.Services.AddSingleton<IEmailQueue>(sp => sp.GetRequiredService<EmailQueue>());
+builder.Services.AddHostedService<EmailDispatchService>();
+builder.Services.AddHostedService<EliteApp.API.Services.TokenPurgeService>();
 builder.Services.AddScoped<EliteApp.API.Services.IAuthService, EliteApp.API.Services.AuthService>();
+builder.Services.AddSingleton<EliteApp.API.Services.Security.ITokenHasher, EliteApp.API.Services.Security.TokenHasher>();
+
+// Upload storage. Container disk is ephemeral and per-instance, so Production must point at
+// durable storage: either Azure Blob (Storage__BlobConnectionString) or — the zero-extra-cost
+// default for this app — the App Service /home share (Storage__LocalPath=/home/data/uploads
+// with WEBSITES_ENABLE_APP_SERVICE_STORAGE=true), which survives restarts and is shared
+// across instances. Dev falls back to wwwroot/uploads.
+var blobConnectionString = builder.Configuration["Storage:BlobConnectionString"]?.Trim();
+var localStoragePath = builder.Configuration["Storage:LocalPath"]?.Trim();
+if (builder.Environment.IsProduction()
+    && string.IsNullOrWhiteSpace(blobConnectionString)
+    && string.IsNullOrWhiteSpace(localStoragePath))
+    throw new InvalidOperationException(
+        "Production needs durable upload storage: set Storage__LocalPath (e.g. /home/data/uploads, requires " +
+        "WEBSITES_ENABLE_APP_SERVICE_STORAGE=true) or Storage__BlobConnectionString.");
+if (!string.IsNullOrWhiteSpace(blobConnectionString))
+{
+    var containerName = builder.Configuration["Storage:BlobContainer"] ?? "uploads";
+    builder.Services.AddSingleton<EliteApp.API.Services.Storage.IFileStorage>(
+        new EliteApp.API.Services.Storage.AzureBlobFileStorage(blobConnectionString, containerName));
+}
+else if (!string.IsNullOrWhiteSpace(localStoragePath))
+{
+    builder.Services.AddSingleton<EliteApp.API.Services.Storage.IFileStorage>(
+        new EliteApp.API.Services.Storage.LocalFileStorage(localStoragePath));
+}
+else
+{
+    builder.Services.AddSingleton<EliteApp.API.Services.Storage.IFileStorage>(sp =>
+        new EliteApp.API.Services.Storage.LocalFileStorage(Path.Combine(
+            sp.GetRequiredService<IWebHostEnvironment>().WebRootPath ?? "wwwroot", "uploads")));
+}
+
+// Stripe payments. Secret key comes from env/Key Vault (prod) or appsettings.Local.json (dev) —
+// never committed. Set globally once; fail closed in Production if missing.
+var stripeSecret = builder.Configuration["Stripe:SecretKey"]?.Trim();
+if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(stripeSecret))
+    throw new InvalidOperationException("Stripe:SecretKey must be configured in Production (set via App Service settings / Key Vault).");
+if (!string.IsNullOrWhiteSpace(stripeSecret))
+    Stripe.StripeConfiguration.ApiKey = stripeSecret;
+builder.Services.AddScoped<EliteApp.API.Services.Stripe.IStripeService, EliteApp.API.Services.Stripe.StripeService>();
 
 // SMS: uses Twilio when credentials are present; logs-only fallback otherwise so the
 // app starts cleanly even without Twilio configured (e.g. local dev without credentials).
@@ -172,6 +225,54 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+    // SMS sending: 3 per user per hour. Without this, any authenticated user can loop the
+    // phone-verification endpoint for SMS bombing or Twilio toll fraud.
+    options.AddPolicy("sms-send", httpContext =>
+    {
+        var userId = httpContext.User?.FindFirst("id")?.Value
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anon";
+        return RateLimitPartition.GetSlidingWindowLimiter(userId, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 3,
+            Window = TimeSpan.FromHours(1),
+            SegmentsPerWindow = 4,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+    // File uploads: 30 per user per hour. Each upload is up to 10 MB of durable storage,
+    // so an unthrottled loop is a storage-cost and bandwidth amplifier.
+    options.AddPolicy("file-upload", httpContext =>
+    {
+        var userId = httpContext.User?.FindFirst("id")?.Value
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anon";
+        return RateLimitPartition.GetSlidingWindowLimiter(userId, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromHours(1),
+            SegmentsPerWindow = 4,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+    // Message sending: 60 per user per minute keeps a scripted client from flooding
+    // another user's inbox (and the Messages table).
+    options.AddPolicy("send-message", httpContext =>
+    {
+        var userId = httpContext.User?.FindFirst("id")?.Value
+                     ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                     ?? "anon";
+        return RateLimitPartition.GetSlidingWindowLimiter(userId, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 60,
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 4,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
     // Job creation: 20 per user per hour prevents runaway submission loops.
     options.AddPolicy("create-job", httpContext =>
     {
@@ -201,8 +302,21 @@ if (!builder.Environment.IsDevelopment())
 
 // Add Entity Framework Core with PostgreSQL
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+// Cap the pool per instance (Npgsql default is 100 — 2-3 instances would exhaust a small
+// Azure Postgres max_connections) unless the connection string already sets it explicitly.
+if (!string.IsNullOrWhiteSpace(connectionString))
+{
+    var csb = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+    if (!connectionString.Contains("Maximum Pool Size", StringComparison.OrdinalIgnoreCase)
+        && !connectionString.Contains("MaxPoolSize", StringComparison.OrdinalIgnoreCase))
+        csb.MaxPoolSize = 40;
+    connectionString = csb.ConnectionString;
+}
 builder.Services.AddDbContext<EliteApp.API.Data.AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString, npgsql =>
+        // Azure Postgres drops connections during maintenance/failover; without retry
+        // one blip becomes a 500 storm under load.
+        npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null)));
 
 // Health Checks — uses the registered NpgSql package (async, pooled connection)
 // instead of the former raw-connection + synchronous Open() that blocked the thread pool.
@@ -262,6 +376,19 @@ if (builder.Environment.IsProduction())
             "AllowedHosts must list your API hostname(s) in Production (semicolon-separated), e.g. \"api.example.com;your-api.azurewebsites.net\". Wildcard * is not allowed.");
 }
 
+// Issue time of the presented token: the "iat" claim, falling back to the token's nbf.
+// Null when the token carries neither — the caller treats that as "cannot prove it was issued
+// after the password reset" and rejects it.
+static DateTime? ResolveTokenIssuedAt(Microsoft.AspNetCore.Authentication.JwtBearer.TokenValidatedContext context)
+{
+    var iat = context.Principal?.FindFirst("iat")?.Value;
+    if (long.TryParse(iat, out var unixSeconds))
+        return DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime;
+
+    var validFrom = context.SecurityToken?.ValidFrom;
+    return validFrom is null || validFrom == DateTime.MinValue ? null : validFrom;
+}
+
 var jwtKey = ResolveJwtSigningKey(builder.Configuration, builder.Environment);
 
 // Issuer and audience are read from config (default: "EliteApp").
@@ -296,6 +423,45 @@ builder.Services.AddAuthentication(options =>
 
     options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
     {
+        // Tokens live 7 days with no revocation list. Reject if the user has been deactivated
+        // (denied/removed vendor), or if the token was issued before their last password reset,
+        // so a valid-but-stale token can't keep acting. Both facts come from ONE cached lookup
+        // per user (60s) — otherwise every authenticated request costs a DB round-trip, which
+        // roughly doubles query volume under load. 60s of revocation lag is acceptable against
+        // a 7-day token lifetime, and both writers evict the entry immediately.
+        OnTokenValidated = async context =>
+        {
+            var idClaim = context.Principal?.FindFirst("id")?.Value;
+            if (Guid.TryParse(idClaim, out var uid))
+            {
+                var cache = context.HttpContext.RequestServices
+                    .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+                var snapshot = await cache.GetOrCreateAsync($"user-active:{uid}", async entry =>
+                {
+                    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
+                    var db = context.HttpContext.RequestServices
+                        .GetRequiredService<EliteApp.API.Data.AppDbContext>();
+                    return await db.Users
+                        .Where(u => u.Id == uid)
+                        .Select(u => new EliteApp.API.Services.UserAuthSnapshot(u.IsActive, u.PasswordChangedAt))
+                        .FirstOrDefaultAsync();
+                });
+                if (snapshot is not { IsActive: true })
+                {
+                    context.Fail("User is inactive.");
+                }
+                else if (snapshot.PasswordChangedAt is { } passwordChangedAt)
+                {
+                    var issuedAt = ResolveTokenIssuedAt(context);
+                    if (issuedAt is null || issuedAt < passwordChangedAt)
+                        context.Fail("Token was issued before the password was changed.");
+                }
+            }
+            else
+            {
+                context.Fail("Missing user id claim.");
+            }
+        },
         OnAuthenticationFailed = context =>
         {
             var logger = context.HttpContext.RequestServices
@@ -386,28 +552,18 @@ app.Use(async (context, next) =>
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 
-app.UseStaticFiles(new StaticFileOptions
-{
-    OnPrepareResponse = ctx =>
-    {
-        // #13 Force user-uploaded files to download rather than render inline in the app
-        // origin — a crafted PDF/HTML could otherwise execute active content same-origin.
-        if (ctx.Context.Request.Path.StartsWithSegments("/uploads"))
-        {
-            ctx.Context.Response.Headers["Content-Disposition"] = "attachment";
-            ctx.Context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-        }
-    }
-});
+// wwwroot static content (privacy.html etc.). Uploads are NOT served from disk anymore —
+// the /uploads/{fileName} endpoint below streams from IFileStorage (blob in prod).
+app.UseStaticFiles();
 app.UseResponseCompression();
 app.UseResponseCaching();
 
-if (app.Environment.IsProduction())
-    app.UseCors("ProdCors");
-else
+// Only Development gets the wide-open DevCors. Staging/Production (and any other env) must use
+// the origin-locked ProdCors so a non-dev deploy can never accept requests from any origin.
+if (app.Environment.IsDevelopment())
     app.UseCors("DevCors");
-
-app.UseRateLimiter();
+else
+    app.UseCors("ProdCors");
 
 app.Use(async (context, next) =>
 {
@@ -426,6 +582,12 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Must run AFTER authentication: the per-user policies partition on the "id" claim, and
+// HttpContext.User is empty until authentication has run. Placed earlier, every "per user"
+// limit silently degrades to per-IP — which breaks behind carrier NAT, where thousands of
+// real users share one address and would exhaust each other's quota.
+app.UseRateLimiter();
+
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -443,29 +605,19 @@ using (var scope = app.Services.CreateScope())
         Log.Warning(
             "Database:RunMigrations is false; skipping EF migrations at startup. Apply pending migrations before serving traffic.");
 
-    // Performance indexes applied idempotently (CREATE INDEX IF NOT EXISTS can never fail or
-    // block a deploy). Speeds up the role-based lookups (dashboard / vendor list / admin-id)
-    // and case-insensitive email lookups (login / reset / invite) that previously seq-scanned.
-    if (runMigrations)
-    {
-        await context.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS ix_users_role_approved_active ON \"Users\" (\"Role\", \"IsApproved\", \"IsActive\");");
-        await context.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS ix_users_email_lower ON \"Users\" (LOWER(\"Email\"));");
-    }
-
-    // Clean up expired password reset tokens older than 7 days to prevent table bloat.
-    var deleted = await context.PasswordResetTokens
-        .Where(t => t.ExpiresAt < DateTime.UtcNow.AddDays(-7))
-        .ExecuteDeleteAsync();
-    if (deleted > 0)
-        Log.Information("Startup: purged {Count} expired password reset tokens.", deleted);
+    // The ix_users_role_approved_active / ix_users_email_lower indexes and the job_number_seq
+    // sequence now live in the JobNumberSequenceAndUserIndexes migration, so environments that
+    // run migrations from CI (Database__RunMigrations=false here) still get them.
+    // Expired password-reset tokens are purged by TokenPurgeService on a daily timer instead of
+    // a boot-time delete, so scale-out instance starts do no redundant DB writes.
 
     const string adminEmail = "admin@elite.com";
     // Use async query — synchronous DB calls block thread-pool threads at startup.
     var existingAdmin = await context.Users.FirstOrDefaultAsync(u => u.Email == adminEmail);
 
-    if (!env.IsProduction())
+    // Dev-only: a fixed weak password in any internet-reachable environment (incl. Staging)
+    // is an instant admin compromise. Non-dev environments use Bootstrap:AdminPassword below.
+    if (env.IsDevelopment())
     {
         if (existingAdmin == null)
         {
@@ -526,6 +678,30 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
 });
 
 app.MapControllers();
+
+// Serve uploads from IFileStorage, preserving the historical /uploads/{name} URL shape that
+// is stored in the DB and linked from invoice emails. Anonymous by design (invoice emails go
+// to customers who may not be signed in); names are unguessable GUIDs. Strict name check
+// blocks path traversal; attachment + nosniff stop same-origin active-content execution.
+app.MapGet("/uploads/{fileName}", async (
+    string fileName,
+    EliteApp.API.Services.Storage.IFileStorage storage,
+    HttpResponse response,
+    CancellationToken ct) =>
+{
+    if (!System.Text.RegularExpressions.Regex.IsMatch(
+            fileName, @"^[0-9a-fA-F-]{36}\.(jpg|jpeg|png|webp|heic|heif|pdf)$"))
+        return Results.NotFound();
+
+    var entry = await storage.OpenReadAsync(fileName, ct);
+    if (entry == null)
+        return Results.NotFound();
+
+    response.Headers["Content-Disposition"] = "attachment";
+    response.Headers["X-Content-Type-Options"] = "nosniff";
+    response.Headers["Cache-Control"] = "private, max-age=86400"; // immutable GUID content
+    return Results.Stream(entry.Content, entry.ContentType);
+}).AllowAnonymous();
 
 // Graceful shutdown: honour SIGTERM from Azure App Service / Kubernetes.
 // The host's built-in cancellation token handles in-flight requests; this

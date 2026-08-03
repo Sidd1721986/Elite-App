@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EliteApp.API.Controllers;
 
@@ -52,14 +53,15 @@ public class FilesController : ControllerBase
         return null; // HEIC/HEIF lack universal magic — fall through to MIME+extension check
     }
 
-    private readonly IWebHostEnvironment _environment;
+    private readonly EliteApp.API.Services.Storage.IFileStorage _storage;
 
-    public FilesController(IWebHostEnvironment environment)
+    public FilesController(EliteApp.API.Services.Storage.IFileStorage storage)
     {
-        _environment = environment;
+        _storage = storage;
     }
 
     [HttpPost("upload")]
+    [EnableRateLimiting("file-upload")]
     // Explicitly cap at MaxFileSizeBytes — replaces the former [DisableRequestSizeLimit]
     // which removed all size constraints and allowed unlimited uploads.
     [RequestSizeLimit(MaxFileSizeBytes)]
@@ -94,17 +96,12 @@ public class FilesController : ControllerBase
                 return BadRequest(new { message = "File content does not match the declared type." });
         }
 
-        // ── Write to disk with a random name (no user-supplied filename) ────────
-        var uploadsFolder = Path.Combine(_environment.WebRootPath ?? "wwwroot", "uploads");
-        if (!Directory.Exists(uploadsFolder))
-            Directory.CreateDirectory(uploadsFolder);
-
+        // ── Persist with a random name (no user-supplied filename) ──────────────
         var safeFileName = $"{Guid.NewGuid()}{extension.ToLowerInvariant()}";
-        var filePath = Path.Combine(uploadsFolder, safeFileName);
 
-        using (var stream = new FileStream(filePath, FileMode.Create))
+        await using (var uploadStream = file.OpenReadStream())
         {
-            await file.CopyToAsync(stream);
+            await _storage.SaveAsync(safeFileName, uploadStream, contentType);
         }
 
         var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";

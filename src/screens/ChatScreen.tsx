@@ -85,6 +85,21 @@ const MessageItem = memo(({ item, isMe, otherUserName }: {
     );
 });
 
+/**
+ * Cheap equality check for a polled message page. The 20 s poll returns the same list almost
+ * every time; replacing state unconditionally re-renders every bubble. Comparing length plus
+ * the first/last id + timestamp catches every real change (append, delete, edit) without
+ * serialising the whole thread.
+ */
+const isSameMessageList = (a: Message[], b: Message[]): boolean => {
+    if (a === b) {return true;}
+    if (a.length !== b.length) {return false;}
+    if (a.length === 0) {return true;}
+    const lastA = a[a.length - 1];
+    const lastB = b[b.length - 1];
+    return a[0].id === b[0].id && lastA.id === lastB.id && lastA.timestamp === lastB.timestamp;
+};
+
 const ChatScreen: React.FC = () => {
     const route = useRoute<ChatRouteProp>();
     const navigation = useNavigation();
@@ -122,7 +137,8 @@ const ChatScreen: React.FC = () => {
             const data = await messageService.getMessages(resolvedOtherUserId);
             // Guard against a malformed-but-200 payload (proxy error page / version skew):
             // FlashList would otherwise hard-crash dereferencing item.id on a non-array.
-            setMessages(Array.isArray(data) ? data : []);
+            const next = Array.isArray(data) ? data : [];
+            setMessages(prev => (isSameMessageList(prev, next) ? prev : next));
             // Reset backoff on success.
             pollFailCountRef.current = 0;
         } catch (error) {
@@ -168,20 +184,24 @@ const ChatScreen: React.FC = () => {
 
         let appState = AppState.currentState;
         let cancelled = false;
+        // Only the chain holding the current generation owns pollTimeoutRef. Two rapid
+        // background/foreground flips would otherwise spawn two self-perpetuating chains
+        // (clearTimeout can't stop one that has already fired and is awaiting loadMessages).
+        let generation = 0;
 
-        const schedulePoll = () => {
-            if (cancelled) {return;}
+        const schedulePoll = (gen: number) => {
+            if (cancelled || gen !== generation) {return;}
             pollTimeoutRef.current = setTimeout(async () => {
-                if (cancelled) {return;}
+                if (cancelled || gen !== generation) {return;}
                 if (appState === 'active') {
                     await loadMessages();
                 }
-                schedulePoll();
+                schedulePoll(gen);
             }, nextPollDelay());
         };
 
         void loadMessages();
-        schedulePoll();
+        schedulePoll(generation);
 
         const appStateSub = AppState.addEventListener('change', (next) => {
             appState = next;
@@ -190,7 +210,10 @@ const ChatScreen: React.FC = () => {
                 // then re-schedule from a clean slate so the interval resets to 20 s.
                 if (pollTimeoutRef.current) {clearTimeout(pollTimeoutRef.current);}
                 pollFailCountRef.current = 0;
-                void loadMessages().then(() => { if (!cancelled) {schedulePoll();} });
+                const gen = ++generation;   // retires any chain still in flight
+                void loadMessages().then(() => {
+                    if (!cancelled && gen === generation) {schedulePoll(gen);}
+                });
             }
         });
 
@@ -310,7 +333,7 @@ const ChatScreen: React.FC = () => {
                 <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
                 <View style={styles.headerInfo}>
                     <Text variant="titleMedium" style={styles.headerName}>{otherUserName}</Text>
-                    <Text variant="labelSmall" style={styles.headerStatus}>Online</Text>
+                    {/* Presence is not tracked server-side — don't show a hardcoded "Online" that lies. */}
                 </View>
                 <Menu
                     visible={headerMenuVisible}

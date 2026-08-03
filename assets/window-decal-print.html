@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Elite Home Services – Window Decal (Print-Ready)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #cccccc;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    font-family: 'Georgia', serif;
+    gap: 40px;
+  }
+
+  .instructions {
+    background: #fff;
+    border-left: 5px solid #C9952A;
+    padding: 16px 20px;
+    border-radius: 6px;
+    max-width: 860px;
+    width: 100%;
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    color: #333;
+    line-height: 1.7;
+  }
+  .instructions h2 { color: #0D1B3E; margin-bottom: 8px; font-size: 16px; }
+  .instructions strong { color: #C9952A; }
+
+  /* ── The actual decal ── */
+  .decal-wrap {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  }
+
+  .decal {
+    width: 860px;
+    height: 320px;
+    background: #FFFFFF;
+    border: 4px solid #0D1B3E;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    padding: 24px 36px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Thin gold inner border */
+  .decal::before {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    border: 2px solid #C9952A;
+    border-radius: 10px;
+    pointer-events: none;
+  }
+
+  /* Logo mark */
+  .logo-mark {
+    flex-shrink: 0;
+    width: 200px;
+    height: 200px;
+  }
+
+  /* Divider */
+  .divider {
+    width: 3px;
+    height: 200px;
+    background: linear-gradient(to bottom, transparent, #C9952A 20%, #C9952A 80%, transparent);
+    flex-shrink: 0;
+  }
+
+  /* Text block */
+  .text-block {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .company-name {
+    font-size: 46px;
+    font-weight: bold;
+    color: #0D1B3E;
+    letter-spacing: 2px;
+    line-height: 1.1;
+    text-transform: uppercase;
+  }
+
+  .company-name span {
+    color: #C9952A;
+  }
+
+  .tagline {
+    font-size: 17px;
+    color: #555;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-family: Arial, sans-serif;
+    font-weight: normal;
+  }
+
+  .contact-row {
+    display: flex;
+    gap: 28px;
+    margin-top: 10px;
+    align-items: center;
+  }
+
+  .contact-item {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: #0D1B3E;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .contact-item .icon { font-size: 15px; }
+
+  .gold-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 7px;
+    background: linear-gradient(to right, #A07820, #F5D070, #C9952A, #F5D070, #A07820);
+  }
+
+  /* Print controls */
+  .controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn {
+    padding: 10px 22px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+  }
+  .btn-print  { background: #0D1B3E; color: #fff; }
+  .btn-print:hover { background: #1A2D5A; }
+  .btn-save   { background: #C9952A; color: #fff; }
+  .btn-save:hover { background: #a07820; }
+
+  /* Size variant labels */
+  .size-label {
+    font-family: Arial, sans-serif;
+    font-size: 11px;
+    color: #888;
+    text-align: center;
+    margin-top: 6px;
+  }
+
+  @media print {
+    body { background: white; padding: 0; }
+    .instructions, .controls, .size-label { display: none !important; }
+    .decal-wrap { box-shadow: none; padding: 0; }
+    .decal { width: 100%; height: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="instructions">
+  <h2>🖨️ Print Instructions — Window Decal for Google Business Verification</h2>
+  <p>
+    <strong>Step 1:</strong> Click <strong>"Print / Save as PDF"</strong> below → print on glossy vinyl or paper at your local print shop (FedEx, Staples, UPS Store).<br>
+    <strong>Step 2:</strong> Ask for a <strong>clear vinyl window sticker</strong> — 10"×4" or 14"×5" works great on a door or window.<br>
+    <strong>Step 3:</strong> Stick it on your front door or window so it's visible from outside.<br>
+    <strong>Step 4:</strong> During Google's video verification, point the camera at the sign — this proves your business operates at that address.<br>
+    <strong>Tip:</strong> FedEx/Staples can print this same day for under $10.
+  </p>
+</div>
+
+<!-- ── DECAL DESIGN ── -->
+<div class="decal-wrap">
+  <div class="decal" id="decal">
+
+    <!-- Logo SVG inline -->
+    <svg class="logo-mark" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="g" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%"  stop-color="#F5D070"/>
+          <stop offset="40%" stop-color="#C9952A"/>
+          <stop offset="100%" stop-color="#A07820"/>
+        </linearGradient>
+        <clipPath id="hc">
+          <polygon points="130,225 130,330 370,330 370,225 250,115"/>
+        </clipPath>
+      </defs>
+      <!-- Navy background -->
+      <rect width="500" height="500" rx="50" fill="#0D1B3E"/>
+      <!-- Flag inside house -->
+      <g clip-path="url(#hc)">
+        <rect x="130" y="115" width="240" height="215" fill="#B22234"/>
+        <rect x="130" y="130" width="240" height="16" fill="#FFF"/>
+        <rect x="130" y="162" width="240" height="16" fill="#FFF"/>
+        <rect x="130" y="194" width="240" height="16" fill="#FFF"/>
+        <rect x="130" y="226" width="240" height="16" fill="#FFF"/>
+        <rect x="130" y="258" width="240" height="16" fill="#FFF"/>
+        <rect x="130" y="290" width="240" height="16" fill="#FFF"/>
+        <rect x="130" y="115" width="108" height="120" fill="#3C3B6E"/>
+        <g fill="#FFF">
+          <circle cx="148" cy="130" r="4"/><circle cx="168" cy="130" r="4"/><circle cx="188" cy="130" r="4"/><circle cx="208" cy="130" r="4"/><circle cx="228" cy="130" r="4"/>
+          <circle cx="158" cy="146" r="4"/><circle cx="178" cy="146" r="4"/><circle cx="198" cy="146" r="4"/><circle cx="218" cy="146" r="4"/>
+          <circle cx="148" cy="162" r="4"/><circle cx="168" cy="162" r="4"/><circle cx="188" cy="162" r="4"/><circle cx="208" cy="162" r="4"/><circle cx="228" cy="162" r="4"/>
+          <circle cx="158" cy="178" r="4"/><circle cx="178" cy="178" r="4"/><circle cx="198" cy="178" r="4"/><circle cx="218" cy="178" r="4"/>
+          <circle cx="148" cy="194" r="4"/><circle cx="168" cy="194" r="4"/><circle cx="188" cy="194" r="4"/><circle cx="208" cy="194" r="4"/><circle cx="228" cy="194" r="4"/>
+          <circle cx="158" cy="210" r="4"/><circle cx="178" cy="210" r="4"/><circle cx="198" cy="210" r="4"/><circle cx="218" cy="210" r="4"/>
+        </g>
+      </g>
+      <!-- House roof -->
+      <polygon points="118,228 250,100 382,228" fill="none" stroke="url(#g)" stroke-width="9" stroke-linejoin="round"/>
+      <!-- House walls -->
+      <rect x="130" y="225" width="240" height="105" fill="none" stroke="url(#g)" stroke-width="9"/>
+      <!-- Window -->
+      <rect x="290" y="245" width="60" height="55" rx="4" fill="#0D1B3E" stroke="url(#g)" stroke-width="5"/>
+      <line x1="320" y1="245" x2="320" y2="300" stroke="url(#g)" stroke-width="4"/>
+      <line x1="290" y1="272" x2="350" y2="272" stroke="url(#g)" stroke-width="4"/>
+      <!-- Door -->
+      <rect x="218" y="268" width="44" height="62" rx="4" fill="#0D1B3E" stroke="url(#g)" stroke-width="5"/>
+      <circle cx="255" cy="300" r="4" fill="url(#g)"/>
+      <!-- Chimney -->
+      <rect x="300" y="115" width="28" height="62" fill="none" stroke="url(#g)" stroke-width="6"/>
+      <!-- Swoosh -->
+      <path d="M100 348 Q250 310 400 348" fill="none" stroke="url(#g)" stroke-width="5"/>
+      <!-- Text -->
+      <text x="250" y="388" font-family="Georgia,serif" font-size="40" font-weight="bold" letter-spacing="5" text-anchor="middle" fill="url(#g)">ELITE HOME</text>
+      <text x="250" y="428" font-family="Georgia,serif" font-size="30" font-weight="bold" letter-spacing="7" text-anchor="middle" fill="#FFFFFF">SERVICES USA</text>
+    </svg>
+
+    <div class="divider"></div>
+
+    <div class="text-block">
+      <div class="company-name">Elite <span>Home</span><br>Services <span>USA</span></div>
+      <div class="tagline">Professional Home Services</div>
+      <div class="contact-row">
+        <div class="contact-item"><span class="icon">🌐</span> elitehomeservicesusa.com</div>
+        <div class="contact-item"><span class="icon">📧</span> info@elitehomeservicesusa.com</div>
+      </div>
+    </div>
+
+    <div class="gold-bar"></div>
+  </div>
+  <div class="size-label">Recommended print size: 14" × 5" on clear vinyl — or any size proportionally</div>
+</div>
+
+<div class="controls">
+  <button class="btn btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  <button class="btn btn-save"  onclick="saveAsSVG()">⬇ Download SVG</button>
+</div>
+
+<script>
+function saveAsSVG() {
+  // Serialize the decal div to SVG-like HTML, let user use browser print to PDF
+  alert('Use "Print / Save as PDF" and choose "Save as PDF" as the printer — then send that PDF to your print shop for the best quality.');
+}
+</script>
+</body>
+</html>

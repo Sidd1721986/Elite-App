@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { jobService } from '../services/jobService';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import DocumentPicker, { types } from 'react-native-document-picker';
-import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
+import { RouteProp, useRoute, useNavigation, NavigationProp } from '@react-navigation/native';
 import { RootStackParamList, JobStatus, Urgency, User } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { openExternalUrl } from '../utils/openExternalUrl';
@@ -49,8 +49,8 @@ const getStatusStyle = (status: string) => {
 
 const JobDetailsScreen: React.FC = () => {
     const route = useRoute<JobDetailsRouteProp>();
-    const navigation = useNavigation();
-    const { getJobById, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, addJobPhotos, removeJobPhoto } = useJobs();
+    const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+    const { getJobById, updateJob, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, sendInvoice, addJobPhotos, removeJobPhoto } = useJobs();
     const { user, getApprovedVendors } = useAuth();
     const jobId = route.params?.jobId;
 
@@ -72,6 +72,10 @@ const JobDetailsScreen: React.FC = () => {
     const [saleDialogVisible, setSaleDialogVisible] = React.useState(false);
     const [saleAmount, setSaleAmount] = React.useState('');
     const [saleStartDate, setSaleStartDate] = React.useState('');
+
+    // Admin-only override of the amount the customer is invoiced / pays.
+    const [amountDialogVisible, setAmountDialogVisible] = React.useState(false);
+    const [amountValue, setAmountValue] = React.useState('');
 
     // Surface action failures to the user instead of swallowing them in console.error
     // (previously a failed accept/reach-out/appointment/invoice left the spinner stopped
@@ -115,9 +119,14 @@ const JobDetailsScreen: React.FC = () => {
     const job = jobId ? getJobById(jobId) : undefined;
 
     React.useEffect(() => {
-        if (user?.role === 'Admin') {
-            getApprovedVendors().then(setApprovedVendors);
-        }
+        if (user?.role !== 'Admin') {return;}
+        // Guarded: this can resolve after the screen is popped (setState-after-unmount), and an
+        // unhandled rejection here previously crashed the red box on a flaky network.
+        let cancelled = false;
+        getApprovedVendors()
+            .then(vendors => { if (!cancelled) {setApprovedVendors(vendors);} })
+            .catch(err => { if (__DEV__) {console.error('Failed to load approved vendors:', err);} });
+        return () => { cancelled = true; };
     }, [user, getApprovedVendors]);
 
     React.useEffect(() => {
@@ -299,6 +308,49 @@ const JobDetailsScreen: React.FC = () => {
     };
 
 
+    const openAmountDialog = () => {
+        setAmountValue(job.contractAmount != null ? String(job.contractAmount) : '');
+        setAmountDialogVisible(true);
+    };
+
+    const submitAmount = async () => {
+        const amount = parseFloat(amountValue);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            Alert.alert('Invalid amount', 'Enter an amount greater than 0.');
+            return;
+        }
+        setAmountDialogVisible(false);
+        setIsProcessing(true);
+        try {
+            await updateJob(job.id, { contractAmount: amount });
+        } catch (e: any) {
+            showError(e, 'Could not update the amount. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleSendInvoice = async () => {
+        setIsProcessing(true);
+        try {
+            const message = await sendInvoice(job.id);
+            Alert.alert('Invoice sent', message);
+        } catch (e: any) {
+            showError(e, 'Could not send the invoice. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const isAdmin = user?.role === 'Admin';
+    const isCustomer = !isAdmin && user?.role !== 'Vendor';
+    // Customer may pay once the work is done (or an invoice exists) and it isn't already paid.
+    const PAYABLE_STATUSES = [JobStatus.COMPLETED, JobStatus.INVOICE_REQUESTED, JobStatus.INVOICED];
+    const canPay = isCustomer
+        && (job.contractAmount ?? 0) > 0
+        && (job.paymentStatus ?? 'Unpaid') !== 'Paid'
+        && PAYABLE_STATUSES.includes(job.status as JobStatus);
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -351,6 +403,35 @@ const JobDetailsScreen: React.FC = () => {
                         </View>
                     </View>
                 </Surface>
+
+                {/* Admin: set / change the amount the customer is invoiced & pays */}
+                {isAdmin && (
+                    <View style={{ paddingHorizontal: 24, marginBottom: 32 }}>
+                        <Text variant="titleMedium" style={styles.sectionTitle}>Invoice Amount</Text>
+                        <Surface style={styles.contactCard} elevation={0}>
+                            <View style={styles.contactRow}>
+                                <Avatar.Icon size={48} icon="cash-multiple" style={{ backgroundColor: '#ECFDF5' }} color="#059669" />
+                                <View style={styles.contactInfo}>
+                                    <Text variant="titleMedium" style={styles.contactName}>
+                                        {job.contractAmount != null ? `$${Number(job.contractAmount).toFixed(2)}` : 'Not set'}
+                                    </Text>
+                                    <Text variant="labelSmall" style={styles.contactType}>
+                                        {(job.paymentStatus ?? 'Unpaid') === 'Paid' ? 'Paid — locked' : 'Amount the customer pays'}
+                                    </Text>
+                                </View>
+                                <Button
+                                    mode="outlined"
+                                    icon="pencil-outline"
+                                    disabled={isProcessing || (job.paymentStatus ?? 'Unpaid') === 'Paid'}
+                                    onPress={openAmountDialog}
+                                    style={{ borderRadius: 12 }}
+                                >
+                                    Edit
+                                </Button>
+                            </View>
+                        </Surface>
+                    </View>
+                )}
 
                 {/* Invoicing Section for Vendor */}
                 {user?.role === 'Vendor' && job.status === JobStatus.INVOICE_REQUESTED && (
@@ -444,12 +525,52 @@ const JobDetailsScreen: React.FC = () => {
                                     View
                                 </Button>
                             </View>
+                            {isAdmin && (
+                                <Button
+                                    mode="contained"
+                                    icon="email-fast-outline"
+                                    loading={isProcessing}
+                                    disabled={isProcessing}
+                                    onPress={handleSendInvoice}
+                                    style={{ borderRadius: 12, marginTop: 16, backgroundColor: '#6366F1' }}
+                                    contentStyle={{ paddingVertical: 4 }}
+                                >
+                                    Send Invoice to Customer
+                                </Button>
+                            )}
+                        </Surface>
+                    </View>
+                )}
+
+                {/* Customer payment section — pay after the job is completed / invoiced. */}
+                {canPay && (
+                    <View style={{ paddingHorizontal: 24, marginBottom: 32 }}>
+                        <Text variant="titleMedium" style={styles.sectionTitle}>Payment</Text>
+                        <Surface style={styles.contactCard} elevation={0}>
+                            <View style={styles.contactRow}>
+                                <Avatar.Icon size={48} icon="credit-card-outline" style={{ backgroundColor: '#EEF2FF' }} color="#6366F1" />
+                                <View style={styles.contactInfo}>
+                                    <Text variant="titleMedium" style={styles.contactName}>
+                                        Amount due: ${Number(job.contractAmount).toFixed(2)}
+                                    </Text>
+                                    <Text variant="labelSmall" style={styles.contactType}>Pay securely with Stripe</Text>
+                                </View>
+                            </View>
+                            <Button
+                                mode="contained"
+                                icon="credit-card-outline"
+                                onPress={() => navigation.navigate('Payment', { jobId: job.id })}
+                                style={{ borderRadius: 12, marginTop: 16, backgroundColor: '#6366F1' }}
+                                contentStyle={{ paddingVertical: 4 }}
+                            >
+                                Pay Now
+                            </Button>
                         </Surface>
                     </View>
                 )}
 
                 <View style={styles.contentBody}>
-                    {user?.role === 'Admin' && (!job.items || (Array.isArray(job.items) && job.items.some(i => i && !i.isAssigned))) && job.status !== JobStatus.COMPLETED && (
+                    {user?.role === 'Admin' && (!job.items || (Array.isArray(job.items) && job.items.some(i => i && !i.isAssigned))) && ![JobStatus.COMPLETED, JobStatus.INVOICE_REQUESTED, JobStatus.INVOICED].includes(job.status as JobStatus) && (
                         <View style={styles.section}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                 <Text variant="titleMedium" style={[styles.sectionTitle, { marginBottom: 0 }]}>
@@ -1023,6 +1144,27 @@ const JobDetailsScreen: React.FC = () => {
                     <Dialog.Actions>
                         <Button onPress={() => setSaleDialogVisible(false)}>Cancel</Button>
                         <Button mode="contained" onPress={submitSale} loading={isProcessing}>Confirm Sale</Button>
+                    </Dialog.Actions>
+                </Dialog>
+
+                <Dialog visible={amountDialogVisible} onDismiss={() => setAmountDialogVisible(false)}>
+                    <Dialog.Title>Edit Invoice Amount</Dialog.Title>
+                    <Dialog.Content>
+                        <Text variant="bodyMedium" style={{ color: '#64748B', marginBottom: 12 }}>
+                            This is the amount the customer is invoiced and pays.
+                        </Text>
+                        <TextInput
+                            label="Amount ($)"
+                            value={amountValue}
+                            onChangeText={setAmountValue}
+                            keyboardType="decimal-pad"
+                            mode="outlined"
+                            left={<TextInput.Affix text="$" />}
+                        />
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setAmountDialogVisible(false)}>Cancel</Button>
+                        <Button mode="contained" onPress={submitAmount} loading={isProcessing}>Save</Button>
                     </Dialog.Actions>
                 </Dialog>
             </Portal>

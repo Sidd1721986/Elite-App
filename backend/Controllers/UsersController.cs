@@ -6,7 +6,9 @@ using EliteApp.API.Services.Sms;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace EliteApp.API.Controllers;
 
@@ -20,25 +22,23 @@ public class UsersController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly ISmsService _smsService;
     private readonly ILogger<UsersController> _logger;
+    private readonly EliteApp.API.Services.Security.ITokenHasher _tokenHasher;
+    private readonly IMemoryCache _cache;
 
-    public UsersController(AppDbContext context, IWebHostEnvironment environment, IConfiguration configuration, ISmsService smsService, ILogger<UsersController> logger)
+    public UsersController(AppDbContext context, IWebHostEnvironment environment, IConfiguration configuration, ISmsService smsService, ILogger<UsersController> logger, EliteApp.API.Services.Security.ITokenHasher tokenHasher, IMemoryCache cache)
     {
         _context = context;
         _environment = environment;
         _configuration = configuration;
         _smsService = smsService;
         _logger = logger;
+        _tokenHasher = tokenHasher;
+        _cache = cache;
     }
 
-    // ── Phone-OTP hashing (mirrors AuthService.HashResetCode) ──────────────────
-    // The pepper is the same shared secret used for password-reset OTPs so both
-    // flows benefit from the same protection without a second secret to manage.
-    private string HashPhoneCode(string plaintext)
-    {
-        var pepper = _configuration["PasswordReset:Pepper"] ?? string.Empty;
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(plaintext + pepper));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
+    // The JWT OnTokenValidated hook caches IsActive for 60s; evict on deactivation so
+    // a denied/removed vendor is locked out immediately instead of after the TTL.
+    private void EvictActiveFlag(Guid userId) => _cache.Remove($"user-active:{userId}");
 
     [HttpGet("me")]
     public async Task<IActionResult> GetMe()
@@ -114,6 +114,7 @@ public class UsersController : ControllerBase
         var adminId = User.FindFirst("id")?.Value;
         user.IsActive = false;
         await _context.SaveChangesAsync();
+        EvictActiveFlag(user.Id);
 
         _logger.LogWarning("Vendor denied: vendorId={VendorId} email={Email} by adminId={AdminId}", id, user.Email, adminId);
         return Ok(new { message = "Vendor denied" });
@@ -152,6 +153,7 @@ public class UsersController : ControllerBase
         // on Jobs and Messages, and mirrors the pattern used by DenyVendor and DeleteSelf.
         user.IsActive = false;
         await _context.SaveChangesAsync();
+        EvictActiveFlag(user.Id);
 
         return Ok(new { message = "Vendor removed" });
     }
@@ -165,13 +167,29 @@ public class UsersController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user == null) return NotFound();
 
-        if (request.Name != null) user.Name = request.Name;
-        if (request.Address != null) user.Address = request.Address;
+        // Validate lengths server-side — [StringLength] annotations do not run on SaveChanges,
+        // so without this a client could store an oversized Name/Address/Phone.
+        if (request.Name != null)
+        {
+            var name = request.Name.Trim();
+            if (name.Length is < 1 or > 255)
+                return BadRequest(new { message = "Name must be 1–255 characters." });
+            user.Name = name;
+        }
+        if (request.Address != null)
+        {
+            if (request.Address.Length > 500)
+                return BadRequest(new { message = "Address must be 500 characters or fewer." });
+            user.Address = request.Address;
+        }
         if (request.Phone != null)
         {
-            if (user.Phone != request.Phone.Trim())
+            var phone = request.Phone.Trim();
+            if (phone.Length > 30)
+                return BadRequest(new { message = "Phone must be 30 characters or fewer." });
+            if (user.Phone != phone)
             {
-                user.Phone = request.Phone.Trim();
+                user.Phone = phone;
                 user.IsPhoneVerified = false; // Reset verification if phone changes
             }
         }
@@ -186,6 +204,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("request-phone-verification")]
+    [EnableRateLimiting("sms-send")]
     public async Task<IActionResult> RequestPhoneVerification()
     {
         var email = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -201,12 +220,22 @@ public class UsersController : ControllerBase
 
         // Hash the OTP before storing — same pattern as password-reset tokens.
         // The plaintext is sent to the user; only the hash lives in the database.
-        user.PhoneVerificationCode = HashPhoneCode(plainCode);
+        user.PhoneVerificationCode = _tokenHasher.HashWithPepper(plainCode);
         user.PhoneVerificationExpiry = DateTime.UtcNow.AddMinutes(10);
 
         await _context.SaveChangesAsync();
 
-        await _smsService.SendAsync(user.Phone, $"Your Elite Home Services verification code is: {plainCode}. It expires in 10 minutes.");
+        // A rejected number or a Twilio outage/throttle must not surface as a 500 — the caller
+        // gets an actionable message instead. Mirrors the password-reset SMS path.
+        try
+        {
+            await _smsService.SendAsync(user.Phone, $"Your Elite Home Services verification code is: {plainCode}. It expires in 10 minutes.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Phone verification SMS failed for user {UserId}", user.Id);
+            return StatusCode(503, new { message = "Could not send the verification code right now. Please try again." });
+        }
 
         return Ok(new { message = "Verification code sent" });
     }
@@ -234,7 +263,7 @@ public class UsersController : ControllerBase
 
         // Compare hashes — the DB stores only the hashed OTP, never the plaintext.
         // CryptographicOperations.FixedTimeEquals prevents timing-based side-channel attacks.
-        var submittedHash = HashPhoneCode(request.Code ?? string.Empty);
+        var submittedHash = _tokenHasher.HashWithPepper(request.Code ?? string.Empty);
         var storedHash    = user.PhoneVerificationCode ?? string.Empty;
 
         // Ensure equal-length byte arrays for constant-time compare.
@@ -270,6 +299,7 @@ public class UsersController : ControllerBase
 
         user.IsActive = false; // Soft delete for compliance
         await _context.SaveChangesAsync();
+        EvictActiveFlag(user.Id);
 
         return Ok(new { message = "Account deactivated successfully" });
     }

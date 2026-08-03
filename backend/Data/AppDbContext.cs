@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Message> Messages { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
     public DbSet<AdminInvite> AdminInvites { get; set; }
+    public DbSet<Payment> Payments { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,5 +51,13 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<AdminInvite>()
             .HasIndex(i => i.Email);
+
+        // One Stripe PaymentIntent maps to exactly one Payment row — webhook idempotency relies on this.
+        modelBuilder.Entity<Payment>()
+            .HasIndex(p => p.StripePaymentIntentId)
+            .IsUnique();
+
+        modelBuilder.Entity<Payment>()
+            .HasIndex(p => new { p.JobId, p.Status });
     }
 }

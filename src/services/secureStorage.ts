@@ -46,12 +46,22 @@ export const SecureStorage = {
                 if (credentials) {
                     return credentials.password;
                 }
-                // Migration fallback: token was stored in AsyncStorage before Keychain was introduced.
-                // Warn so we know when this path is hit; it should become unreachable after one login cycle.
+                // Migration: the token was stored in plaintext AsyncStorage before Keychain was
+                // introduced. Move it into the Keychain and delete the plaintext copy right away —
+                // just reading it left an unencrypted JWT on disk until the user happened to re-login.
                 const legacy = await AsyncStorage.getItem(key);
                 if (legacy) {
-                    console.warn(`SecureStorage: token "${key}" found only in AsyncStorage (unencrypted). ` +
-                        'User should re-login so the token is migrated to Keychain.');
+                    try {
+                        await Keychain.setGenericPassword(key, legacy, {
+                            service: key,
+                            accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+                        });
+                        await AsyncStorage.removeItem(key);
+                    } catch (migrationError) {
+                        // Keychain unavailable (e.g. locked device): keep the legacy copy so the
+                        // session survives, and try again on the next read.
+                        console.warn(`SecureStorage: could not migrate "${key}" to Keychain`, migrationError);
+                    }
                 }
                 return legacy;
             }

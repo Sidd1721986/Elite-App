@@ -65,6 +65,40 @@ retry() {
   done
 }
 
+# --- preflight: required app settings ----------------------------------------
+# The API fails closed in Production without durable upload storage. This app uses the
+# App Service /home share (no extra Azure resources): Storage__LocalPath under /home plus
+# WEBSITES_ENABLE_APP_SERVICE_STORAGE=true (mounts the persistent share into the container).
+echo "==> Checking required App Service settings…"
+SETTINGS=$(az webapp config appsettings list --name "$WEBAPP" --resource-group "$RG" -o json)
+HAS_PATH=$(echo "$SETTINGS" | python3 -c "import json,sys; s={x['name']:x['value'] for x in json.load(sys.stdin)}; print(1 if s.get('Storage__LocalPath','').startswith('/home/') and s.get('WEBSITES_ENABLE_APP_SERVICE_STORAGE','').lower()=='true' else 0)")
+HAS_BLOB=$(echo "$SETTINGS" | python3 -c "import json,sys; s={x['name'] for x in json.load(sys.stdin)}; print(1 if 'Storage__BlobConnectionString' in s else 0)")
+if [ "$HAS_PATH" != "1" ] && [ "$HAS_BLOB" != "1" ]; then
+  echo "❌ Durable upload storage is not configured on ${WEBAPP} — the new image will refuse to start."
+  echo "   Set it first (uses the existing App Service plan, no new resources):"
+  echo "   az webapp config appsettings set --name $WEBAPP --resource-group $RG --settings Storage__LocalPath=/home/data/uploads WEBSITES_ENABLE_APP_SERVICE_STORAGE=true"
+  exit 1
+fi
+
+# --- apply EF migrations before rolling the container ------------------------
+# Preferred path for scale-out safety: migrate once from here, not at instance boot.
+# If the prod DB isn't reachable from this machine (firewall), we warn and fall back to
+# the app's startup migration (Database__RunMigrations defaults to true).
+echo "==> Applying EF migrations to the production database…"
+PROD_CONN=$(az webapp config appsettings list --name "$WEBAPP" --resource-group "$RG" \
+  --query "[?name=='ConnectionStrings__DefaultConnection'].value | [0]" -o tsv)
+if [ -z "$PROD_CONN" ]; then
+  PROD_CONN=$(az webapp config connection-string list --name "$WEBAPP" --resource-group "$RG" \
+    --query "[?name=='DefaultConnection'].value | [0]" -o tsv 2>/dev/null || echo "")
+fi
+if [ -n "$PROD_CONN" ] && (cd backend && dotnet ef database update --connection "$PROD_CONN" >/dev/null 2>&1); then
+  echo "   ✅ migrations applied from deploy machine"
+else
+  echo "   ⚠️  could not migrate from here (DB firewall or missing conn string) —"
+  echo "       relying on startup migration inside the container (fine for a single instance;"
+  echo "       do NOT scale out until migrations run out-of-band)."
+fi
+
 # --- point the web app at the new image + restart ---------------------------
 echo "==> Pointing ${WEBAPP} at ${IMAGE}:${NEW_TAG} and restarting…"
 retry az webapp config container set \
@@ -72,6 +106,12 @@ retry az webapp config container set \
   --container-image-name "${IMAGE}:${NEW_TAG}" \
   --container-registry-url "$REGISTRY" >/dev/null
 retry az webapp restart --name "$WEBAPP" --resource-group "$RG"
+
+# --- platform health probing + always-on (idempotent) ------------------------
+# Azure ignores the Docker HEALTHCHECK; the App Service health-check path is what lets the
+# load balancer stop routing to a sick instance. Always On prevents idle unload.
+retry az webapp config set --name "$WEBAPP" --resource-group "$RG" \
+  --generic-configurations '{"healthCheckPath": "/health", "alwaysOn": true}' >/dev/null
 
 # --- health check -----------------------------------------------------------
 echo "==> Waiting for ${HEALTH_URL} (cold start can take ~90s)…"

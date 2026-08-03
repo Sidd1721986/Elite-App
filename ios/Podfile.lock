@@ -1900,29 +1900,6 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - RNSentry (8.14.0):
-    - DoubleConversion
-    - glog
-    - hermes-engine
-    - RCT-Folly (= 2024.10.14.00)
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-hermes
-    - React-ImageManager
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - Sentry (= 9.16.1)
-    - Yoga
   - RNVectorIcons (10.3.0):
     - DoubleConversion
     - glog
@@ -1950,9 +1927,6 @@ PODS:
   - SDWebImageWebPCoder (0.8.5):
     - libwebp (~> 1.0)
     - SDWebImage/Core (~> 5.10)
-  - Sentry (9.16.1):
-    - Sentry/Core (= 9.16.1)
-  - Sentry/Core (9.16.1)
   - SocketRocket (0.7.1)
   - Yoga (0.0.0)
 
@@ -2033,7 +2007,6 @@ DEPENDENCIES:
   - RNKeychain (from `../node_modules/react-native-keychain`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
-  - "RNSentry (from `../node_modules/@sentry/react-native`)"
   - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
@@ -2042,7 +2015,6 @@ SPEC REPOS:
     - libwebp
     - SDWebImage
     - SDWebImageWebPCoder
-    - Sentry
     - SocketRocket
 
 EXTERNAL SOURCES:
@@ -2195,8 +2167,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-reanimated"
   RNScreens:
     :path: "../node_modules/react-native-screens"
-  RNSentry:
-    :path: "../node_modules/@sentry/react-native"
   RNVectorIcons:
     :path: "../node_modules/react-native-vector-icons"
   Yoga:
@@ -2269,7 +2239,7 @@ SPEC CHECKSUMS:
   React-runtimescheduler: 8ec34cc885281a34696ea16c4fd86892d631f38d
   React-timing: 331cbf9f2668c67faddfd2e46bb7f41cbd9320b9
   React-utils: ed818f19ab445000d6b5c4efa9d462449326cc9f
-  ReactCodegen: f853a20cc9125c5521c8766b4b49375fec20648b
+  ReactCodegen: dcad464239ee2a9a7eb3b00c42921d84cf5f0e4a
   ReactCommon: 300d8d9c5cb1a6cd79a67cf5d8f91e4d477195f9
   RNCAsyncStorage: 87a74d13ba0128f853817e45e21c4051e1f2cd45
   RNFastImage: 462a183c4b0b6b26fdfd639e1ed6ba37536c3b87
@@ -2278,14 +2248,12 @@ SPEC CHECKSUMS:
   RNKeychain: 850638785745df5f70c37251130617a66ec82102
   RNReanimated: 2e5069649cbab2c946652d3b97589b2ae0526220
   RNScreens: 18e02aaafedc00fc2a44bb9566fc0e82274f830e
-  RNSentry: 10a92cf454701da3a4f296149f5a5e62a160b6ac
   RNVectorIcons: c95fdae217b0ed388f2b4d7ed7a4edc457c1df47
   SDWebImage: a7f831e1a65eb5e285e3fb046a23fcfbf08e696d
   SDWebImageWebPCoder: 908b83b6adda48effe7667cd2b7f78c897e5111d
-  Sentry: e5d82a3c1f2d951f75c04c57215a0abb1facbd51
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: feb4910aba9742cfedc059e2b2902e22ffe9954a
 
-PODFILE CHECKSUM: 59695bfda40767516a8cf541984d9a0382d2cb5b
+PODFILE CHECKSUM: 66a7f7ca3a3dc997f219ded831a0e085c316739b
 
 COCOAPODS: 1.16.2

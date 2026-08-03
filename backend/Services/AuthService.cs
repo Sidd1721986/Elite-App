@@ -7,6 +7,7 @@ using EliteApp.API.Models;
 using EliteApp.API.Services.Email;
 using EliteApp.API.Services.Sms;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
@@ -30,6 +31,11 @@ public class AuthService : IAuthService
     private readonly ISmsService _smsService;
     private readonly ILogger<AuthService> _logger;
     private readonly JwtSigningKeyProvider _jwtKeyProvider;
+    private readonly EliteApp.API.Services.Security.ITokenHasher _tokenHasher;
+    private readonly IMemoryCache _cache;
+
+    // Failed verifies allowed against one reset code before it is burned.
+    private const int MaxResetAttempts = 5;
 
     public AuthService(
         AppDbContext context,
@@ -37,7 +43,9 @@ public class AuthService : IAuthService
         IEmailSender emailSender,
         ISmsService smsService,
         ILogger<AuthService> logger,
-        JwtSigningKeyProvider jwtKeyProvider)
+        JwtSigningKeyProvider jwtKeyProvider,
+        EliteApp.API.Services.Security.ITokenHasher tokenHasher,
+        IMemoryCache cache)
     {
         _context = context;
         _configuration = configuration;
@@ -45,6 +53,8 @@ public class AuthService : IAuthService
         _smsService = smsService;
         _logger = logger;
         _jwtKeyProvider = jwtKeyProvider;
+        _tokenHasher = tokenHasher;
+        _cache = cache;
     }
 
     public async Task<(User? User, string Error)> RegisterAsync(User user, string password)
@@ -130,6 +140,11 @@ public class AuthService : IAuthService
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Email ?? "unknown"),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            // Issued-at is the revocation anchor: Program.cs (OnTokenValidated) rejects any
+            // token issued before the user's PasswordChangedAt.
+            new Claim(JwtRegisteredClaimNames.Iat,
+                DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64),
             new Claim("id", user.Id.ToString()),
             new Claim(ClaimTypes.Role, user.Role ?? "Customer"), // Long URI form
             new Claim("role", user.Role ?? "Customer"),          // Short form
@@ -147,20 +162,10 @@ public class AuthService : IAuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    public async Task<bool> CanShowForgotPasswordAsync(string email, string role)
-    {
-        if (string.IsNullOrWhiteSpace(email)) return false;
-        var r = (role ?? string.Empty).Trim();
-        if (!string.Equals(r, UserRole.Vendor.ToString(), StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        var user = await _context.Users.FirstOrDefaultAsync(u =>
-            u.Email.ToLower() == email.Trim().ToLower());
-        if (user == null) return false;
-        if (!string.Equals(user.Role, UserRole.Vendor.ToString(), StringComparison.OrdinalIgnoreCase))
-            return false;
-        return user.IsApproved;
-    }
+    // Constant by design. The previous per-account answer (does this vendor email exist? is it
+    // approved?) was an unauthenticated oracle for enumerating registered vendors. The reset
+    // request itself already responds generically, so the UI can offer the link to everyone.
+    public Task<bool> CanShowForgotPasswordAsync(string email, string role) => Task.FromResult(true);
 
     public async Task<ForgotPasswordRequestResult> RequestPasswordResetAsync(string email, string role, string deliveryMethod, string? phone = null)
     {
@@ -221,7 +226,7 @@ public class AuthService : IAuthService
         // Cryptographically secure 6-digit OTP (100000–999999).
         // RandomNumberGenerator.GetInt32 uses the OS CSPRNG, unlike System.Random.
         var plaintextCode = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
-        var tokenHash = HashResetCode(plaintextCode);
+        var tokenHash = _tokenHasher.HashWithPepper(plaintextCode);
 
         _context.PasswordResetTokens.Add(new PasswordResetToken
         {
@@ -279,19 +284,76 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(token) || (!byPhone && string.IsNullOrWhiteSpace(email)))
             return (false, "A reset code and your email or phone are required.");
 
-        var tokenHash = HashResetCode(token.Trim());
+        var (entry, error) = await ResolveResetTokenAsync(email, token, phone);
+        if (entry == null)
+            return (false, error);
+
+        return (true, string.Empty);
+    }
+
+    /// <summary>
+    /// Matches a submitted reset code to its live token row. A wrong code is charged as a failed
+    /// attempt against the code currently outstanding for the supplied identity, and that code is
+    /// burned once <see cref="MaxResetAttempts"/> is reached — the IP rate limiter alone leaves a
+    /// 6-digit OTP guessable from rotating addresses. Mirrors the phone-verification counter in
+    /// UsersController.VerifyPhone. Returns (null, error) when the code is not usable.
+    /// </summary>
+    private async Task<(PasswordResetToken? Entry, string Error)> ResolveResetTokenAsync(string email, string token, string? phone)
+    {
+        const string invalid = "Invalid or expired reset code.";
+
+        var tokenHash = _tokenHasher.HashWithPepper(token.Trim());
         var entry = await _context.PasswordResetTokens
             .Include(t => t.User)
             .FirstOrDefaultAsync(t =>
                 t.Token == tokenHash && !t.Used && t.ExpiresAt > DateTime.UtcNow);
 
-        if (entry?.User == null)
-            return (false, "Invalid or expired reset code.");
+        if (entry?.User != null && ResetIdentityMatches(entry.User, email, phone))
+            return (entry, string.Empty);
 
-        if (!ResetIdentityMatches(entry.User, email, phone))
-            return (false, "Invalid or expired reset code.");
+        // The code did not resolve to this identity's token — count the miss on whatever code
+        // that identity currently has outstanding.
+        var outstanding = await FindOutstandingTokenAsync(email, phone);
+        if (outstanding == null)
+            return (null, invalid);
 
-        return (true, string.Empty);
+        outstanding.Attempts++;
+        var exhausted = outstanding.Attempts >= MaxResetAttempts;
+        if (exhausted)
+            outstanding.Used = true; // burn it: the user must request a fresh code
+        await _context.SaveChangesAsync();
+
+        if (exhausted)
+        {
+            _logger.LogWarning("Password reset code burned after {Attempts} failed attempts for user {UserId}",
+                outstanding.Attempts, outstanding.UserId);
+            return (null, "Too many incorrect attempts. Please request a new reset code.");
+        }
+
+        return (null, invalid);
+    }
+
+    /// <summary>The live (unused, unexpired) reset token belonging to the supplied identity, if any.</summary>
+    private async Task<PasswordResetToken?> FindOutstandingTokenAsync(string email, string? phone)
+    {
+        var live = _context.PasswordResetTokens
+            .Include(t => t.User)
+            .Where(t => !t.Used && t.ExpiresAt > DateTime.UtcNow);
+
+        if (!string.IsNullOrWhiteSpace(phone))
+        {
+            // Phone numbers are stored in mixed formats, so normalize in memory exactly as the
+            // reset-request flow does. Bounded by the live-token set, not by user count.
+            var wanted = NormalizePhone(phone);
+            var candidates = await live
+                .Where(t => t.User != null && t.User.Phone != null && t.User.Phone != "")
+                .ToListAsync();
+            return candidates.FirstOrDefault(t => NormalizePhone(t.User!.Phone!) == wanted);
+        }
+
+        if (string.IsNullOrWhiteSpace(email)) return null;
+        var wantedEmail = email.Trim().ToLower();
+        return await live.FirstOrDefaultAsync(t => t.User != null && t.User.Email.ToLower() == wantedEmail);
     }
 
     // The reset code is tied to a user; confirm the supplied identifier (phone for the
@@ -313,13 +375,6 @@ public class AuthService : IAuthService
         return digits.Length > 10 ? digits[^10..] : digits;
     }
 
-    private string HashResetCode(string plaintext)
-    {
-        var pepper = _configuration["PasswordReset:Pepper"] ?? string.Empty;
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(plaintext + pepper));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
-
     public async Task<(bool Ok, string Error)> ResetPasswordAsync(string email, string token, string newPassword, string? phone = null)
     {
         var minLen = Math.Clamp(_configuration.GetValue("Security:MinPasswordLength", 8), 8, 128);
@@ -329,21 +384,21 @@ public class AuthService : IAuthService
         if (newPassword.Length < minLen)
             return (false, $"Password must be at least {minLen} characters.");
 
-        var tokenHash = HashResetCode(token.Trim());
-        var entry = await _context.PasswordResetTokens
-            .Include(t => t.User)
-            .FirstOrDefaultAsync(t =>
-                t.Token == tokenHash && !t.Used && t.ExpiresAt > DateTime.UtcNow);
-
+        var (entry, error) = await ResolveResetTokenAsync(email, token, phone);
         if (entry?.User == null)
-            return (false, "Invalid or expired reset code.");
-
-        if (!ResetIdentityMatches(entry.User, email, phone))
-            return (false, "Invalid or expired reset code.");
+            return (false, error);
 
         entry.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, 12);
+        // Revokes every JWT issued before this moment (tokens live 7 days and are otherwise
+        // unaffected by a reset). Enforced in Program.cs → OnTokenValidated.
+        entry.User.PasswordChangedAt = DateTime.UtcNow;
         entry.Used = true;
         await _context.SaveChangesAsync();
+
+        // The auth hook caches this user's IsActive/PasswordChangedAt for 60s — drop it so the
+        // revocation takes effect on the next request instead of after the TTL.
+        _cache.Remove($"user-active:{entry.User.Id}");
+
         return (true, string.Empty);
     }
 }

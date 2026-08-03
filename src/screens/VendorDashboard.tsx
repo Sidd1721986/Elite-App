@@ -8,6 +8,7 @@ import { useReducedMotion } from 'react-native-reanimated';
 import { useAuth } from '../context/AuthContext';
 import AppLogo from '../components/AppLogo';
 import { useJobs } from '../context/JobContext';
+import { JobErrorBanner } from '../components/JobErrorBanner';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, Job, JobStatus, Urgency } from '../types/types';
@@ -298,7 +299,10 @@ const VendorDashboard: React.FC = () => {
         );
     }, [navigation, jobs, reducedMotion]);
 
-    const renderHeader = useCallback(() => (
+    // Built as an ELEMENT, not a component function: FlashList remounts ListHeaderComponent
+    // whenever the component *type* changes, which would blow away the Searchbar's keyboard
+    // focus on every keystroke. An element of the same type reconciles in place instead.
+    const headerElement = useMemo(() => (
         <View style={styles.headerWrapper}>
             <Surface style={styles.header} elevation={0}>
                 <View style={styles.headerTop}>
@@ -410,40 +414,52 @@ const VendorDashboard: React.FC = () => {
                 )}
             </Surface>
         </View>
-    ), [user, handleLogout, stats, settingsMenuVisible, navigation, messageUnreadTotal]);
+    ), [user, handleLogout, stats, settingsMenuVisible, navigation, messageUnreadTotal, searchQuery, isLoading, reducedMotion]);
+
+    const listHeaderElement = useMemo(() => (
+        <View>
+            {headerElement}
+            {isLoading && (
+                <View style={styles.headerSkeletons}>
+                    <JobSkeleton />
+                    <JobSkeleton />
+                </View>
+            )}
+        </View>
+    ), [headerElement, isLoading]);
+
+    const listEmptyElement = useMemo(() => (
+        <View style={styles.emptyBox}>
+            <IconButton icon="briefcase-variant-off-outline" size={48} iconColor="#E2E8F0" />
+            <Text variant="bodyLarge" style={styles.emptyText}>No available jobs in your area.</Text>
+            <Button mode="text" onPress={onRefresh}>Refresh Feed</Button>
+        </View>
+    ), [onRefresh]);
+
+    // Stable extraData ref — an inline array literal is a new object on every render,
+    // which defeats FlashList's memoization and re-renders every row.
+    const listExtraData = useMemo(
+        () => [isLoading, vendorGroupedFeed, refreshing, messageUnreadTotal, searchQuery],
+        [isLoading, vendorGroupedFeed, refreshing, messageUnreadTotal, searchQuery],
+    );
 
     return (
         <SafeAreaView style={styles.container} edges={['top']} testID="vendor_dashboard_screen">
+            <JobErrorBanner />
             <View style={{ flex: 1 }}>
                 <VendorList
                     data={isLoading ? [] : vendorGroupedFeed}
                     keyExtractor={(item: VendorJobGroup) => item.groupKey}
                     renderItem={renderOrderCard}
                     estimatedItemSize={250}
-                    ListHeaderComponent={() => (
-                        <View>
-                            {renderHeader()}
-                            {isLoading && (
-                                <View style={{ marginTop: 8 }}>
-                                    <JobSkeleton />
-                                    <JobSkeleton />
-                                </View>
-                            )}
-                        </View>
-                    )}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-                ListHeaderComponentStyle={styles.headerList}
-                ListEmptyComponent={() => (
-                    <View style={styles.emptyBox}>
-                        <IconButton icon="briefcase-variant-off-outline" size={48} iconColor="#E2E8F0" />
-                        <Text variant="bodyLarge" style={styles.emptyText}>No available jobs in your area.</Text>
-                        <Button mode="text" onPress={onRefresh}>Refresh Feed</Button>
-                    </View>
-                )}
-                contentContainerStyle={styles.listContent}
-                extraData={[isLoading, vendorGroupedFeed, refreshing, messageUnreadTotal, searchQuery]}
+                    ListHeaderComponent={listHeaderElement}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                    }
+                    ListHeaderComponentStyle={styles.headerList}
+                    ListEmptyComponent={listEmptyElement}
+                    contentContainerStyle={styles.listContent}
+                    extraData={listExtraData}
                 />
             </View>
 
@@ -568,6 +584,9 @@ const styles = StyleSheet.create({
     },
     headerList: {
         marginBottom: 24,
+    },
+    headerSkeletons: {
+        marginTop: 8,
     },
     listContent: {
         paddingBottom: 40,

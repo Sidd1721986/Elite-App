@@ -124,6 +124,7 @@ export interface Job {
   workStartDate?: string;
   completedPhotos: string[];
   isInvoiced?: boolean;
+  paymentStatus?: string; // 'Unpaid' | 'Paid' — source of truth is the Stripe webhook, never the client.
   invoiceDocumentUrl?: string;
   invoiceRequestedAt?: string;
   invoicedAt?: string;
@@ -169,6 +170,7 @@ export type RootStackParamList = {
   UserDashboard: undefined;
   RoleFallback: undefined;
   JobDetails: { jobId: string };
+  Payment: { jobId: string };
   AssignVendor: { jobId: string; reassignMode?: boolean };
   Chat: { otherUserId: string; otherUserName: string };
   Profile: undefined;

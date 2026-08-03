@@ -2,8 +2,10 @@ import { apiClient } from './apiClient';
 import { Job } from '../types/types';
 
 export const jobService = {
-    async getJobs(): Promise<Job[]> {
-        return apiClient.get<Job[]>('/jobs');
+    /** @param fresh bypass the 5-min GET cache — explicit refreshes and polls must see
+     *  server truth (e.g. a job the admin just assigned, or Paid status after checkout). */
+    async getJobs(fresh = false): Promise<Job[]> {
+        return apiClient.get<Job[]>('/jobs', fresh);
     },
 
     async getJobById(id: string): Promise<Job> {
@@ -76,6 +78,11 @@ export const jobService = {
     async uploadInvoice(jobId: string, invoiceDocumentUrl: string): Promise<Job> {
         return apiClient.post<Job>(`/jobs/${jobId}/upload-invoice`, { invoiceDocumentUrl });
     },
+
+    /** Admin emails the uploaded invoice to the customer. */
+    async sendInvoice(jobId: string): Promise<{ message: string }> {
+        return apiClient.post<{ message: string }>(`/jobs/${jobId}/send-invoice`, {});
+    },
     async addJobPhotos(jobId: string, photos: string[]): Promise<Job> {
         return apiClient.post<Job>(`/jobs/${jobId}/photos`, { photos });
     },
@@ -85,12 +92,12 @@ export const jobService = {
     async uploadFile(file: any): Promise<{ url: string }> {
         const formData = new FormData();
         formData.append('file', file);
+        // Do NOT set Content-Type manually: a bare 'multipart/form-data' has no boundary
+        // parameter, so the server can't parse the body. Let React Native's fetch generate
+        // the header (with the correct boundary) from the FormData body.
         return apiClient.request<{ url: string }>('/files/upload', {
             method: 'POST',
             body: formData,
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
         });
     },
 };

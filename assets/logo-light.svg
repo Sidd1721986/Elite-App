@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <linearGradient id="goldGradL" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#C9952A"/>
+      <stop offset="50%"  stop-color="#A07820"/>
+      <stop offset="100%" stop-color="#C9952A"/>
+    </linearGradient>
+    <clipPath id="houseClipL">
+      <polygon points="130,225 130,330 370,330 370,225 250,115"/>
+    </clipPath>
+    <filter id="shadowL" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#0D1B3E" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- White background -->
+  <rect width="500" height="500" rx="50" ry="50" fill="#FFFFFF"/>
+
+  <!-- Subtle navy border -->
+  <rect x="8" y="8" width="484" height="484" rx="44" ry="44"
+        fill="none" stroke="#0D1B3E" stroke-width="6"/>
+  <rect x="14" y="14" width="472" height="472" rx="40" ry="40"
+        fill="none" stroke="url(#goldGradL)" stroke-width="2" opacity="0.7"/>
+
+  <!-- American flag inside house (clipped) -->
+  <g clip-path="url(#houseClipL)">
+    <rect x="130" y="115" width="240" height="215" fill="#B22234"/>
+    <rect x="130" y="130" width="240" height="16" fill="#FFFFFF"/>
+    <rect x="130" y="162" width="240" height="16" fill="#FFFFFF"/>
+    <rect x="130" y="194" width="240" height="16" fill="#FFFFFF"/>
+    <rect x="130" y="226" width="240" height="16" fill="#FFFFFF"/>
+    <rect x="130" y="258" width="240" height="16" fill="#FFFFFF"/>
+    <rect x="130" y="290" width="240" height="16" fill="#FFFFFF"/>
+    <rect x="130" y="115" width="108" height="120" fill="#3C3B6E"/>
+    <g fill="#FFFFFF">
+      <circle cx="148" cy="130" r="4"/><circle cx="168" cy="130" r="4"/>
+      <circle cx="188" cy="130" r="4"/><circle cx="208" cy="130" r="4"/>
+      <circle cx="228" cy="130" r="4"/>
+      <circle cx="158" cy="146" r="4"/><circle cx="178" cy="146" r="4"/>
+      <circle cx="198" cy="146" r="4"/><circle cx="218" cy="146" r="4"/>
+      <circle cx="148" cy="162" r="4"/><circle cx="168" cy="162" r="4"/>
+      <circle cx="188" cy="162" r="4"/><circle cx="208" cy="162" r="4"/>
+      <circle cx="228" cy="162" r="4"/>
+      <circle cx="158" cy="178" r="4"/><circle cx="178" cy="178" r="4"/>
+      <circle cx="198" cy="178" r="4"/><circle cx="218" cy="178" r="4"/>
+      <circle cx="148" cy="194" r="4"/><circle cx="168" cy="194" r="4"/>
+      <circle cx="188" cy="194" r="4"/><circle cx="208" cy="194" r="4"/>
+      <circle cx="228" cy="194" r="4"/>
+      <circle cx="158" cy="210" r="4"/><circle cx="178" cy="210" r="4"/>
+      <circle cx="198" cy="210" r="4"/><circle cx="218" cy="210" r="4"/>
+    </g>
+  </g>
+
+  <!-- House outline (navy/gold) -->
+  <polygon points="118,228 250,100 382,228"
+           fill="none" stroke="#0D1B3E" stroke-width="10" stroke-linejoin="round"/>
+  <polygon points="118,228 250,100 382,228"
+           fill="none" stroke="url(#goldGradL)" stroke-width="5" stroke-linejoin="round"/>
+  <rect x="130" y="225" width="240" height="105"
+        fill="none" stroke="#0D1B3E" stroke-width="10" stroke-linejoin="round"/>
+  <rect x="130" y="225" width="240" height="105"
+        fill="none" stroke="url(#goldGradL)" stroke-width="5" stroke-linejoin="round"/>
+
+  <!-- Window -->
+  <rect x="290" y="245" width="60" height="55" rx="4"
+        fill="#FFFFFF" stroke="#0D1B3E" stroke-width="5"/>
+  <rect x="290" y="245" width="60" height="55" rx="4"
+        fill="none" stroke="url(#goldGradL)" stroke-width="3"/>
+  <line x1="320" y1="245" x2="320" y2="300" stroke="url(#goldGradL)" stroke-width="3"/>
+  <line x1="290" y1="272" x2="350" y2="272" stroke="url(#goldGradL)" stroke-width="3"/>
+
+  <!-- Door -->
+  <rect x="218" y="268" width="44" height="62" rx="4"
+        fill="#FFFFFF" stroke="#0D1B3E" stroke-width="5"/>
+  <rect x="218" y="268" width="44" height="62" rx="4"
+        fill="none" stroke="url(#goldGradL)" stroke-width="3"/>
+  <circle cx="255" cy="300" r="4" fill="url(#goldGradL)"/>
+
+  <!-- Chimney -->
+  <rect x="300" y="115" width="28" height="62"
+        fill="none" stroke="#0D1B3E" stroke-width="6"/>
+  <rect x="300" y="115" width="28" height="62"
+        fill="none" stroke="url(#goldGradL)" stroke-width="3"/>
+
+  <!-- Gold swoosh -->
+  <path d="M 100 348 Q 250 310 400 348"
+        fill="none" stroke="url(#goldGradL)" stroke-width="5" opacity="0.9"/>
+
+  <!-- Company name in navy + gold -->
+  <text x="250" y="388"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="40" font-weight="bold" letter-spacing="5"
+        text-anchor="middle" fill="#0D1B3E">
+    ELITE HOME
+  </text>
+  <text x="250" y="428"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="32" font-weight="bold" letter-spacing="8"
+        text-anchor="middle" fill="url(#goldGradL)">
+    SERVICES USA
+  </text>
+</svg>

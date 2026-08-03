@@ -210,6 +210,10 @@ const VendorSignupScreen: React.FC<Props> = ({ navigation }) => {
                                         label={submitted && !street ? 'Business Street Address *' : 'Business Street Address'}
                                         hasError={submitted && !street}
                                         initialValue={street}
+                                        // Manually typed street must reach form state too —
+                                        // otherwise it stays inside the autocomplete and signup
+                                        // fails validation despite visible text.
+                                        onChangeText={(v) => { setStreet(v); setAddressValid(null); }}
                                         onAddressSelect={({ street: s, city: c, zip: z, state: st }) => {
                                             setStreet(s);
                                             setCity(c);

@@ -17,7 +17,14 @@ export function parseChatMessageContent(content: string): ParsedChatMessage {
                 typeof o.url === 'string' &&
                 o.url.trim().length > 0
             ) {
-                return { kind: 'image', url: o.url.trim() };
+                const url = o.url.trim();
+                // Only render peer-supplied URLs that are https. A non-https URL handed to an
+                // <Image>/FastImage source would silently fire a request to an attacker-chosen
+                // host (beaconing / IP grab). Anything else falls through to plain text, where
+                // tapping is still gated by the validated external-URL opener.
+                if (/^https:\/\//i.test(url)) {
+                    return { kind: 'image', url };
+                }
             }
         } catch {
             /* plain text that happens to start with { */

@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Elite Home Services — 3D UI Preview</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:'Inter',sans-serif;
+  background:#07091a;
+  color:#fff;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+/* animated bg */
+body::before{
+  content:'';position:fixed;inset:0;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 10%,rgba(99,102,241,.18) 0%,transparent 55%),
+    radial-gradient(ellipse 60% 60% at 85% 85%,rgba(16,185,129,.09) 0%,transparent 55%);
+  pointer-events:none;z-index:0;
+}
+
+/* ── hero ── */
+.hero{
+  position:relative;z-index:1;
+  text-align:center;
+  padding:52px 24px 32px;
+}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(99,102,241,.14);
+  border:1px solid rgba(99,102,241,.35);
+  border-radius:100px;padding:5px 14px;
+  font-size:11px;font-weight:700;color:#a5b4fc;
+  letter-spacing:1.5px;text-transform:uppercase;margin-bottom:18px;
+}
+.hero h1{
+  font-size:clamp(26px,4.5vw,52px);font-weight:900;line-height:1.1;
+  background:linear-gradient(130deg,#fff 0%,#a5b4fc 55%,#6366f1 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  margin-bottom:10px;
+}
+.hero p{font-size:14px;color:#64748b;max-width:480px;margin:0 auto 36px;line-height:1.65;}
+
+/* ── phones row — single line ── */
+.phones-row{
+  position:relative;z-index:1;
+  display:flex;justify-content:center;align-items:flex-start;
+  gap:28px;
+  padding:0 24px 60px;
+  flex-wrap:nowrap;
+  overflow-x:auto;
+}
+
+/* ── phone card ── */
+.phone-wrap{
+  flex-shrink:0;
+  display:flex;flex-direction:column;align-items:center;
+  transition:transform .4s cubic-bezier(.34,1.56,.64,1);
+}
+.phone-wrap:hover{transform:translateY(-12px) scale(1.03);}
+
+.phone{
+  width:190px;height:390px;
+  background:linear-gradient(160deg,#1b2040,#111628);
+  border-radius:36px;
+  border:1.5px solid rgba(255,255,255,.11);
+  overflow:hidden;
+  position:relative;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.05),
+    0 24px 60px rgba(0,0,0,.65),
+    0 8px 20px rgba(0,0,0,.4),
+    inset 0 1px 0 rgba(255,255,255,.13);
+  /* subtle perspective tilt */
+  transform:perspective(900px) rotateY(var(--ry,0deg)) rotateX(4deg);
+  transition:transform .45s cubic-bezier(.34,1.56,.64,1),box-shadow .45s ease;
+}
+.phone-wrap:hover .phone{
+  transform:perspective(900px) rotateY(0deg) rotateX(0deg);
+  box-shadow:
+    0 0 0 1px rgba(99,102,241,.25),
+    0 32px 80px rgba(99,102,241,.25),
+    0 8px 24px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.18);
+}
+/* alternating tilt directions */
+.phone-wrap:nth-child(odd)  .phone{--ry:-13deg;}
+.phone-wrap:nth-child(even) .phone{--ry: 13deg;}
+.phone-wrap:nth-child(4)    .phone{--ry:-13deg;}
+
+/* glass reflection overlay */
+.phone::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:45%;
+  background:linear-gradient(180deg,rgba(255,255,255,.055) 0%,transparent 100%);
+  border-radius:35px 35px 0 0;pointer-events:none;z-index:30;
+}
+/* edge glow */
+.phone::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(99,102,241,.07) 0%,transparent 50%);
+  border-radius:35px;pointer-events:none;z-index:29;
+}
+
+/* notch */
+.notch{
+  position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:72px;height:20px;
+  background:#070919;border-radius:0 0 14px 14px;
+  z-index:31;display:flex;align-items:center;justify-content:center;
+}
+.notch-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:#141629;border:1.5px solid #1e2240;
+}
+
+/* screen content */
+.sc{
+  position:absolute;inset:0;overflow:hidden;border-radius:35px;
+  font-family:'Inter',sans-serif;
+}
+
+/* label */
+.phone-label{
+  text-align:center;margin-top:16px;
+}
+.phone-label h3{
+  font-size:11px;font-weight:800;color:#e2e8f0;
+  letter-spacing:2px;text-transform:uppercase;
+}
+.phone-label p{font-size:10px;color:#475569;margin-top:3px;}
+
+/* ───────────────────────────────
+   SCREEN STYLES
+─────────────────────────────── */
+
+/* shared atoms */
+.tag-pill{
+  display:inline-block;font-size:7px;font-weight:800;
+  padding:2px 7px;border-radius:5px;letter-spacing:.5px;text-transform:uppercase;
+}
+
+/* ── 1. LANDING ── */
+.sc-land{
+  background:linear-gradient(155deg,#0e1428 0%,#171d38 55%,#0e1428 100%);
+  display:flex;flex-direction:column;align-items:center;padding-top:42px;
+}
+.land-logo{
+  width:56px;height:56px;
+  background:linear-gradient(135deg,#6366f1,#4f46e5);
+  border-radius:18px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;margin-bottom:14px;
+  box-shadow:0 14px 32px rgba(99,102,241,.55);
+  position:relative;
+}
+.land-logo::after{
+  content:'';position:absolute;inset:-5px;border-radius:22px;
+  border:1px solid rgba(99,102,241,.35);
+  animation:ring 2s ease-out infinite;
+}
+@keyframes ring{0%{transform:scale(1);opacity:.6}100%{transform:scale(1.25);opacity:0}}
+.land-brand{font-size:15px;font-weight:900;color:#fff;text-align:center;}
+.land-brand span{color:#6366f1;}
+.land-sub{font-size:7px;color:#475569;letter-spacing:2.5px;text-transform:uppercase;margin:4px 0 22px;}
+.rc{
+  width:152px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;padding:10px 12px;
+  display:flex;align-items:center;gap:9px;
+  margin-bottom:7px;position:relative;overflow:hidden;
+}
+.rc::before{
+  content:'';position:absolute;top:0;left:0;width:2.5px;height:100%;
+  background:var(--ac,#6366f1);border-radius:2px 0 0 2px;
+}
+.rc-icon{
+  width:28px;height:28px;
+  background:var(--ab,rgba(99,102,241,.14));
+  border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-size:13px;flex-shrink:0;
+}
+.rc-info h4{font-size:10px;font-weight:700;color:#e2e8f0;}
+.rc-info p{font-size:8px;color:#475569;margin-top:1px;}
+.rc-arr{font-size:11px;color:#334155;margin-left:auto;}
+
+/* ── 2. LOGIN ── */
+.sc-login{
+  background:linear-gradient(160deg,#f8fafc,#eef2ff);
+  display:flex;flex-direction:column;
+}
+.login-top{
+  background:linear-gradient(135deg,#6366f1,#4f46e5);
+  padding:28px 16px 22px;
+  display:flex;flex-direction:column;align-items:center;
+  position:relative;overflow:hidden;
+}
+.login-top::before{
+  content:'';position:absolute;top:-28px;right:-28px;
+  width:80px;height:80px;background:rgba(255,255,255,.08);border-radius:50%;
+}
+.login-logo-sm{
+  width:38px;height:38px;background:rgba(255,255,255,.15);
+  border-radius:12px;display:flex;align-items:center;justify-content:center;
+  font-size:17px;margin-bottom:7px;
+}
+.login-top h2{font-size:12px;font-weight:800;color:#fff;}
+.login-top p{font-size:8px;color:rgba(255,255,255,.65);margin-top:2px;}
+.login-body{padding:14px 14px;display:flex;flex-direction:column;gap:9px;}
+.rbadge{
+  background:rgba(99,102,241,.09);border:1px solid rgba(99,102,241,.2);
+  border-radius:7px;padding:5px 9px;
+  font-size:8px;font-weight:700;color:#6366f1;letter-spacing:.8px;
+}
+.fl{font-size:7px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px;}
+.fi{
+  background:#fff;border:1.5px solid #e2e8f0;border-radius:9px;
+  padding:7px 10px;display:flex;align-items:center;gap:6px;
+  box-shadow:0 2px 6px rgba(0,0,0,.05);
+}
+.fi .ic{font-size:11px;}
+.fi .ph{font-size:9px;color:#cbd5e1;}
+.lbtn{
+  background:linear-gradient(135deg,#6366f1,#4f46e5);
+  border-radius:9px;padding:9px;text-align:center;
+  font-size:10px;font-weight:700;color:#fff;margin-top:3px;
+  box-shadow:0 6px 18px rgba(99,102,241,.4);
+}
+.lfooter{text-align:center;font-size:8px;color:#94a3b8;}
+.lfooter span{color:#6366f1;font-weight:600;}
+
+/* ── 3. USER DASHBOARD ── */
+.sc-user{background:#f8fafc;display:flex;flex-direction:column;}
+.udh{
+  background:#fff;padding:28px 12px 12px;
+  border-radius:0 0 20px 20px;
+  box-shadow:0 4px 16px rgba(0,0,0,.06);
+}
+.udh-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.udh-icos{display:flex;gap:5px;}
+.udi{
+  width:26px;height:26px;background:#eef2ff;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;position:relative;
+}
+.bdot{
+  position:absolute;top:-2px;right:-2px;width:6px;height:6px;
+  background:#ef4444;border-radius:50%;border:1.5px solid #fff;
+}
+.wtxt h3{font-size:11px;font-weight:900;color:#1e293b;}
+.wtxt p{font-size:8px;color:#94a3b8;margin-top:1px;}
+.stats-r{display:flex;gap:6px;margin-top:9px;}
+.sp{
+  flex:1;border-radius:10px;padding:7px 6px;text-align:center;
+}
+.sp:nth-child(1){background:linear-gradient(135deg,#6366f1,#4f46e5);}
+.sp:nth-child(2){background:linear-gradient(135deg,#10b981,#059669);}
+.sp:nth-child(3){background:linear-gradient(135deg,#f59e0b,#d97706);}
+.sp .sn{font-size:13px;font-weight:900;color:#fff;}
+.sp .sl{font-size:7px;color:rgba(255,255,255,.75);margin-top:1px;}
+.jlist{padding:9px 10px;flex:1;}
+.jlist h4{font-size:8px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:7px;}
+.jc{
+  background:#fff;border-radius:12px;padding:9px;margin-bottom:7px;
+  border:1px solid #f1f5f9;
+  box-shadow:0 3px 12px rgba(0,0,0,.04);
+  position:relative;overflow:hidden;
+}
+.jc::before{
+  content:'';position:absolute;top:0;left:0;width:2.5px;height:100%;
+  background:var(--jcc,#6366f1);
+}
+.jc-t{display:flex;justify-content:space-between;margin-bottom:4px;}
+.jc-ti{font-size:9px;font-weight:800;color:#1e293b;}
+.jc-d{font-size:7px;color:#94a3b8;}
+.jc-a{font-size:8px;color:#64748b;margin-bottom:6px;}
+.jc-pb{height:3px;background:#f1f5f9;border-radius:2px;overflow:hidden;margin-bottom:5px;}
+.jc-pf{height:100%;border-radius:2px;background:var(--jcc,#6366f1);}
+.jst{
+  display:inline-block;background:var(--jcb,#eef2ff);
+  color:var(--jcc,#6366f1);font-size:7px;font-weight:800;
+  padding:2px 6px;border-radius:5px;letter-spacing:.4px;text-transform:uppercase;
+}
+/* FAB */
+.fab{
+  position:absolute;bottom:46px;right:12px;
+  width:32px;height:32px;
+  background:linear-gradient(135deg,#6366f1,#4f46e5);
+  border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:18px;color:#fff;
+  box-shadow:0 6px 16px rgba(99,102,241,.5);
+}
+.bnav{
+  display:flex;background:#fff;border-top:1px solid #f1f5f9;
+  padding:7px 0 10px;margin-top:auto;
+}
+.bni{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:7px;color:#94a3b8;font-weight:500;}
+.bni.active{color:#6366f1;}
+.bni-icon{font-size:13px;}
+.bni-dot{width:3px;height:3px;background:#6366f1;border-radius:50%;}
+
+/* ── 4. JOB FORM ── */
+.sc-form{background:#f8fafc;display:flex;flex-direction:column;}
+.fh{
+  background:linear-gradient(135deg,#6366f1,#4f46e5);
+  padding:28px 13px 16px;border-radius:0 0 20px 20px;
+}
+.fh-top{display:flex;align-items:center;gap:8px;margin-bottom:3px;}
+.bk{
+  width:22px;height:22px;background:rgba(255,255,255,.15);border-radius:7px;
+  display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;
+}
+.fh h2{font-size:11px;font-weight:800;color:#fff;}
+.fh p{font-size:8px;color:rgba(255,255,255,.65);}
+.fb{padding:12px 11px;flex:1;overflow:hidden;}
+.fsl{font-size:7px;font-weight:700;color:#64748b;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;}
+.chip{
+  background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;
+  padding:4px 8px;font-size:7px;font-weight:600;color:#475569;
+}
+.chip.on{background:#eef2ff;border-color:#6366f1;color:#6366f1;}
+.fin{
+  background:#fff;border:1.5px solid #e2e8f0;border-radius:9px;
+  padding:7px 10px;font-size:8px;color:#94a3b8;
+  box-shadow:0 2px 6px rgba(0,0,0,.03);margin-bottom:8px;
+}
+.urg{display:flex;gap:5px;margin-bottom:10px;}
+.ub{
+  flex:1;padding:6px 3px;text-align:center;
+  background:#fff;border:1.5px solid #e2e8f0;
+  border-radius:8px;font-size:7px;font-weight:600;color:#64748b;
+}
+.ub.on{background:#eef2ff;border-color:#6366f1;color:#6366f1;}
+.sbtn{
+  background:linear-gradient(135deg,#6366f1,#4f46e5);
+  border-radius:11px;padding:10px;text-align:center;
+  font-size:10px;font-weight:800;color:#fff;
+  box-shadow:0 6px 18px rgba(99,102,241,.4);
+}
+
+/* ── 5. VENDOR DASHBOARD ── */
+.sc-vend{background:#f8fafc;display:flex;flex-direction:column;}
+.vh{
+  background:linear-gradient(135deg,#1e293b,#0f172a);
+  padding:28px 13px 16px;border-radius:0 0 20px 20px;
+  position:relative;overflow:hidden;
+}
+.vh::before{
+  content:'';position:absolute;top:-20px;right:-20px;
+  width:70px;height:70px;background:rgba(99,102,241,.14);border-radius:50%;
+}
+.vh-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;}
+.v-prof{display:flex;align-items:center;gap:8px;}
+.vava{
+  width:32px;height:32px;
+  background:linear-gradient(135deg,#6366f1,#4f46e5);
+  border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:800;color:#fff;
+  box-shadow:0 4px 10px rgba(99,102,241,.4);
+}
+.vn{font-size:11px;font-weight:800;color:#fff;}
+.vr{font-size:7px;color:#475569;margin-top:1px;}
+.vbell{
+  width:26px;height:26px;background:rgba(255,255,255,.08);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:13px;position:relative;
+}
+.vst{display:flex;gap:6px;}
+.vs{
+  flex:1;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:9px;padding:7px 6px;text-align:center;
+}
+.vs .vsn{font-size:13px;font-weight:900;color:#fff;}
+.vs .vsl{font-size:7px;color:#475569;margin-top:1px;}
+.vs:nth-child(1) .vsn{color:#6366f1;}
+.vs:nth-child(2) .vsn{color:#f59e0b;}
+.vs:nth-child(3) .vsn{color:#10b981;}
+.vjf{padding:10px;flex:1;}
+.vjf h4{font-size:8px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
+.vjc{
+  background:#fff;border-radius:12px;padding:10px;margin-bottom:8px;
+  border:1px solid #f1f5f9;box-shadow:0 3px 12px rgba(0,0,0,.04);
+}
+.vjct{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.vjcti{font-size:9px;font-weight:800;color:#1e293b;}
+.nb{background:#eef2ff;color:#6366f1;font-size:7px;font-weight:800;padding:2px 6px;border-radius:5px;letter-spacing:.5px;}
+.pb2{background:#fffbeb;color:#d97706;font-size:7px;font-weight:800;padding:2px 6px;border-radius:5px;letter-spacing:.5px;}
+.vjcl{font-size:8px;color:#64748b;margin-bottom:8px;}
+.vjca{display:flex;gap:5px;}
+.vacc{
+  flex:1;background:linear-gradient(135deg,#10b981,#059669);
+  border-radius:8px;padding:6px;text-align:center;
+  font-size:8px;font-weight:700;color:#fff;
+  box-shadow:0 3px 10px rgba(16,185,129,.3);
+}
+.vdec{
+  flex:1;background:#fef2f2;border:1px solid #fecaca;
+  border-radius:8px;padding:6px;text-align:center;
+  font-size:8px;font-weight:700;color:#ef4444;
+}
+
+/* ── 6. ADMIN DASHBOARD ── */
+.sc-adm{background:#f8fafc;display:flex;flex-direction:column;}
+.adh{
+  background:linear-gradient(135deg,#1e293b,#0f172a);
+  padding:28px 13px 16px;border-radius:0 0 20px 20px;
+  position:relative;overflow:hidden;
+}
+.adh::before{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(-45deg,transparent,transparent 8px,
+    rgba(99,102,241,.025) 8px,rgba(99,102,241,.025) 9px);
+}
+.adh-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:relative;}
+.adh-ti{font-size:12px;font-weight:900;color:#fff;}
+.adh-su{font-size:7px;color:#475569;margin-top:2px;}
+.abadge{
+  background:linear-gradient(135deg,#6366f1,#4f46e5);
+  border-radius:7px;padding:3px 8px;
+  font-size:8px;font-weight:800;color:#fff;letter-spacing:.8px;
+}
+.adgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;position:relative;}
+.adas{
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:9px;padding:7px 6px;
+}
+.adas .an{font-size:15px;font-weight:900;color:#fff;}
+.adas .al{font-size:7px;color:#475569;margin-top:1px;}
+.adas .at{font-size:7px;font-weight:700;margin-top:3px;}
+.adas:nth-child(1) .an{color:#6366f1;}
+.adas:nth-child(2) .an{color:#f59e0b;}
+.adas:nth-child(3) .an{color:#10b981;}
+.adlist{padding:10px;flex:1;}
+.adlist h4{font-size:8px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
+.adjc{
+  background:#fff;border-radius:11px;padding:9px;margin-bottom:7px;
+  border:1px solid #f1f5f9;box-shadow:0 3px 12px rgba(0,0,0,.04);
+}
+.adjct{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.adjcn{font-size:9px;font-weight:800;color:#1e293b;}
+.unas{background:#fef2f2;color:#ef4444;font-size:7px;font-weight:800;padding:2px 6px;border-radius:5px;}
+.asnd{background:#ecfdf5;color:#10b981;font-size:7px;font-weight:800;padding:2px 6px;border-radius:5px;}
+.adjcd{font-size:8px;color:#64748b;margin-bottom:7px;}
+.adja{display:flex;gap:5px;}
+.adjas{
+  flex:2;background:linear-gradient(135deg,#6366f1,#4f46e5);
+  border-radius:7px;padding:6px;text-align:center;
+  font-size:8px;font-weight:700;color:#fff;
+  box-shadow:0 3px 10px rgba(99,102,241,.3);
+}
+.adjav{
+  flex:1;background:#f1f5f9;border-radius:7px;padding:6px;
+  text-align:center;font-size:8px;font-weight:700;color:#475569;
+}
+
+/* ── info footer ── */
+.info{
+  position:relative;z-index:1;text-align:center;
+  max-width:800px;margin:0 auto;padding:8px 24px 64px;
+}
+.info h2{
+  font-size:22px;font-weight:900;
+  background:linear-gradient(130deg,#fff,#a5b4fc);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  margin-bottom:10px;
+}
+.info p{font-size:13px;color:#475569;line-height:1.7;max-width:520px;margin:0 auto 24px;}
+.tags{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;}
+.tg{
+  background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);
+  border-radius:100px;padding:5px 14px;
+  font-size:11px;color:#a5b4fc;font-weight:600;
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-badge">✦ 3D UI Preview — Hover each phone</div>
+  <h1>Elite Home Services<br/>App Screens</h1>
+  <p>Hover each phone to see it rise and flatten into focus. All 6 screens with depth, shadows and glass layers.</p>
+</div>
+
+<div class="phones-row">
+
+  <!-- 1. LANDING -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="notch"><div class="notch-dot"></div></div>
+      <div class="sc sc-land">
+        <div class="land-logo">🏠</div>
+        <div class="land-brand"><span>Elite</span> Home Services</div>
+        <div class="land-sub">Premium · Trusted · Fast</div>
+        <div class="rc" style="--ac:#6366f1;--ab:rgba(99,102,241,.13);">
+          <div class="rc-icon">🛡️</div>
+          <div class="rc-info"><h4>Admin</h4><p>Manage jobs &amp; vendors</p></div>
+          <div class="rc-arr">›</div>
+        </div>
+        <div class="rc" style="--ac:#3b82f6;--ab:rgba(59,130,246,.13);">
+          <div class="rc-icon">🔧</div>
+          <div class="rc-info"><h4>Vendor</h4><p>View &amp; accept jobs</p></div>
+          <div class="rc-arr">›</div>
+        </div>
+        <div class="rc" style="--ac:#10b981;--ab:rgba(16,185,129,.13);">
+          <div class="rc-icon">👤</div>
+          <div class="rc-info"><h4>User</h4><p>Request home services</p></div>
+          <div class="rc-arr">›</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><h3>Landing</h3><p>Role selector</p></div>
+  </div>
+
+  <!-- 2. LOGIN -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="notch"><div class="notch-dot"></div></div>
+      <div class="sc sc-login">
+        <div class="login-top">
+          <div class="login-logo-sm">🏠</div>
+          <h2>Elite Home Services</h2>
+          <p>Sign in to your account</p>
+        </div>
+        <div class="login-body">
+          <div class="rbadge">👤 USER LOGIN</div>
+          <div>
+            <div class="fl">Email</div>
+            <div class="fi"><span class="ic">✉️</span><span class="ph">your@email.com</span></div>
+          </div>
+          <div>
+            <div class="fl">Password</div>
+            <div class="fi"><span class="ic">🔒</span><span class="ph">••••••••</span></div>
+          </div>
+          <div class="lbtn">Sign In →</div>
+          <div class="lfooter">Forgot password?</div>
+          <div class="lfooter" style="margin-top:6px;">New here? <span>Join Now</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><h3>Login</h3><p>Authentication</p></div>
+  </div>
+
+  <!-- 3. USER DASHBOARD -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="notch"><div class="notch-dot"></div></div>
+      <div class="sc sc-user" style="position:relative;">
+        <div class="udh">
+          <div class="udh-top">
+            <div class="wtxt"><h3>Hello, John 👋</h3><p>Ready to fix something?</p></div>
+            <div class="udh-icos">
+              <div class="udi">💬<div class="bdot"></div></div>
+              <div class="udi" style="color:#6366f1;">☰</div>
+            </div>
+          </div>
+          <div class="stats-r">
+            <div class="sp"><div class="sn">3</div><div class="sl">Active</div></div>
+            <div class="sp"><div class="sn">7</div><div class="sl">Done</div></div>
+            <div class="sp"><div class="sn">1</div><div class="sl">Pending</div></div>
+          </div>
+        </div>
+        <div class="jlist">
+          <h4>Active Jobs</h4>
+          <div class="jc" style="--jcc:#6366f1;--jcb:#eef2ff;">
+            <div class="jc-t"><div class="jc-ti">🔧 Plumbing Repair</div><div class="jc-d">Today</div></div>
+            <div class="jc-a">📍 1845 Hubbard St</div>
+            <div class="jc-pb"><div class="jc-pf" style="width:60%;"></div></div>
+            <div class="jst">In Progress</div>
+          </div>
+          <div class="jc" style="--jcc:#f59e0b;--jcb:#fffbeb;">
+            <div class="jc-t"><div class="jc-ti">⚡ Electrical</div><div class="jc-d">May 8</div></div>
+            <div class="jc-a">📍 9117 Woodsman Cove</div>
+            <div class="jc-pb"><div class="jc-pf" style="width:25%;background:#f59e0b;"></div></div>
+            <div class="jst" style="color:#f59e0b;background:#fffbeb;">Pending</div>
+          </div>
+        </div>
+        <div class="fab">＋</div>
+        <div class="bnav">
+          <div class="bni active"><div class="bni-icon">🏠</div><div>Home</div><div class="bni-dot"></div></div>
+          <div class="bni"><div class="bni-icon">📋</div><div>Jobs</div></div>
+          <div class="bni"><div class="bni-icon">💬</div><div>Chat</div></div>
+          <div class="bni"><div class="bni-icon">👤</div><div>Profile</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><h3>User Dashboard</h3><p>Jobs &amp; stats</p></div>
+  </div>
+
+  <!-- 4. JOB FORM -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="notch"><div class="notch-dot"></div></div>
+      <div class="sc sc-form">
+        <div class="fh">
+          <div class="fh-top">
+            <div class="bk">‹</div>
+            <div><h2>New Service Request</h2><p>Tell us what you need</p></div>
+          </div>
+        </div>
+        <div class="fb">
+          <div class="fsl">Services Needed</div>
+          <div class="chips">
+            <div class="chip on">🔧 Plumbing</div>
+            <div class="chip">⚡ Electrical</div>
+            <div class="chip">❄️ HVAC</div>
+            <div class="chip">🧹 Cleaning</div>
+            <div class="chip">🏠 Roofing</div>
+          </div>
+          <div class="fsl">Address</div>
+          <div class="fin">📍 123 Main St, Jacksonville FL</div>
+          <div class="fsl">Urgency</div>
+          <div class="urg">
+            <div class="ub">Low</div>
+            <div class="ub on">Medium</div>
+            <div class="ub">High</div>
+            <div class="ub">🚨 ASAP</div>
+          </div>
+          <div class="sbtn">Submit Request →</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><h3>Job Request</h3><p>Service form</p></div>
+  </div>
+
+  <!-- 5. VENDOR DASHBOARD -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="notch"><div class="notch-dot"></div></div>
+      <div class="sc sc-vend">
+        <div class="vh">
+          <div class="vh-top">
+            <div class="v-prof">
+              <div class="vava">MK</div>
+              <div><div class="vn">Mike's Services</div><div class="vr">Plumbing &amp; HVAC Vendor</div></div>
+            </div>
+            <div class="vbell">🔔<div class="bdot"></div></div>
+          </div>
+          <div class="vst">
+            <div class="vs"><div class="vsn">5</div><div class="vsl">New Jobs</div></div>
+            <div class="vs"><div class="vsn">12</div><div class="vsl">Active</div></div>
+            <div class="vs"><div class="vsn">98%</div><div class="vsl">Rating</div></div>
+          </div>
+        </div>
+        <div class="vjf">
+          <h4>New Assignments</h4>
+          <div class="vjc">
+            <div class="vjct"><div class="vjcti">🔧 Plumbing Repair</div><div class="nb">NEW</div></div>
+            <div class="vjcl">📍 1845 Hubbard St · Today 2pm</div>
+            <div class="vjca"><div class="vacc">✓ Accept</div><div class="vdec">✗ Decline</div></div>
+          </div>
+          <div class="vjc">
+            <div class="vjct"><div class="vjcti">❄️ HVAC Service</div><div class="pb2">PENDING</div></div>
+            <div class="vjcl">📍 9117 Woodsman Cove · Tomorrow</div>
+            <div class="vjca"><div class="vacc">✓ Accept</div><div class="vdec">✗ Decline</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><h3>Vendor Dashboard</h3><p>Job assignments</p></div>
+  </div>
+
+  <!-- 6. ADMIN DASHBOARD -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="notch"><div class="notch-dot"></div></div>
+      <div class="sc sc-adm">
+        <div class="adh">
+          <div class="adh-top">
+            <div><div class="adh-ti">Command Center</div><div class="adh-su">Elite Home Services Admin</div></div>
+            <div class="abadge">⚡ ADMIN</div>
+          </div>
+          <div class="adgrid">
+            <div class="adas"><div class="an">24</div><div class="al">Total Jobs</div><div class="at" style="color:#10b981;">↑ 12%</div></div>
+            <div class="adas"><div class="an">8</div><div class="al">Pending</div><div class="at" style="color:#94a3b8;">↔ 0%</div></div>
+            <div class="adas"><div class="an">16</div><div class="al">Vendors</div><div class="at" style="color:#10b981;">↑ 3%</div></div>
+          </div>
+        </div>
+        <div class="adlist">
+          <h4>Needs Assignment</h4>
+          <div class="adjc">
+            <div class="adjct"><div class="adjcn">John Smith</div><div class="unas">Unassigned</div></div>
+            <div class="adjcd">🔧 Plumbing · 1845 Hubbard St</div>
+            <div class="adja"><div class="adjas">Assign Vendor →</div><div class="adjav">View</div></div>
+          </div>
+          <div class="adjc">
+            <div class="adjct"><div class="adjcn">Sarah Johnson</div><div class="asnd">Assigned</div></div>
+            <div class="adjcd">❄️ HVAC · 9117 Woodsman Cove</div>
+            <div class="adja"><div class="adjas" style="background:linear-gradient(135deg,#475569,#334155);">Reassign →</div><div class="adjav">View</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><h3>Admin Dashboard</h3><p>Command center</p></div>
+  </div>
+
+</div><!-- end phones-row -->
+
+<div class="info">
+  <h2>Same App. New Depth.</h2>
+  <p>3D perspective samples of the existing screens — same indigo design, same logo and branding, with depth, shadows and glass overlays.</p>
+  <div class="tags">
+    <div class="tg">✅ Same indigo color scheme</div>
+    <div class="tg">✅ Same logo &amp; branding</div>
+    <div class="tg">✅ All 6 core screens</div>
+    <div class="tg">✅ 3D perspective tilt</div>
+    <div class="tg">✅ Glass morphism layers</div>
+    <div class="tg">✅ Hover to flatten &amp; rise</div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.phone-wrap').forEach((wrap, idx) => {
+  const phone = wrap.querySelector('.phone');
+  const baseRY = idx % 2 === 0 ? -13 : 13;
+  wrap.addEventListener('mousemove', e => {
+    const r = wrap.getBoundingClientRect();
+    const dx = ((e.clientX - r.left) / r.width - 0.5) * 28;
+    const dy = ((e.clientY - r.top)  / r.height - 0.5) * 18;
+    phone.style.transition = 'transform .1s ease, box-shadow .1s ease';
+    phone.style.transform = `perspective(900px) rotateY(${dx}deg) rotateX(${-dy}deg) scale(1.05)`;
+  });
+  wrap.addEventListener('mouseleave', () => {
+    phone.style.transition = 'transform .5s cubic-bezier(.34,1.56,.64,1), box-shadow .5s ease';
+    phone.style.transform = `perspective(900px) rotateY(${baseRY}deg) rotateX(4deg)`;
+  });
+});
+</script>
+</body>
+</html>

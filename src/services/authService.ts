@@ -93,10 +93,13 @@ export const authService = {
     // Fetch current profile from backend
     async getProfile(): Promise<User | null> {
         try {
-            // We use the login-like flow to get the user object
-            // The backend doesn't have a dedicated GET /profile yet, but we can use the login token to identify.
-            // Wait, let's look at UsersController again.
-            // Actually, I can just add a simple GET /profile to UsersController.
+            // No token means no session to validate — calling /users/me would 401 by
+            // construction on every cold start before sign-in.
+            const token = await SecureStorage.getItem('auth_token');
+            if (!token) {
+                return null;
+            }
+
             const user = await apiClient.get<User>('/users/me', true);
             if (user) {
                 await AsyncStorage.setItem('@current_user', JSON.stringify(user));

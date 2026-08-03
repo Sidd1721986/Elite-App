@@ -543,7 +543,9 @@ const AssignVendorScreen: React.FC = () => {
             await finalizeAssignment(jobId);
             setSnackbarMessage('Finalized! Job moved to active status.');
             setSnackbarVisible(true);
-            setTimeout(() => {
+            // Tracked so the unmount cleanup can cancel it — an untracked goBack() can fire
+            // after the user has already navigated elsewhere and pop an unrelated screen.
+            navigationTimeoutRef.current = setTimeout(() => {
                 navigation.goBack();
             }, 1000);
         } catch (error: any) {

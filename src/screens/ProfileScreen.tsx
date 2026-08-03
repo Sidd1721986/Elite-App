@@ -446,12 +446,19 @@ const styles = StyleSheet.create({
     },
     badgeChip: {
         backgroundColor: '#1E293B',
-        height: 24,
+        // No fixed height — a too-short Chip clips its own label vertically. Center the
+        // content and let it size to the text instead.
+        minHeight: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 4,
     },
     badgeText: {
         color: '#FFFFFF',
         fontSize: 10,
         fontWeight: '800',
+        lineHeight: 14,
+        marginVertical: 0,
     },
     form: {
         gap: 16,

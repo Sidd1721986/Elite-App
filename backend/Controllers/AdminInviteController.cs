@@ -14,20 +14,26 @@ namespace EliteApp.API.Controllers;
 public class AdminInviteController : ControllerBase
 {
     private readonly AppDbContext _context;
-    private readonly IEmailSender _emailSender;
+    private readonly IEmailSender _emailSender;   // direct: invite email failure must surface as 503
+    private readonly IEmailQueue _emailQueue;     // queued: courtesy notifications
     private readonly IConfiguration _configuration;
     private readonly ILogger<AdminInviteController> _logger;
+    private readonly EliteApp.API.Services.Security.ITokenHasher _tokenHasher;
 
     public AdminInviteController(
         AppDbContext context,
         IEmailSender emailSender,
+        IEmailQueue emailQueue,
         IConfiguration configuration,
-        ILogger<AdminInviteController> logger)
+        ILogger<AdminInviteController> logger,
+        EliteApp.API.Services.Security.ITokenHasher tokenHasher)
     {
         _context = context;
         _emailSender = emailSender;
+        _emailQueue = emailQueue;
         _configuration = configuration;
         _logger = logger;
+        _tokenHasher = tokenHasher;
     }
 
     // POST /api/admin/invite — Admin sends an invite to a new admin by email.
@@ -53,7 +59,7 @@ public class AdminInviteController : ControllerBase
             .ExecuteDeleteAsync();
 
         var plainToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
-        var tokenHash = HashToken(plainToken);
+        var tokenHash = _tokenHasher.HashRaw(plainToken);
 
         var expiryHours = 48;
         _context.AdminInvites.Add(new AdminInvite
@@ -92,6 +98,50 @@ public class AdminInviteController : ControllerBase
 
         _logger.LogInformation("Admin invite sent to {Email} by admin {AdminId}", email, adminGuid);
         return Ok(new { message = $"Invite sent to {email}." });
+    }
+
+    // POST /api/admin/promote — Admin promotes an EXISTING account to Admin.
+    // Distinct from /invite (which onboards a brand-new email). This flips the role
+    // of a user who already has an account (customer/vendor/etc.) to Admin.
+    [Authorize(Roles = "Admin")]
+    [HttpPost("api/admin/promote")]
+    public async Task<IActionResult> PromoteToAdmin([FromBody] AdminPromoteRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(new { message = "Email is required." });
+
+        var email = request.Email.Trim().ToLowerInvariant();
+
+        var actingAdminId = User.FindFirst("id")?.Value;
+        if (!Guid.TryParse(actingAdminId, out var actingAdminGuid))
+            return Unauthorized();
+
+        var target = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+        if (target == null)
+            return NotFound(new { message = "No account exists with this email. Use Invite Admin to onboard a new person." });
+
+        if (!target.IsActive)
+            return BadRequest(new { message = "This account is inactive and cannot be promoted." });
+
+        if (string.Equals(target.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "This account is already an Admin." });
+
+        var previousRole = target.Role;
+        target.Role = "Admin";
+        target.IsApproved = true; // Admins are always approved.
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "User {Email} promoted from {PreviousRole} to Admin by admin {AdminId}",
+            email, previousRole, actingAdminGuid);
+
+        // Best-effort courtesy email — queued so it never delays or fails the request.
+        _emailQueue.TryEnqueue(new OutgoingEmail(
+            email,
+            "You are now an Admin on Elite Home Services",
+            $"Hello,\n\nYour Elite Home Services account ({email}) has been granted Admin access. Sign out and sign back in to see the admin dashboard."));
+
+        return Ok(new { message = $"{email} is now an Admin. They must sign out and back in.", role = "Admin" });
     }
 
     // GET /invite — Smart landing page: tries deep link, shows download buttons if app not installed.
@@ -155,14 +205,14 @@ public class AdminInviteController : ControllerBase
         return Content(html, "text/html");
     }
 
-    private string HashToken(string plaintext)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(plaintext));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
 }
 
 public class AdminInviteRequest
+{
+    public string Email { get; set; } = string.Empty;
+}
+
+public class AdminPromoteRequest
 {
     public string Email { get; set; } = string.Empty;
 }

@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using EliteApp.API.Data;
 using EliteApp.API.Models;
-using System.Security.Claims;
 
 namespace EliteApp.API.Controllers;
 
@@ -22,7 +21,9 @@ public class MessagesController : ControllerBase
 
     private Guid GetCurrentUserId()
     {
-        var userIdStr = User.FindFirst("id")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        // "id" is the only claim carrying the user's Guid — Sub (which maps to NameIdentifier)
+        // holds the email, so it must never be used as a fallback here.
+        var userIdStr = User.FindFirst("id")?.Value;
         if (Guid.TryParse(userIdStr, out var userId))
         {
             return userId;
@@ -47,6 +48,7 @@ public class MessagesController : ControllerBase
 
     // POST: api/messages
     [HttpPost]
+    [EnableRateLimiting("send-message")]
     public async Task<ActionResult<Message>> SendMessage(MessageDto messageDto)
     {
         var currentUserId = GetCurrentUserId();
@@ -103,49 +105,92 @@ public class MessagesController : ControllerBase
         if (currentUserId == Guid.Empty)
             return Unauthorized();
 
-        // Read only the fields needed to build the conversation list.
-        var messages = await _context.Messages
+        // Aggregate per-conversation metadata in the database rather than materializing the
+        // user's entire message history. Each query below returns at most one row per
+        // conversation partner (bounded by contacts, not message volume), grouping on a real
+        // indexed column so the work happens server-side.
+        //
+        // Outgoing leg: latest timestamp per partner the current user has messaged.
+        var sent = await _context.Messages
             .AsNoTracking()
-            .Where(m => m.SenderId == currentUserId || m.ReceiverId == currentUserId)
-            .OrderByDescending(m => m.Timestamp)
-            .Select(m => new
+            .Where(m => m.SenderId == currentUserId)
+            .GroupBy(m => m.ReceiverId)
+            .Select(g => new { OtherUserId = g.Key, LastTimestamp = g.Max(m => m.Timestamp) })
+            .ToListAsync();
+
+        // Incoming leg: latest timestamp + unread count per partner who has messaged the user.
+        var received = await _context.Messages
+            .AsNoTracking()
+            .Where(m => m.ReceiverId == currentUserId)
+            .GroupBy(m => m.SenderId)
+            .Select(g => new
             {
-                m.SenderId,
-                m.ReceiverId,
-                m.Content,
-                m.Timestamp,
-                m.IsRead
+                OtherUserId = g.Key,
+                LastTimestamp = g.Max(m => m.Timestamp),
+                UnreadCount = g.Count(m => !m.IsRead)
             })
             .ToListAsync();
 
-        var grouped = messages
-            .GroupBy(m => m.SenderId == currentUserId ? m.ReceiverId : m.SenderId);
+        // Merge the two legs into one entry per partner.
+        var convosByPartner = new Dictionary<Guid, (DateTime LastTimestamp, int UnreadCount)>();
+        foreach (var s in sent)
+            convosByPartner[s.OtherUserId] = (s.LastTimestamp, 0);
+        foreach (var r in received)
+        {
+            if (convosByPartner.TryGetValue(r.OtherUserId, out var existing))
+                convosByPartner[r.OtherUserId] = (existing.LastTimestamp > r.LastTimestamp ? existing.LastTimestamp : r.LastTimestamp, r.UnreadCount);
+            else
+                convosByPartner[r.OtherUserId] = (r.LastTimestamp, r.UnreadCount);
+        }
 
-        var otherUserIds = grouped.Select(g => g.Key).Distinct().ToList();
+        if (convosByPartner.Count == 0)
+            return Ok(new List<ConversationDto>());
+
+        var otherUserIds = convosByPartner.Keys.ToList();
+        var latestTimestamps = convosByPartner.Values.Select(v => v.LastTimestamp).Distinct().ToList();
+
+        // Fetch the content of each conversation's latest message. Bounded by the set of
+        // latest timestamps (one per conversation); matched back to the partner below.
+        var latestRows = await _context.Messages
+            .AsNoTracking()
+            .Where(m => (m.SenderId == currentUserId && latestTimestamps.Contains(m.Timestamp))
+                     || (m.ReceiverId == currentUserId && latestTimestamps.Contains(m.Timestamp)))
+            .Select(m => new
+            {
+                Partner = m.SenderId == currentUserId ? m.ReceiverId : m.SenderId,
+                m.Content,
+                m.Timestamp
+            })
+            .ToListAsync();
+
+        var latestContentByPartner = latestRows
+            .Where(r => convosByPartner.TryGetValue(r.Partner, out var v) && v.LastTimestamp == r.Timestamp)
+            .GroupBy(r => r.Partner)
+            .ToDictionary(g => g.Key, g => g.First().Content);
+
         var usersById = await _context.Users
             .AsNoTracking()
             .Where(u => otherUserIds.Contains(u.Id))
             .Select(u => new { u.Id, u.Name, u.Email })
             .ToDictionaryAsync(u => u.Id);
 
-        var conversations = new List<ConversationDto>(grouped.Count());
-        foreach (var g in grouped)
-        {
-            var otherUserId = g.Key;
-            usersById.TryGetValue(otherUserId, out var otherUser);
-            var latestMessage = g.First();
-            var unreadCount = g.Count(m => m.ReceiverId == currentUserId && !m.IsRead);
-
-            conversations.Add(new ConversationDto
+        var conversations = convosByPartner
+            .Select(kvp =>
             {
-                OtherUserId = otherUserId,
-                OtherUserName = otherUser?.Name ?? "Unknown",
-                OtherUserEmail = otherUser?.Email ?? "",
-                LatestMessage = latestMessage.Content,
-                Timestamp = latestMessage.Timestamp,
-                UnreadCount = unreadCount
-            });
-        }
+                usersById.TryGetValue(kvp.Key, out var otherUser);
+                latestContentByPartner.TryGetValue(kvp.Key, out var latestContent);
+                return new ConversationDto
+                {
+                    OtherUserId = kvp.Key,
+                    OtherUserName = otherUser?.Name ?? "Unknown",
+                    OtherUserEmail = otherUser?.Email ?? "",
+                    LatestMessage = latestContent ?? "",
+                    Timestamp = kvp.Value.LastTimestamp,
+                    UnreadCount = kvp.Value.UnreadCount
+                };
+            })
+            .OrderByDescending(c => c.Timestamp)
+            .ToList();
 
         return Ok(conversations);
     }

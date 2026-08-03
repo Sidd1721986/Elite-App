@@ -42,6 +42,12 @@ interface Props {
     hasError?: boolean;
     initialValue?: string;
     onAddressSelect: (parts: AddressParts) => void;
+    /**
+     * Fires on every keystroke (and on clear) with the raw text.
+     * Required for manually typed addresses: without it, text the user never confirms by
+     * tapping a suggestion stays local to this component and never reaches the parent form.
+     */
+    onChangeText?: (text: string) => void;
 }
 
 /** Parse Google Place Details address_components into AddressParts. */
@@ -70,20 +76,42 @@ const AddressAutocomplete: React.FC<Props> = ({
     hasError = false,
     initialValue = '',
     onAddressSelect,
+    onChangeText,
 }) => {
     const [query, setQuery] = useState(initialValue);
     const [predictions, setPredictions] = useState<Prediction[]>([]);
     const [focused, setFocused] = useState(false);
     const [loading, setLoading] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const blurRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    /** Incremented per keystroke; a resolved fetch only applies if it is still the latest. */
+    const requestSeqRef = useRef(0);
 
     // Keep query in sync if parent resets initialValue (e.g. after correction)
     useEffect(() => {
         setQuery(initialValue);
     }, [initialValue]);
 
+    // Cancel any pending debounced fetch / blur timer on unmount so they can't fire setState
+    // after the component is gone (warning) or burn a billable Places request nobody needs.
+    useEffect(() => {
+        return () => {
+            if (debounceRef.current) {
+                clearTimeout(debounceRef.current);
+            }
+            if (blurRef.current) {
+                clearTimeout(blurRef.current);
+            }
+            // Invalidate any in-flight response so it can't setState post-unmount.
+            requestSeqRef.current += 1;
+        };
+    }, []);
+
     const fetchPredictions = (text: string) => {
         if (debounceRef.current) { clearTimeout(debounceRef.current); }
+        // Any older in-flight response is now stale — a slow earlier request must not
+        // overwrite the predictions for the text the user has since typed.
+        const seq = ++requestSeqRef.current;
         if (text.length < 2) { setPredictions([]); return; }
 
         debounceRef.current = setTimeout(async () => {
@@ -98,6 +126,7 @@ const AddressAutocomplete: React.FC<Props> = ({
                     `&language=en`;
                 const res = await fetch(url);
                 const data = await res.json();
+                if (seq !== requestSeqRef.current) { return; }
                 // A denied/over-quota key returns HTTP 200 with status REQUEST_DENIED /
                 // OVER_QUERY_LIMIT and no predictions — don't let that look like "no address found".
                 if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
@@ -105,15 +134,18 @@ const AddressAutocomplete: React.FC<Props> = ({
                 }
                 setPredictions(data.predictions ?? []);
             } catch {
-                setPredictions([]);
+                if (seq === requestSeqRef.current) { setPredictions([]); }
             } finally {
-                setLoading(false);
+                if (seq === requestSeqRef.current) { setLoading(false); }
             }
         }, 300);
     };
 
     const selectPrediction = async (prediction: Prediction) => {
         setQuery(prediction.description);
+        // Invalidate the pending autocomplete request so it can't re-open the dropdown.
+        requestSeqRef.current += 1;
+        if (debounceRef.current) { clearTimeout(debounceRef.current); }
         setPredictions([]);
         setLoading(true);
         try {
@@ -152,13 +184,18 @@ const AddressAutocomplete: React.FC<Props> = ({
                         value={query}
                         onChangeText={(text) => {
                             setQuery(text);
+                            // Push the raw text up immediately — an address the user types but
+                            // never confirms via a suggestion must still reach the parent form.
+                            onChangeText?.(text);
                             fetchPredictions(text);
                         }}
                         onFocus={() => setFocused(true)}
                         onBlur={() => {
                             setFocused(false);
+                            onChangeText?.(query);
                             // Small delay so tap on suggestion registers first
-                            setTimeout(() => setPredictions([]), 150);
+                            if (blurRef.current) { clearTimeout(blurRef.current); }
+                            blurRef.current = setTimeout(() => setPredictions([]), 150);
                         }}
                         placeholder={focused ? 'e.g. 88 Main St' : ''}
                         placeholderTextColor="#94A3B8"
@@ -175,7 +212,12 @@ const AddressAutocomplete: React.FC<Props> = ({
                     )}
                     {!loading && query.length > 0 && (
                         <TouchableOpacity
-                            onPress={() => { setQuery(''); setPredictions([]); }}
+                            onPress={() => {
+                                setQuery('');
+                                onChangeText?.('');
+                                requestSeqRef.current += 1;
+                                setPredictions([]);
+                            }}
                             style={styles.clearBtn}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >

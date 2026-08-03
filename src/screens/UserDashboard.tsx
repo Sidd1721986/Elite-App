@@ -14,6 +14,7 @@ import { MotiView, MotiText } from 'moti';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useAuth } from '../context/AuthContext';
 import { useJobs } from '../context/JobContext';
+import { JobErrorBanner } from '../components/JobErrorBanner';
 import AppLogo from '../components/AppLogo';
 import { useNavigation } from '@react-navigation/native';
 import { useChatInboxNotifications } from '../hooks/useChatInboxNotifications';
@@ -150,7 +151,9 @@ const UserDashboard: React.FC = () => {
         />
     ), [handleViewDetails, handleModifyJob]);
 
-    const renderHeader = useCallback(() => (
+    // Rendered inline (`{renderHeader()}`), not passed to FlashList, so a stable identity buys
+    // nothing — and memoizing it here silently served stale stats whenever a dep was missed.
+    const renderHeader = () => (
         <View style={styles.headerContainer}>
             <Surface style={styles.header} elevation={0}>
                 <View style={styles.headerTop}>
@@ -252,7 +255,7 @@ const UserDashboard: React.FC = () => {
                 style={styles.segmentedButtons}
             />
         </View>
-    ), [user, activeTab, settingsMenuVisible, handleLogout, navigation, messageUnreadTotal]);
+    );
 
     // Memoised FlashList sub-components — stable references prevent unnecessary
     // FlashList re-renders when unrelated state (e.g. settingsMenu) changes.
@@ -329,6 +332,13 @@ const UserDashboard: React.FC = () => {
         </View>
     ), []);
 
+    // Stable extraData ref — an inline array literal is a new object on every render,
+    // which defeats FlashList's memoization and re-renders every row.
+    const listExtraData = useMemo(
+        () => [isLoading, activeJobs, refreshing, messageUnreadTotal, recentHistoryJobs],
+        [isLoading, activeJobs, refreshing, messageUnreadTotal, recentHistoryJobs],
+    );
+
     const renderActiveTab = useCallback(() => (
         <View style={{ flex: 1 }}>
             <FlashListCompat
@@ -340,10 +350,13 @@ const UserDashboard: React.FC = () => {
                 ListFooterComponent={ListFooter}
                 ListEmptyComponent={ListEmpty}
                 contentContainerStyle={styles.tabContent}
-                extraData={[isLoading, activeJobs, refreshing, messageUnreadTotal, recentHistoryJobs]}
+                extraData={listExtraData}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
             />
         </View>
-    ), [isLoading, activeJobs, renderJobItem, ListHeader, ListFooter, ListEmpty, refreshing, messageUnreadTotal, recentHistoryJobs]);
+    ), [isLoading, activeJobs, renderJobItem, ListHeader, ListFooter, ListEmpty, listExtraData, refreshing, onRefresh]);
 
 
     const renderProfileTab = () => (
@@ -399,6 +412,7 @@ const UserDashboard: React.FC = () => {
     return (
         <SafeAreaView style={styles.container} edges={['top']} testID="user_dashboard_screen">
             {renderHeader()}
+            <JobErrorBanner />
 
             <View style={{ flex: 1 }}>
                 {activeTab === 'active' && renderActiveTab()}

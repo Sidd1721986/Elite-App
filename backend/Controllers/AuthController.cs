@@ -17,12 +17,18 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly AppDbContext _context;
     private readonly ILogger<AuthController> _logger;
+    private readonly EliteApp.API.Services.Security.ITokenHasher _tokenHasher;
+    private readonly EliteApp.API.Services.Email.IEmailQueue _emailQueue;
+    private readonly IConfiguration _configuration;
 
-    public AuthController(IAuthService authService, AppDbContext context, ILogger<AuthController> logger)
+    public AuthController(IAuthService authService, AppDbContext context, ILogger<AuthController> logger, EliteApp.API.Services.Security.ITokenHasher tokenHasher, EliteApp.API.Services.Email.IEmailQueue emailQueue, IConfiguration configuration)
     {
         _authService = authService;
         _context = context;
         _logger = logger;
+        _tokenHasher = tokenHasher;
+        _emailQueue = emailQueue;
+        _configuration = configuration;
     }
 
     [EnableRateLimiting("auth-login")]
@@ -47,14 +53,26 @@ public class AuthController : ControllerBase
         if (role != UserRole.Customer.ToString() && role != UserRole.Vendor.ToString())
             return BadRequest(new { message = "Invalid account type." });
 
+        // Same length limits UsersController.UpdateProfile enforces — [StringLength] annotations
+        // do not run on SaveChanges, so registration would otherwise accept oversized values.
+        var name = request.Name.Trim();
+        if (name.Length > 255)
+            return BadRequest(new { message = "Name must be 1–255 characters." });
+        var address = request.Address?.Trim();
+        if (address is { Length: > 500 })
+            return BadRequest(new { message = "Address must be 500 characters or fewer." });
+        var phone = request.Phone?.Trim();
+        if (phone is { Length: > 30 })
+            return BadRequest(new { message = "Phone must be 30 characters or fewer." });
+
         var user = new User
         {
             Id = Guid.NewGuid(),
             Email = email,
-            Name = request.Name.Trim(),
+            Name = name,
             Role = role,
-            Address = request.Address,
-            Phone = request.Phone,
+            Address = address,
+            Phone = phone,
             IsApproved = role != UserRole.Vendor.ToString() // Authors approve non-vendors
         };
 
@@ -63,6 +81,24 @@ public class AuthController : ControllerBase
         if (newUser == null)
         {
             return BadRequest(new { message = error });
+        }
+
+        // Best-effort admin notification when a vendor registers (pending approval).
+        // Queued: never let mail delivery slow down or break a successful registration.
+        if (role == UserRole.Vendor.ToString())
+        {
+            var to = _configuration["Email:AdminNotify"];
+            if (!string.IsNullOrWhiteSpace(to))
+            {
+                _emailQueue.TryEnqueue(new EliteApp.API.Services.Email.OutgoingEmail(
+                    to,
+                    "New vendor registered — pending approval",
+                    $"A new vendor registered and is awaiting approval.\n\n" +
+                    $"Name: {newUser.Name}\n" +
+                    $"Email: {newUser.Email}\n" +
+                    $"Phone: {newUser.Phone}\n" +
+                    $"Address: {newUser.Address}"));
+            }
         }
 
         return Ok(new { message = "Registration successful" });
@@ -171,7 +207,7 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "All fields are required." });
 
         var email = request.Email.Trim().ToLowerInvariant();
-        var tokenHash = HashInviteToken(request.Token.Trim());
+        var tokenHash = _tokenHasher.HashRaw(request.Token.Trim());
 
         var invite = await _context.AdminInvites
             .FirstOrDefaultAsync(i =>
@@ -212,11 +248,6 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Admin account created. You can now log in." });
     }
 
-    private static string HashInviteToken(string plaintext)
-    {
-        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(plaintext));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
 }
 
 public class RegisterRequest

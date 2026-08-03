@@ -18,6 +18,7 @@ import AdminDashboard from '../screens/AdminDashboard';
 import VendorDashboard from '../screens/VendorDashboard';
 import UserDashboard from '../screens/UserDashboard';
 import JobDetailsScreen from '../screens/JobDetailsScreen';
+import PaymentScreen from '../screens/PaymentScreen';
 import AssignVendorScreen from '../screens/AssignVendorScreen';
 import ChatScreen from '../screens/ChatScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -199,6 +200,7 @@ const AppNavigator: React.FC = () => {
                     <Stack.Screen name="RoleFallback" component={RoleFallbackScreen} options={{ headerShown: false }} />
 
                     <Stack.Screen name="JobDetails" component={JobDetailsScreen} options={{ title: 'Job Details', headerShown: false }} />
+                    <Stack.Screen name="Payment" component={PaymentScreen} options={{ title: 'Payment', headerShown: false }} />
                     <Stack.Screen name="AssignVendor" component={AssignVendorScreen} options={{ title: 'Assign Vendor', headerShown: false }} />
                     <Stack.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat', headerShown: false }} />
                     <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile Settings', headerShown: false }} />

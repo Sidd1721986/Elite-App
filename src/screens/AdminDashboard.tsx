@@ -2,7 +2,8 @@ import * as React from 'react';
 import { useCallback, useMemo } from 'react';
 import { View, StyleSheet, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Text, Card, Button, Avatar, Divider, Surface, IconButton, Icon, List, Chip, Snackbar, Portal, Menu, Dialog, Searchbar } from 'react-native-paper';
+import { Text, Card, Button, Avatar, Divider, Surface, IconButton, Icon, List, Chip, Snackbar, Portal, Menu, Dialog, Searchbar, TextInput } from 'react-native-paper';
+import { apiClient } from '../services/apiClient';
 import { MotiView } from 'moti';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +15,7 @@ import { messageService } from '../services/messageService';
 import { formatChatPreview } from '../utils/chatMessageContent';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useJobs } from '../context/JobContext'; // Assuming useJobs is imported from here
+import { JobErrorBanner } from '../components/JobErrorBanner';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -110,7 +112,18 @@ const AdminDashboard: React.FC = () => {
     const [inProgressSearch, setInProgressSearch] = React.useState('');
     const [showAllRequests, setShowAllRequests] = React.useState(false);
     const [showAllInProgress, setShowAllInProgress] = React.useState(false);
+    const [makeAdminVisible, setMakeAdminVisible] = React.useState(false);
+    const [makeAdminEmail, setMakeAdminEmail] = React.useState('');
+    const [makeAdminLoading, setMakeAdminLoading] = React.useState(false);
     const SECTION_PREVIEW = 3;
+
+    // Guards async setState: these fetches can resolve after the screen unmounts (navigation
+    // away mid-request), which would otherwise warn about setState on an unmounted component.
+    const isMountedRef = React.useRef(true);
+    React.useEffect(() => {
+        isMountedRef.current = true;
+        return () => { isMountedRef.current = false; };
+    }, []);
 
     const fetchData = useCallback(async () => {
         setRefreshing(true);
@@ -120,6 +133,7 @@ const AdminDashboard: React.FC = () => {
                 getApprovedVendors(),
                 messageService.getConversations().catch(() => [] as Conversation[]),
             ]);
+            if (!isMountedRef.current) { return; }
             setPendingVendors(pending);
             setApprovedVendors(approved);
             const sorted = [...(conv || [])].sort(
@@ -130,7 +144,7 @@ const AdminDashboard: React.FC = () => {
         } catch (error) {
             console.error('Error fetching data:', error);
         }
-        setRefreshing(false);
+        if (isMountedRef.current) { setRefreshing(false); }
     }, [getPendingVendors, getApprovedVendors, refreshJobs]);
 
     React.useEffect(() => {
@@ -141,6 +155,7 @@ const AdminDashboard: React.FC = () => {
     const refreshInbox = useCallback(async () => {
         try {
             const conv = await messageService.getConversations().catch(() => [] as Conversation[]);
+            if (!isMountedRef.current) { return; }
             const sorted = [...(conv || [])].sort(
                 (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime(),
             );
@@ -220,11 +235,8 @@ const AdminDashboard: React.FC = () => {
      *  - Submitted: brand-new customer request, not yet touched by admin.
      *  - PartiallyAssigned: admin is mid-way through splitting/reassigning the job
      *    (vendors cannot see it yet — they only see it after "Mark Fully Assigned").
+     * Defined below collectActiveChildren (which it depends on) — see submittedJobs there.
      */
-    const submittedJobs = useMemo(() => filteredJobs.filter(j =>
-        j.status === JobStatus.SUBMITTED ||
-        j.status === JobStatus.PARTIALLY_ASSIGNED
-    ), [filteredJobs]);
 
     const ACTIVE_STATUSES = useMemo(() => new Set<string>([
         JobStatus.ASSIGNED, JobStatus.ACCEPTED, JobStatus.REACHED_OUT,
@@ -275,6 +287,28 @@ const AdminDashboard: React.FC = () => {
         },
         [jobsDeduped],
     );
+
+    /**
+     * A split PARENT whose scopes are all finished: it has children, none are still active,
+     * and nothing on the parent remains to assign. Such a parent lingers in Submitted/
+     * PartiallyAssigned forever, so without this it keeps showing as a "Job Request" with the
+     * Split/Assign actions even though the work is done. Excluded from Job Requests below.
+     */
+    const isFullyHandledSplitParent = useCallback((j: Job): boolean => {
+        const active = collectActiveChildren(j, ACTIVE_STATUSES);
+        const done = collectActiveChildren(j, DONE_STATUSES);
+        if (active.length + done.length === 0) {return false;} // not a split parent
+        if (active.length > 0) {return false;}                  // still has live scopes
+        const remainingSvc = j.services?.length || 0;
+        const itemsLeft = (j.items || []).filter(i => i && !i.isAssigned).length;
+        return remainingSvc === 0 && itemsLeft === 0;
+    }, [collectActiveChildren, ACTIVE_STATUSES, DONE_STATUSES]);
+
+    /** "Job Requests" — Submitted / PartiallyAssigned jobs still needing admin action. */
+    const submittedJobs = useMemo(() => filteredJobs.filter(j =>
+        (j.status === JobStatus.SUBMITTED || j.status === JobStatus.PARTIALLY_ASSIGNED)
+        && !isFullyHandledSplitParent(j)
+    ), [filteredJobs, isFullyHandledSplitParent]);
 
     /**
      * "In Progress" — live vendor work, one card per vendor scope.
@@ -372,7 +406,9 @@ const AdminDashboard: React.FC = () => {
         return '#B91C1C';                            // super red (past 48h)
     }, []);
 
-    const handleApproval = async (userId: string, approved: boolean) => {
+    // Memoised: the row renderers below depend on these, so an unstable identity would
+    // re-create renderItem/renderVendorItem on every render and re-render every card.
+    const handleApproval = useCallback(async (userId: string, approved: boolean) => {
         setRefreshing(true);
         try {
             const success = await updateUserStatus(userId, approved);
@@ -389,9 +425,9 @@ const AdminDashboard: React.FC = () => {
             setSnackbarVisible(true);
         }
         setRefreshing(false);
-    };
+    }, [updateUserStatus, fetchData]);
 
-    const handleRemoveVendor = async (userId: string) => {
+    const handleRemoveVendor = useCallback(async (userId: string) => {
         setRefreshing(true);
         try {
             const success = await removeVendor(userId);
@@ -408,12 +444,36 @@ const AdminDashboard: React.FC = () => {
             setSnackbarVisible(true);
         }
         setRefreshing(false);
-    };
+    }, [removeVendor, fetchData]);
 
     const handleLogout = useCallback(async () => {
         setSettingsMenuVisible(false);
         await logout();
     }, [logout]);
+
+    // Promote an EXISTING account to Admin by email (distinct from Invite Admin, which onboards a new email).
+    const handlePromoteAdmin = async () => {
+        const email = makeAdminEmail.trim().toLowerCase();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setSnackbarMessage('Please enter a valid email address.');
+            setSnackbarVisible(true);
+            return;
+        }
+        setMakeAdminLoading(true);
+        try {
+            const res = await apiClient.post<{ message: string }>('/admin/promote', { email });
+            setMakeAdminVisible(false);
+            setMakeAdminEmail('');
+            setSnackbarMessage(res.message);
+            setSnackbarVisible(true);
+            await fetchData();
+        } catch (err: any) {
+            setSnackbarMessage(err?.message ?? 'Failed to promote user.');
+            setSnackbarVisible(true);
+        } finally {
+            setMakeAdminLoading(false);
+        }
+    };
 
 
     // Stat counts must match the lists in each section + scroll targets (sectionKey).
@@ -429,7 +489,10 @@ const AdminDashboard: React.FC = () => {
         { label: 'Completed', value: completedJobs.length.toString(), icon: 'check-decagram', color: '#8B5CF6', sectionKey: 'completedJobs' },
     ], [pendingVendors.length, submittedJobs.length, activeProjects.length, completedJobs.length]);
 
-    const renderHeader = useCallback(() => (
+    // Built as an ELEMENT, not a component function: FlashList remounts ListHeaderComponent
+    // whenever the component *type* changes, which would blow away the Searchbar's keyboard
+    // focus on every keystroke. An element of the same type reconciles in place instead.
+    const headerElement = useMemo(() => (
         <View style={styles.headerWrapper}>
             <Surface style={styles.header} elevation={0}>
                 <View style={styles.headerTop}>
@@ -466,6 +529,11 @@ const AdminDashboard: React.FC = () => {
                             leadingIcon="account-plus-outline"
                             onPress={() => { setSettingsMenuVisible(false); navigation.navigate('InviteAdmin'); }}
                             title="Invite Admin"
+                        />
+                        <Menu.Item
+                            leadingIcon="shield-account-outline"
+                            onPress={() => { setSettingsMenuVisible(false); setMakeAdminEmail(''); setMakeAdminVisible(true); }}
+                            title="Make Admin"
                         />
                         <Divider />
                         <Menu.Item leadingIcon="logout" onPress={handleLogout} title="Logout" />
@@ -527,7 +595,7 @@ const AdminDashboard: React.FC = () => {
                 </View>
             </Surface>
         </View>
-    ), [user, handleLogout, stats, scrollToSection, settingsMenuVisible, windowWidth]);
+    ), [user, handleLogout, stats, scrollToSection, settingsMenuVisible, windowWidth, searchQuery, reducedMotion, navigation]);
 
     const renderVendorItem = useCallback(({ item: vendor }: { item: User }) => (
         <Card style={styles.approvalCard} elevation={0}>
@@ -556,11 +624,11 @@ const AdminDashboard: React.FC = () => {
                 <View style={styles.detailsRow}>
                     <View style={styles.detailItem}>
                         <IconButton icon="map-marker-outline" size={16} style={{ margin: 0 }} />
-                        <Text variant="labelSmall">{vendor.address || 'No Address'}</Text>
+                        <Text variant="labelSmall" style={styles.detailText} numberOfLines={1}>{vendor.address || 'No Address'}</Text>
                     </View>
                     <View style={styles.detailItem}>
                         <IconButton icon="phone-outline" size={16} style={{ margin: 0 }} />
-                        <Text variant="labelSmall">{vendor.phone || 'No Phone'}</Text>
+                        <Text variant="labelSmall" style={styles.detailText} numberOfLines={1}>{vendor.phone || 'No Phone'}</Text>
                     </View>
                 </View>
 
@@ -591,7 +659,7 @@ const AdminDashboard: React.FC = () => {
                 </View>
             </Card.Content>
         </Card>
-    ), [handleApproval, handleRemoveVendor, navigation]);
+    ), [handleApproval, navigation]);
 
     const listData = useMemo<AdminDashboardDataItem[]>(() => {
         const data: AdminDashboardDataItem[] = [];
@@ -1020,7 +1088,7 @@ const AdminDashboard: React.FC = () => {
                     ? 'Invoice Requested'
                     : 'Completed';
                 const compStatusColor = isInvoiced ? '#0EA5E9' : isInvoiceRequested ? '#8B5CF6' : '#059669';
-                const compStatusIcon  = isInvoiced ? 'file-check-outline' : isInvoiceRequested ? 'receipt-outline' : 'check-decagram';
+                const compStatusIcon  = isInvoiced ? 'file-check-outline' : isInvoiceRequested ? 'file-document-edit-outline' : 'check-decagram';
 
                 return wrapInMoti(
                     <Card style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: compJob.id })}>
@@ -1105,6 +1173,7 @@ const AdminDashboard: React.FC = () => {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']} testID="admin_dashboard_screen">
+            <JobErrorBanner />
             <AdminList
                 ref={scrollViewRef}
                 data={listData}
@@ -1115,7 +1184,7 @@ const AdminDashboard: React.FC = () => {
                     return item.type + (dataId || sectionKey || index);
                 }}
                 estimatedItemSize={200}
-                ListHeaderComponent={renderHeader}
+                ListHeaderComponent={headerElement}
                 contentContainerStyle={styles.scrollContent}
                 extraData={adminExtraData}
                 refreshControl={
@@ -1124,6 +1193,31 @@ const AdminDashboard: React.FC = () => {
             />
 
             <Portal>
+                <Dialog visible={makeAdminVisible} onDismiss={() => setMakeAdminVisible(false)} style={{ borderRadius: 16 }}>
+                    <Dialog.Title>Make Admin</Dialog.Title>
+                    <Dialog.Content>
+                        <Text variant="bodyMedium" style={{ color: '#64748B', marginBottom: 16 }}>
+                            Enter the email of an existing account to grant Admin access. They must sign out and back in.
+                        </Text>
+                        <TextInput
+                            label="Email address"
+                            value={makeAdminEmail}
+                            onChangeText={setMakeAdminEmail}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            mode="outlined"
+                            left={<TextInput.Icon icon="email-outline" />}
+                        />
+                    </Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setMakeAdminVisible(false)} disabled={makeAdminLoading}>Cancel</Button>
+                        <Button mode="contained" onPress={handlePromoteAdmin} loading={makeAdminLoading} disabled={makeAdminLoading}>
+                            Make Admin
+                        </Button>
+                    </Dialog.Actions>
+                </Dialog>
+
                 <Snackbar
                     visible={snackbarVisible}
                     onDismiss={() => setSnackbarVisible(false)}
@@ -1399,13 +1493,18 @@ const styles = StyleSheet.create({
         backgroundColor: '#F1F5F9',
     },
     detailsRow: {
-        flexDirection: 'row',
-        gap: 16,
+        flexDirection: 'column',
+        gap: 4,
         marginVertical: 12,
     },
     detailItem: {
         flexDirection: 'row',
         alignItems: 'center',
+        alignSelf: 'stretch',
+    },
+    detailText: {
+        flexShrink: 1,
+        minWidth: 0,
     },
     cardActions: {
         flexDirection: 'row',

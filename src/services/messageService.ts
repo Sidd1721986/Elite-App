@@ -15,11 +15,13 @@ export const messageService = {
     },
 
     async getMessages(otherUserId: string): Promise<Message[]> {
-        return apiClient.get<Message[]>(`/messages/${otherUserId}`);
+        // bypassCache: polling must see new messages, not a 5-min stale cache
+        return apiClient.get<Message[]>(`/messages/${otherUserId}`, true);
     },
 
     async getConversations(): Promise<Conversation[]> {
-        return apiClient.get<Conversation[]>('/messages/conversations');
+        // bypassCache: inbox unread badges must update on each poll
+        return apiClient.get<Conversation[]>('/messages/conversations', true);
     },
 
     async getDefaultAdminId(): Promise<string> {

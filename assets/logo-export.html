@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Elite Home Services – Logo Export</title>
+<style>
+  body { background: #888; display: flex; flex-wrap: wrap; gap: 32px;
+         padding: 32px; font-family: sans-serif; }
+  .card { background: #555; padding: 16px; border-radius: 12px; text-align: center; }
+  .card h3 { color: #fff; margin: 0 0 8px; font-size: 13px; }
+  .card p  { color: #ccc; font-size: 11px; margin: 6px 0 0; }
+  img { display: block; border-radius: 8px; }
+
+  /* Export buttons */
+  .btn { margin-top: 10px; padding: 6px 14px; border: none; border-radius: 6px;
+         background: #C9952A; color: #fff; font-size: 12px; cursor: pointer; }
+  .btn:hover { background: #a07820; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h3>Dark (app / digital)</h3>
+  <img id="dark" src="logo-dark.svg" width="250" height="250">
+  <p>500×500 · navy background</p>
+  <button class="btn" onclick="download('logo-dark.svg','logo-dark-500.svg')">⬇ SVG</button>
+  <button class="btn" onclick="toPng('dark','logo-dark-500.png',500)">⬇ PNG 500px</button>
+  <button class="btn" onclick="toPng('dark','logo-dark-1024.png',1024)">⬇ PNG 1024px</button>
+</div>
+
+<div class="card">
+  <h3>Light (window sticker / Google)</h3>
+  <img id="light" src="logo-light.svg" width="250" height="250">
+  <p>500×500 · white background</p>
+  <button class="btn" onclick="download('logo-light.svg','logo-light-500.svg')">⬇ SVG</button>
+  <button class="btn" onclick="toPng('light','logo-light-500.png',500)">⬇ PNG 500px</button>
+  <button class="btn" onclick="toPng('light','logo-light-1024.png',1024)">⬇ PNG 1024px</button>
+  <button class="btn" onclick="toPng('light','logo-google-biz-250.png',250)">⬇ Google Biz 250px</button>
+</div>
+
+<script>
+function download(src, filename) {
+  const a = document.createElement('a');
+  a.href = src; a.download = filename; a.click();
+}
+
+function toPng(imgId, filename, size) {
+  const img = document.getElementById(imgId);
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const svgSrc = img.src;
+
+  // Load SVG into image then draw onto canvas
+  const tmpImg = new Image();
+  tmpImg.width = tmpImg.height = size;
+  tmpImg.onload = () => {
+    ctx.drawImage(tmpImg, 0, 0, size, size);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = filename;
+    a.click();
+  };
+  tmpImg.src = svgSrc;
+}
+</script>
+</body>
+</html>

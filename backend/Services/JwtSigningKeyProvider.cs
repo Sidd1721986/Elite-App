@@ -8,3 +8,11 @@ namespace EliteApp.API.Services;
 /// that contained a hard-coded fallback key.
 /// </summary>
 public sealed record JwtSigningKeyProvider(string Key, string Issuer, string Audience);
+
+/// <summary>
+/// The per-user facts the JWT validation hook needs on every authenticated request
+/// (Program.cs → OnTokenValidated). Cached for 60s under "user-active:{userId}" so both
+/// checks cost one DB round-trip instead of one each; evicted by UsersController on
+/// deactivation and by <see cref="AuthService"/> on password reset.
+/// </summary>
+public sealed record UserAuthSnapshot(bool IsActive, DateTime? PasswordChangedAt);

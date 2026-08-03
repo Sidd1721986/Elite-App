@@ -8,9 +8,14 @@ describe('jobService', () => {
         jest.clearAllMocks();
     });
 
-    it('getJobs should call apiClient.get(/jobs)', async () => {
+    it('getJobs should call apiClient.get(/jobs) using the cache by default', async () => {
         await jobService.getJobs();
-        expect(apiClient.get).toHaveBeenCalledWith('/jobs');
+        expect(apiClient.get).toHaveBeenCalledWith('/jobs', false);
+    });
+
+    it('getJobs(true) should bypass the client cache for explicit refreshes', async () => {
+        await jobService.getJobs(true);
+        expect(apiClient.get).toHaveBeenCalledWith('/jobs', true);
     });
 
     it('getJobById should call apiClient.get(/jobs/:id)', async () => {

@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SecureStorage } from './secureStorage';
 import { Platform } from 'react-native';
 import { DEV_API_HOST, getProductionApiBaseUrl } from '../config/appConfig';
@@ -88,21 +87,27 @@ async function getAuthToken(): Promise<string | null> {
     return inMemoryAuthToken;
 }
 
-const fetchWithTimeout = (url: string, options: RequestInit, timeout: number): Promise<Response> => {
-    let timeoutId: any;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('Request timed out')), timeout);
-    });
-
-    return Promise.race([
-        fetch(url, options),
-        timeoutPromise,
-    ]).finally(() => {
-        if (timeoutId) {
-            clearTimeout(timeoutId);
+const fetchWithTimeout = async (url: string, options: RequestInit, timeout: number): Promise<Response> => {
+    // AbortController actually cancels the underlying request on timeout. The previous
+    // Promise.race left the fetch running, so a retry stacked a second live request on a
+    // server that was already struggling.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } catch (err: any) {
+        if (err?.name === 'AbortError') {
+            throw new Error('Request timed out');
         }
-    });
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 };
+
+/** Linear backoff with jitter so synchronized clients don't retry in waves. */
+const retryDelay = (attempt: number, backoff: number) =>
+    backoff * attempt + Math.floor(Math.random() * 500);
 
 export const apiClient = {
     async request<T>(endpoint: string, options: RequestInit = {}, bypassCache = false): Promise<T> {
@@ -124,8 +129,13 @@ export const apiClient = {
 
         const token = await getAuthToken();
 
+        // For FormData bodies (file uploads) we must NOT set Content-Type: React Native's fetch
+        // generates 'multipart/form-data; boundary=...' from the body. Forcing application/json
+        // (or even a boundary-less multipart/form-data) makes the server unable to parse the upload.
+        const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+
         const headers = {
-            'Content-Type': 'application/json',
+            ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
             ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
             ...options.headers,
         };
@@ -140,9 +150,11 @@ export const apiClient = {
                 }, REQUEST_TIMEOUT);
 
                 if (!response.ok) {
-                    // Retry on transient errors (503 Service Unavailable, 504 Gateway Timeout)
-                    if (retries > 0 && (response.status === 503 || response.status === 504)) {
-                        const delay = backoff * (4 - retries); // 1s, 2s, 3s
+                    // Retry transient errors (503/504) for GETs only. A timed-out or 5xx POST may
+                    // have already been applied server-side — retrying it creates duplicate jobs,
+                    // messages, and payment sessions exactly when the server is struggling.
+                    if (retries > 0 && method === 'GET' && (response.status === 503 || response.status === 504)) {
+                        const delay = retryDelay(4 - retries, backoff);
                         if (__DEV__) {console.log(`[API-CLIENT] Transient error ${response.status}. Retrying in ${delay}ms...`);}
                         await new Promise(resolve => setTimeout(resolve, delay));
                         return requestWithRetry(retries - 1, backoff);
@@ -218,21 +230,27 @@ export const apiClient = {
 
                 return data;
             } catch (err: any) {
-                // Retry on network/timeout errors
-                if (retries > 0 && (err.message === 'Request timed out' || err.message === 'Network request failed')) {
-                    const delay = backoff * (4 - retries);
+                // Retry network/timeout errors for GETs only — a non-GET that timed out may have
+                // succeeded server-side (see comment above on duplicate side effects).
+                if (retries > 0 && method === 'GET' && (err.message === 'Request timed out' || err.message === 'Network request failed')) {
+                    const delay = retryDelay(4 - retries, backoff);
                     if (__DEV__) {console.log(`[API-CLIENT] Network error: ${err.message}. Retrying in ${delay}ms...`);}
                     await new Promise(resolve => setTimeout(resolve, delay));
                     return requestWithRetry(retries - 1, backoff);
                 }
                 throw err;
             } finally {
-                if (method === 'GET') {
+                // Only drop the entry if it is still OURS. A bypass-cache GET for the same
+                // endpoint overwrites the map entry while this request is in flight; deleting
+                // unconditionally would evict that newer promise and lose its deduplication.
+                if (method === 'GET' && pendingRequests.get(endpoint) === requestPromise) {
                     pendingRequests.delete(endpoint);
                 }
             }
         };
 
+        // The `finally` above closes over this binding; it can only run after the first await,
+        // by which point the assignment has completed.
         const requestPromise = requestWithRetry();
 
         // Track in-flight GET requests for deduplication BEFORE returning

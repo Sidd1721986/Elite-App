@@ -1,0 +1,38 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "elite-website",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "4555", "website"],
+      "port": 4555
+    },
+    {
+      "name": "design-samples",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "4444", "-s", ".claude/design"],
+      "port": 4444
+    },
+    {
+      "name": "multi-user-auth-app (Metro)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "cwd": "/Users/siddharthsengar/Desktop/multi-user-auth-app",
+      "port": 8081
+    },
+    {
+      "name": "ai-orchestration-react-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "cwd": "/Users/siddharthsengar/Desktop/ai-orchestration/react-app",
+      "port": 3000
+    },
+    {
+      "name": "elite-home-service (Metro)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "cwd": "/Users/siddharthsengar/Desktop/Elite App/Elite-App",
+      "port": 8081
+    }
+  ]
+}

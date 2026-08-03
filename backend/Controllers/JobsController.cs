@@ -1,5 +1,6 @@
 using EliteApp.API.Data;
 using EliteApp.API.Models;
+using EliteApp.API.Services.Email;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -14,11 +15,34 @@ namespace EliteApp.API.Controllers;
 public class JobsController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IEmailSender _emailSender;
+    private readonly IEmailQueue _emailQueue;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<JobsController> _logger;
 
-    public JobsController(AppDbContext context)
+    public JobsController(AppDbContext context, IEmailSender emailSender, IEmailQueue emailQueue, IConfiguration configuration, ILogger<JobsController> logger)
     {
         _context = context;
+        _emailSender = emailSender;
+        _emailQueue = emailQueue;
+        _configuration = configuration;
+        _logger = logger;
     }
+
+    /// <summary>
+    /// Best-effort email. Queued to a background dispatcher — an SMTP round-trip must not
+    /// hold the request open, and a mail failure must not break the request that triggered it.
+    /// </summary>
+    private Task NotifyEmailAsync(string to, string subject, string body)
+    {
+        if (!string.IsNullOrWhiteSpace(to))
+            _emailQueue.TryEnqueue(new OutgoingEmail(to, subject, body));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Best-effort notification to the configured admin inbox.</summary>
+    private Task NotifyAdminAsync(string subject, string body)
+        => NotifyEmailAsync(_configuration["Email:AdminNotify"] ?? string.Empty, subject, body);
 
     /// <summary>Returns true if the caller may view this job (customer, assigned vendor, or admin).</summary>
     private bool CurrentUserCanAccessJob(Guid userId, Job job)
@@ -36,6 +60,38 @@ public class JobsController : ControllerBase
         "Sale", "FollowUp", "Expired", "Completed", "InvoiceRequested", "Invoiced"
     };
 
+    /// <summary>
+    /// Accepts only same-origin "/uploads/..." URLs (the only thing FilesController produces).
+    /// Blocks a client storing an external or javascript:/data: URL in a job that is later served back.
+    /// </summary>
+    private bool IsAllowedUploadUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return false;
+        if (!uri.Host.Equals(Request.Host.Host, StringComparison.OrdinalIgnoreCase)) return false;
+        var path = uri.AbsolutePath;
+        if (path.Contains("..")) return false;
+        return path.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Ceiling on photo URLs stored against a single job (the Photos column is a CSV string).
+    private const int MaxJobPhotos = 50;
+
+    /// <summary>
+    /// Validates a client-supplied photo URL list: same-origin uploaded-file URLs only, capped at
+    /// <see cref="MaxJobPhotos"/>. Returns the error result to send, or null when the list is fine.
+    /// </summary>
+    private IActionResult? ValidatePhotoUrls(List<string>? photos)
+    {
+        if (photos == null || photos.Count == 0) return null;
+        if (photos.Count > MaxJobPhotos)
+            return BadRequest(new { message = $"A job cannot have more than {MaxJobPhotos} photos." });
+        if (photos.Any(p => !IsAllowedUploadUrl(p)))
+            return BadRequest(new { message = "Each photo must be an uploaded file URL." });
+        return null;
+    }
+
     private static List<string> ParseCsvList(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
@@ -43,6 +99,45 @@ public class JobsController : ControllerBase
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
+    }
+
+    // Statuses a vendor may act from during the active outreach phase of a job they have accepted.
+    // Guards the reach-out / appointment endpoints so the workflow can't be skipped or run backwards
+    // from a terminal state.
+    private static readonly HashSet<string> VendorOutreachStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Accepted", "ReachedOut", "ApptSet"
+    };
+
+    // Statuses from which a vendor may record (or revise) a sale. Excludes terminal states
+    // (Completed/Invoiced/InvoiceRequested) so an already-finalized job's ContractAmount/ScopeOfWork
+    // can't be silently overwritten.
+    private static readonly HashSet<string> VendorSaleStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Accepted", "ReachedOut", "ApptSet", "Sale", "FollowUp"
+    };
+
+    // Statuses from which a vendor may mark a job complete.
+    private static readonly HashSet<string> VendorCompleteStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Accepted", "ReachedOut", "ApptSet", "Sale", "FollowUp"
+    };
+
+    /// <summary>
+    /// Persists pending changes, translating an optimistic-concurrency clash (RowVersion mismatch)
+    /// into a 409 the client can refresh-and-retry. Returns null on success, or the IActionResult to return.
+    /// </summary>
+    private async Task<IActionResult?> TrySaveChangesAsync()
+    {
+        try
+        {
+            await _context.SaveChangesAsync();
+            return null;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(new { message = "Job was modified by another request. Please refresh and try again." });
+        }
     }
 
     /// <summary>Statuses from which an admin may force-close a vendor-assigned job to Completed (e.g. vendor forgot to tap complete).</summary>
@@ -155,6 +250,12 @@ public class JobsController : ControllerBase
         Guid targetCustomerId = userId;
         if (isAdmin && request.CustomerId != null)
         {
+            // Validate the target exists and is actually a Customer — otherwise an admin typo
+            // creates an orphan job pointing at a non-existent or wrong-role user.
+            var target = await _context.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == request.CustomerId.Value);
+            if (target == null || !string.Equals(target.Role, "Customer", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Target customer not found or is not a customer account." });
             targetCustomerId = request.CustomerId.Value;
         }
 
@@ -177,14 +278,11 @@ public class JobsController : ControllerBase
                 return BadRequest(new { message = $"Invalid service value: '{svc}'. Services must be plain text, max 100 characters each." });
         }
 
+        var invalidPhotos = ValidatePhotoUrls(request.Photos);
+        if (invalidPhotos != null) return invalidPhotos;
+
         int nextJobNumber;
         string? suffix = null;
-
-        // Serialize JobNumber assignment so two concurrent CreateJob requests can't read the
-        // same Max()+1 (or same child suffix) and write duplicate human-facing job numbers.
-        // A transaction-scoped Postgres advisory lock is released automatically on commit/rollback.
-        await using var jobNumberTx = await _context.Database.BeginTransactionAsync();
-        await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(727274)");
 
         if (request.ParentJobId != null)
         {
@@ -197,17 +295,17 @@ public class JobsController : ControllerBase
                 return BadRequest(new { message = "Parent job not found." });
 
             nextJobNumber = parentJob.JobNumber;
-            // Find how many sub-jobs this parent already has to determine the suffix (A, B, C...)
-            int existingKids = await _context.Jobs.CountAsync(j => j.ParentJobId == request.ParentJobId);
-            suffix = ((char)('A' + existingKids)).ToString();
+            // Suffix (A, B, C...) is assigned under an advisory lock at save time below —
+            // two concurrent splits under the same parent must not compute the same letter.
         }
         else
         {
-            // Manual increment for parent jobs
-            int maxJobNumber = await _context.Jobs.AnyAsync() 
-                ? await _context.Jobs.MaxAsync(j => j.JobNumber) 
-                : 1000;
-            nextJobNumber = maxJobNumber + 1;
+            // Parent numbers come from a Postgres sequence: atomic under any concurrency,
+            // no lock, no table scan. Replaces the former global advisory lock + MaxAsync
+            // that serialized every job creation across all instances.
+            nextJobNumber = (int)await _context.Database
+                .SqlQueryRaw<long>("SELECT nextval('job_number_seq') AS \"Value\"")
+                .SingleAsync();
         }
 
         var job = new Job
@@ -246,15 +344,67 @@ public class JobsController : ControllerBase
             job.AssignedAt = DateTime.UtcNow;
         }
 
-        _context.Jobs.Add(job);
-        await _context.SaveChangesAsync();
-        await jobNumberTx.CommitAsync(); // releases the advisory lock for the next creator
+        if (request.ParentJobId != null)
+        {
+            // Child split: assign the next free suffix under an advisory lock so two concurrent
+            // splits of the same parent can't both become "B". Explicit transactions must run
+            // inside the retrying execution strategy (EnableRetryOnFailure).
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var tx = await _context.Database.BeginTransactionAsync();
+                await _context.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(727274)");
+                var existingKids = await _context.Jobs.CountAsync(j => j.ParentJobId == request.ParentJobId);
+                job.JobSuffix = ((char)('A' + existingKids)).ToString();
+                _context.Jobs.Add(job);
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync(); // releases the advisory lock for the next split
+            });
+        }
+        else
+        {
+            _context.Jobs.Add(job);
+            await _context.SaveChangesAsync();
+        }
 
         // Populate the Customer navigation property on the tracked entity
         // instead of issuing a second SELECT round-trip.
         await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
         if (job.VendorId != null)
             await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
+
+        // Best-effort admin notification for a newly submitted service request.
+        var jobLabel = $"#{job.JobNumber}{job.JobSuffix}";
+        await NotifyAdminAsync(
+            subject: $"New job {jobLabel} submitted",
+            body:
+                $"A new service request was submitted.\n\n" +
+                $"Job: {jobLabel}\n" +
+                $"Customer: {job.Customer?.Name} ({job.Customer?.Email})\n" +
+                $"Services: {job.Services}\n" +
+                $"Address: {job.Address}\n" +
+                $"Contact: {job.ContactPhone} / {job.ContactEmail}\n" +
+                $"Urgency: {job.Urgency}\n\n" +
+                $"Description:\n{job.Description}");
+
+        // If this was an admin split pre-assigned to a vendor, notify that vendor too.
+        if (job.VendorId != null && !string.IsNullOrWhiteSpace(job.Vendor?.Email))
+        {
+            await NotifyEmailAsync(
+                to: job.Vendor.Email,
+                subject: $"You've been assigned job {jobLabel}",
+                body:
+                    $"Hi {job.Vendor.Name},\n\n" +
+                    $"You have been assigned a new job by Elite Home Services.\n\n" +
+                    $"Job: {jobLabel}\n" +
+                    $"Services: {job.Services}\n" +
+                    $"Address: {job.Address}\n" +
+                    $"Contact: {job.ContactPhone} / {job.ContactEmail}\n" +
+                    $"Urgency: {job.Urgency}\n\n" +
+                    $"Description:\n{job.Description}\n\n" +
+                    $"Please log in to the Elite app to accept and view full details.");
+        }
+
         return CreatedAtAction(nameof(GetJob), new { id = job.Id }, job);
     }
 
@@ -337,6 +487,9 @@ public class JobsController : ControllerBase
                 return BadRequest(new { message = $"Invalid status value '{request.Status}'." });
             job.Status = request.Status;
         }
+        var invalidPhotos = ValidatePhotoUrls(request.Photos);
+        if (invalidPhotos != null) return invalidPhotos;
+
         if (request.Description != null) job.Description = request.Description;
         if (request.Address != null) job.Address = request.Address;
         if (request.Urgency != null) job.Urgency = request.Urgency;
@@ -345,6 +498,31 @@ public class JobsController : ControllerBase
         if (request.Services != null) job.Services = string.Join(",", request.Services);
         if (request.ContactPhone != null) job.ContactPhone = request.ContactPhone;
         if (request.ContactEmail != null) job.ContactEmail = request.ContactEmail;
+
+        // Admin-only amount override (the value the customer is invoiced/pays). Blocked once Paid.
+        if (request.ContractAmount.HasValue)
+        {
+            if (!isAdmin)
+                return BadRequest(new { message = "Only an admin can change the amount." });
+            if (string.Equals(job.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Cannot change the amount on a job that is already paid." });
+            if (request.ContractAmount.Value <= 0)
+                return BadRequest(new { message = "Amount must be greater than zero." });
+
+            var previous = job.ContractAmount;
+            if (previous != request.ContractAmount.Value)
+            {
+                job.ContractAmount = request.ContractAmount.Value;
+                _context.JobNotes.Add(new JobNote
+                {
+                    Id = Guid.NewGuid(),
+                    JobId = id,
+                    AuthorId = userId,
+                    Content = $"Amount changed by admin from {(previous.HasValue ? $"${previous.Value:0.00}" : "unset")} to ${request.ContractAmount.Value:0.00}.",
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
+        }
 
         // Final validation to ensure mandatory fields weren't cleared
         var missingFields = new List<string>();
@@ -445,11 +623,35 @@ public class JobsController : ControllerBase
             Content = noteContent, CreatedAt = DateTime.UtcNow
         });
 
-        await _context.SaveChangesAsync();
+        // RowVersion guard: if another admin reassigned/modified this job concurrently,
+        // fail with 409 instead of silently clobbering their assignment (lost update).
+        var conflict = await TrySaveChangesAsync();
+        if (conflict != null) return conflict;
 
         // Load navigation properties on the tracked entity — avoids a second SELECT.
         await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
         await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
+
+        // Best-effort notification to the assigned vendor. Never break the assignment on mail failure.
+        var jobLabel = $"#{job.JobNumber}{job.JobSuffix}";
+        if (!string.IsNullOrWhiteSpace(job.Vendor?.Email))
+        {
+            await NotifyEmailAsync(
+                to: job.Vendor.Email,
+                subject: $"You've been assigned job {jobLabel}",
+                body:
+                    $"Hi {job.Vendor.Name},\n\n" +
+                    $"You have been assigned a new job by Elite Home Services.\n\n" +
+                    $"Job: {jobLabel}\n" +
+                    $"Services: {job.Services}\n" +
+                    $"Address: {job.Address}\n" +
+                    $"Customer: {job.Customer?.Name}\n" +
+                    $"Contact: {job.ContactPhone} / {job.ContactEmail}\n" +
+                    $"Urgency: {job.Urgency}\n\n" +
+                    $"Description:\n{job.Description}\n\n" +
+                    $"Please log in to the Elite app to accept and view full details.");
+        }
+
         return Ok(job);
     }
 
@@ -606,7 +808,10 @@ public class JobsController : ControllerBase
         job.Status = "Accepted";
         job.AcceptedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+        // RowVersion guard closes the read-Status/write-Status race: if a reassignment
+        // landed between the check above and this save, the update affects 0 rows → 409.
+        var conflict = await TrySaveChangesAsync();
+        if (conflict != null) return conflict;
         return Ok(job);
     }
 
@@ -668,11 +873,19 @@ public class JobsController : ControllerBase
 
         if (job.VendorId != userId) return Forbid();
 
+        // Workflow guard: a sale can only be recorded once the vendor has accepted and worked the
+        // lead. Blocks skipping straight from Assigned, and blocks overwriting a Completed/Invoiced job.
+        if (!VendorSaleStatuses.Contains(job.Status))
+            return BadRequest(new { message = $"Cannot record a sale from status '{job.Status}'." });
+
         if (string.IsNullOrWhiteSpace(request.ScopeOfWork))
             return BadRequest(new { message = "Scope of work is required." });
         if (request.ContractAmount <= 0)
             return BadRequest(new { message = "Contract amount must be greater than zero." });
-        if (request.WorkStartDate == default || request.WorkStartDate.Date < DateTime.UtcNow.Date)
+        // WorkStartDate arrives in the client's local date with unspecified Kind; comparing it directly
+        // against UTC "today" would wrongly reject a legitimate same-day start for users west of UTC.
+        // Allow a one-day grace so any timezone's "today" is accepted while still rejecting clearly-past dates.
+        if (request.WorkStartDate == default || request.WorkStartDate.Date < DateTime.UtcNow.Date.AddDays(-1))
             return BadRequest(new { message = "A valid future work start date is required." });
 
         job.Status = "Sale";
@@ -680,7 +893,8 @@ public class JobsController : ControllerBase
         job.ContractAmount = request.ContractAmount;
         job.WorkStartDate = request.WorkStartDate;
 
-        await _context.SaveChangesAsync();
+        var conflict = await TrySaveChangesAsync();
+        if (conflict != null) return conflict;
         return Ok(job);
     }
 
@@ -695,8 +909,13 @@ public class JobsController : ControllerBase
 
         if (job.VendorId != userId) return Forbid();
 
+        // Workflow guard: outreach is only meaningful after the vendor has accepted the job.
+        if (!VendorOutreachStatuses.Contains(job.Status))
+            return BadRequest(new { message = "You must accept the job before logging outreach." });
+
         job.Status = "ReachedOut";
-        await _context.SaveChangesAsync();
+        var conflict = await TrySaveChangesAsync();
+        if (conflict != null) return conflict;
         return Ok(job);
     }
 
@@ -711,8 +930,13 @@ public class JobsController : ControllerBase
 
         if (job.VendorId != userId) return Forbid();
 
+        // Workflow guard: an appointment can only be set on a job the vendor has accepted/worked.
+        if (!VendorOutreachStatuses.Contains(job.Status))
+            return BadRequest(new { message = "You must accept the job before scheduling an appointment." });
+
         job.Status = "ApptSet";
-        await _context.SaveChangesAsync();
+        var conflict = await TrySaveChangesAsync();
+        if (conflict != null) return conflict;
         return Ok(job);
     }
 
@@ -726,6 +950,9 @@ public class JobsController : ControllerBase
 
         var job = await _context.Jobs.FindAsync(id);
         if (job == null) return NotFound();
+
+        var invalidPhotos = ValidatePhotoUrls(request.CompletedPhotos);
+        if (invalidPhotos != null) return invalidPhotos;
 
         if (isAdmin)
         {
@@ -746,6 +973,10 @@ public class JobsController : ControllerBase
         else
         {
             if (job.VendorId != userId) return Forbid();
+            // Workflow guard: vendor can only complete from an active worked state, never re-complete
+            // a job that is already Completed/Invoiced or jump from Assigned without accepting.
+            if (!VendorCompleteStatuses.Contains(job.Status))
+                return BadRequest(new { message = $"Cannot mark complete from status '{job.Status}'." });
         }
 
         job.Status = "Completed";
@@ -754,7 +985,8 @@ public class JobsController : ControllerBase
             job.CompletedPhotos = string.Join(",", request.CompletedPhotos);
         }
 
-        await _context.SaveChangesAsync();
+        var conflict = await TrySaveChangesAsync();
+        if (conflict != null) return conflict;
         return Ok(job);
     }
 
@@ -769,6 +1001,15 @@ public class JobsController : ControllerBase
 
         var job = await _context.Jobs.FindAsync(id);
         if (job == null) return NotFound();
+
+        // Workflow guard: the invoice is requested from the vendor who did the work, so the job
+        // must be Completed and still have that vendor assigned. Without this an admin could put
+        // any job — including an unassigned Submitted one — into InvoiceRequested, from which
+        // upload-invoice is unreachable and the job is stuck.
+        if (job.VendorId == null)
+            return BadRequest(new { message = "Cannot request an invoice: this job has no assigned vendor." });
+        if (!string.Equals(job.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = $"Cannot request an invoice from status '{job.Status}'." });
 
         job.Status = "InvoiceRequested";
         job.InvoiceRequestedAt = DateTime.UtcNow;
@@ -803,6 +1044,8 @@ public class JobsController : ControllerBase
             return BadRequest(new { message = "Invoice can only be uploaded after admin requests it." });
         if (string.IsNullOrWhiteSpace(request.InvoiceDocumentUrl))
             return BadRequest(new { message = "Invoice document URL is required." });
+        if (!IsAllowedUploadUrl(request.InvoiceDocumentUrl))
+            return BadRequest(new { message = "Invoice document URL must be an uploaded file URL." });
 
         job.Status = "Invoiced";
         job.IsInvoiced = true;
@@ -820,8 +1063,72 @@ public class JobsController : ControllerBase
         };
         _context.JobNotes.Add(note);
 
-        await _context.SaveChangesAsync();
+        var conflict = await TrySaveChangesAsync();
+        if (conflict != null) return conflict;
         return Ok(job);
+    }
+
+    // POST /api/jobs/{id}/send-invoice — Admin emails the uploaded invoice to the customer.
+    // The vendor uploads the invoice document (upload-invoice); this hands it to the customer
+    // and nudges them to pay. Requires an invoice document to already exist on the job.
+    [HttpPost("{id}/send-invoice")]
+    public async Task<IActionResult> SendInvoice(Guid id)
+    {
+        var userIdString = User.FindFirstValue("id");
+        if (!Guid.TryParse(userIdString, out var adminId)) return Unauthorized();
+
+        if (!User.IsInRole("Admin") && !User.IsInRole("admin"))
+            return Forbid();
+
+        var job = await _context.Jobs.Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == id);
+        if (job == null) return NotFound();
+
+        if (string.IsNullOrWhiteSpace(job.InvoiceDocumentUrl))
+            return BadRequest(new { message = "No invoice document to send. The vendor must upload an invoice first." });
+
+        var to = !string.IsNullOrWhiteSpace(job.ContactEmail) ? job.ContactEmail : job.Customer?.Email;
+        if (string.IsNullOrWhiteSpace(to))
+            return BadRequest(new { message = "This job has no customer email to send the invoice to." });
+
+        var amount = job.ContractAmount.HasValue ? $"${job.ContractAmount.Value:0.00}" : "the agreed amount";
+        var subject = $"Your invoice for Order #{job.JobNumber} — Elite Home Services";
+        var plainBody =
+            $"Hello,\n\nYour invoice for Order #{job.JobNumber} at {job.Address} is ready.\n\n" +
+            $"Amount due: {amount}\n\nView your invoice: {job.InvoiceDocumentUrl}\n\n" +
+            "Open the Elite Home Services app to pay securely.\n\nThank you,\nElite Home Services";
+        var htmlBody = $@"
+<div style=""font-family:sans-serif;max-width:600px;margin:auto;"">
+  <h2 style=""color:#6366F1;"">Elite Home Services</h2>
+  <p>Your invoice for <strong>Order #{job.JobNumber}</strong> at {job.Address} is ready.</p>
+  <p style=""font-size:18px;""><strong>Amount due: {amount}</strong></p>
+  <a href=""{job.InvoiceDocumentUrl}"" style=""display:inline-block;padding:14px 28px;background:#6366F1;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0;"">View Invoice</a>
+  <p style=""color:#888;font-size:13px;"">Open the Elite Home Services app to pay securely.</p>
+</div>";
+
+        // Best-effort email; a mail failure should still record the attempt but report clearly.
+        try
+        {
+            await _emailSender.SendAsync(to, subject, plainBody, htmlBody);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send invoice email for job {JobId} to {To}", id, to);
+            return StatusCode(503, new { message = "Could not send the invoice email. Please try again." });
+        }
+
+        var note = new JobNote
+        {
+            Id = Guid.NewGuid(),
+            JobId = id,
+            AuthorId = adminId,
+            Content = $"Invoice sent to customer ({to}) by admin.",
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.JobNotes.Add(note);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Invoice for job {JobId} sent to {To} by admin {AdminId}", id, to, adminId);
+        return Ok(new { message = $"Invoice sent to {to}." });
     }
 
     [HttpPost("{id}/photos")]
@@ -843,12 +1150,18 @@ public class JobsController : ControllerBase
         if (request.Photos == null || !request.Photos.Any())
             return BadRequest(new { message = "No photos provided." });
 
-        // Append to existing photos
-        var existingPhotos = !string.IsNullOrEmpty(job.Photos) 
-            ? job.Photos.Split(',').ToList() 
+        // Each photo must be a same-origin uploaded-file URL; reject external/active-content URLs.
+        var invalidPhotos = ValidatePhotoUrls(request.Photos);
+        if (invalidPhotos != null) return invalidPhotos;
+
+        // Append to existing photos, capped so the column can't grow unbounded.
+        var existingPhotos = !string.IsNullOrEmpty(job.Photos)
+            ? job.Photos.Split(',').ToList()
             : new List<string>();
-        
+
         existingPhotos.AddRange(request.Photos);
+        if (existingPhotos.Count > MaxJobPhotos)
+            return BadRequest(new { message = $"A job cannot have more than {MaxJobPhotos} photos." });
         job.Photos = string.Join(",", existingPhotos);
 
         // Add audit note
@@ -927,6 +1240,9 @@ public class UpdateJobRequest
 {
     /// <summary>When true (admin only), clears VendorId and returns the job to Submitted.</summary>
     public bool ClearAssignedVendor { get; set; }
+
+    /// <summary>Admin-only override of the amount the customer is invoiced/pays. Blocked once Paid.</summary>
+    public decimal? ContractAmount { get; set; }
 
     public string? Status { get; set; }
     public string? Description { get; set; }

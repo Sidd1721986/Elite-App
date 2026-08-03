@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace EliteApp.API.Models;
 
@@ -19,7 +20,10 @@ public class User
     [EmailAddress]
     public string Email { get; set; } = string.Empty;
 
+    // Never serialize credential material — Job endpoints return User via navigation
+    // properties, so anything without [JsonIgnore] here ships to every caller.
     [Required]
+    [JsonIgnore]
     public string PasswordHash { get; set; } = string.Empty;
 
     [Required]
@@ -40,10 +44,20 @@ public class User
     public bool IsActive { get; set; } = true;
     
     public bool IsPhoneVerified { get; set; } = false;
+    [JsonIgnore]
     public string? PhoneVerificationCode { get; set; }
+    [JsonIgnore]
     public DateTime? PhoneVerificationExpiry { get; set; }
+    [JsonIgnore]
     public int PhoneVerificationAttempts { get; set; } = 0;
+    [JsonIgnore]
     public DateTime? PhoneVerificationLastAttempt { get; set; }
+
+    // UTC time of the last password reset. Tokens issued before this are rejected in
+    // Program.cs (OnTokenValidated) — a 7-day JWT must not outlive the reset that was
+    // meant to lock its holder out. Null means the password has never been reset.
+    [JsonIgnore]
+    public DateTime? PasswordChangedAt { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -97,6 +111,11 @@ public class Job
     public string? InvoiceDocumentUrl { get; set; }
     public DateTime? InvoiceRequestedAt { get; set; }
     public DateTime? InvoicedAt { get; set; }
+
+    // Payment lifecycle (Stripe). Source of truth for "Paid" is the verified webhook,
+    // never the client. Default Unpaid; flips to Paid only on payment_intent.succeeded.
+    [StringLength(20)]
+    public string PaymentStatus { get; set; } = "Unpaid";
 
     public List<JobNote> Notes { get; set; } = new();
 
@@ -178,6 +197,47 @@ public class PasswordResetToken
     public DateTime ExpiresAt { get; set; }
 
     public bool Used { get; set; }
+
+    // Failed verify count for this specific code. The IP rate limiter alone does not stop a
+    // distributed guess of a 6-digit OTP; the token is burned once this hits the cap.
+    public int Attempts { get; set; }
+}
+
+public class Payment
+{
+    [Key]
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    [Required]
+    public Guid JobId { get; set; }
+
+    [ForeignKey("JobId")]
+    public Job? Job { get; set; }
+
+    // Who pays — the job's customer at intent-creation time.
+    [Required]
+    public Guid CustomerId { get; set; }
+
+    // Snapshot of ContractAmount * 100 at intent creation. Amount is computed server-side;
+    // the client never sends it. The webhook re-verifies the Stripe amount matches this.
+    public long AmountCents { get; set; }
+
+    [StringLength(10)]
+    public string Currency { get; set; } = "usd";
+
+    // RequiresPaymentConfirmation -> Succeeded / Failed / Canceled.
+    [StringLength(40)]
+    public string Status { get; set; } = "RequiresPaymentConfirmation";
+
+    [Required]
+    [StringLength(255)]
+    public string StripePaymentIntentId { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? PaidAt { get; set; }
+
+    [Timestamp]
+    public byte[]? RowVersion { get; set; }
 }
 
 public class AdminInvite

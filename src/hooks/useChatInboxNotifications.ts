@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { messageService } from '../services/messageService';
@@ -12,6 +12,12 @@ const POLL_MS = 30000;
  */
 export function useChatInboxNotifications() {
     const [conversations, setConversations] = useState<Conversation[]>([]);
+    // True only while the screen is focused; gates setState so a poll that resolves after
+    // blur/unmount can't update an unmounted component (setState-after-unmount warning).
+    const activeRef = useRef(false);
+    // Prevents overlapping polls: on a slow network a 30s interval could otherwise fire a
+    // second request before the first resolved, stacking duplicate calls.
+    const inFlightRef = useRef(false);
 
     const messageUnreadTotal = useMemo(
         () => conversations.reduce((n, c) => n + (c.unreadCount || 0), 0),
@@ -19,19 +25,27 @@ export function useChatInboxNotifications() {
     );
 
     const refreshInbox = useCallback(async () => {
+        if (inFlightRef.current) { return; }
+        inFlightRef.current = true;
         try {
-            const conv = await messageService.getConversations().catch(() => [] as Conversation[]);
+            // No fallback to []: a single transient failure would wipe the thread list and
+            // zero the unread badge. Keep the last known state and retry on the next poll.
+            const conv = await messageService.getConversations();
+            if (!activeRef.current) { return; }
             const sorted = [...(conv || [])].sort(
                 (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
             );
             setConversations(sorted);
         } catch {
-            /* ignore */
+            /* keep last-known conversations */
+        } finally {
+            inFlightRef.current = false;
         }
     }, []);
 
     useFocusEffect(
         useCallback(() => {
+            activeRef.current = true;
             void refreshInbox();
             let appState = AppState.currentState;
             const id = setInterval(() => {
@@ -46,6 +60,7 @@ export function useChatInboxNotifications() {
                 }
             });
             return () => {
+                activeRef.current = false;
                 clearInterval(id);
                 appStateSub.remove();
             };

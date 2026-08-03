@@ -33,6 +33,32 @@ function getStatusInfo(status: string) {
     return STATUS_INFO_MAP[status] ?? DEFAULT_STATUS;
 }
 
+// Tracks which job cards have already played their entrance animation. FlashList recycles and
+// re-mounts rows during scrolling, so without this the fade/translate replays every time a card
+// scrolls back into view (janky). Each id animates once per signed-in session.
+const animatedJobIds = new Set<string>();
+/** Bounded so a long session can't grow the set without limit; oldest ids are evicted first. */
+const ANIMATED_IDS_LIMIT = 500;
+/** Owner of the ids above — animation state must not leak between users on a shared device. */
+let animatedIdsOwner: string | undefined;
+
+/** Drops all remembered ids when the signed-in account changes. */
+function syncAnimatedIdsOwner(ownerId: string | undefined) {
+    if (ownerId !== animatedIdsOwner) {
+        animatedJobIds.clear();
+        animatedIdsOwner = ownerId;
+    }
+}
+
+function rememberAnimatedJob(jobId: string) {
+    if (animatedJobIds.size >= ANIMATED_IDS_LIMIT) {
+        // Sets iterate in insertion order, so this is the oldest entry.
+        const oldest = animatedJobIds.values().next().value;
+        if (oldest !== undefined) {animatedJobIds.delete(oldest);}
+    }
+    animatedJobIds.add(jobId);
+}
+
 const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify, index = 0 }) => {
     const { progress, color, bgColor } = getStatusInfo(job.status);
     const reducedMotion = useReducedMotion();
@@ -41,9 +67,16 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify, index =
     const { user } = useAuth();
     const [isPressed, setIsPressed] = React.useState(false);
 
+    // Only run the entrance animation the first time this card appears for this account.
+    syncAnimatedIdsOwner(user?.id || user?.email);
+    const skipEntrance = reducedMotion || animatedJobIds.has(job.id);
+    React.useEffect(() => {
+        rememberAnimatedJob(job.id);
+    }, [job.id]);
+
     return (
         <MotiView
-            from={reducedMotion ? {} : { opacity: 0, translateY: 20 }}
+            from={skipEntrance ? {} : { opacity: 0, translateY: 20 }}
             animate={reducedMotion ? {} : {
                 opacity: 1,
                 translateY: 0,
@@ -52,7 +85,7 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify, index =
             transition={{
                 type: 'timing',
                 duration: 400,
-                delay: reducedMotion ? 0 : index * 50, // 50ms stagger as requested
+                delay: skipEntrance ? 0 : index * 50, // 50ms stagger only on first appearance
             }}
         >
             <TouchableRipple
