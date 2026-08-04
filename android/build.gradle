@@ -1,8 +1,9 @@
 ext {
-    buildToolsVersion = "35.0.0"
+    buildToolsVersion = "36.0.0"
     minSdkVersion = 24
-    compileSdkVersion = 35
-    targetSdkVersion = 35
+    // Google Play requires new releases to target Android 16 (API 36) from 2026-08-31.
+    compileSdkVersion = 36
+    targetSdkVersion = 36
     ndkVersion = "26.1.10909125"
     kotlinVersion = "1.9.25"
 }
@@ -13,7 +14,9 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle")
+        // Pinned ahead of the version React Native 0.76's gradle plugin resolves (8.6.0):
+        // compileSdk 36 requires AGP 8.9.0+.
+        classpath("com.android.tools.build:gradle:8.9.2")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
     }

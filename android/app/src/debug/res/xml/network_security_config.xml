@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only override of the release config in src/main/res/xml/.
+
+  The debug manifest's android:usesCleartextTraffic="true" has no effect on its own:
+  when a networkSecurityConfig is present it takes precedence and the release config
+  denies cleartext, so Metro (8081) and the local API (5260) were unreachable from a
+  debug build. Cleartext stays denied by default here and is permitted only for the
+  loopback addresses used during development. Release builds never merge this file.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <!-- Android emulator's alias for the host machine -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

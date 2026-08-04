@@ -73,9 +73,11 @@ def enableProguardInReleaseBuilds = true
 def jscFlavor = 'org.webkit:android-jsc:+'
 
 android {
-    ndkVersion "26.1.10909125"
-    buildToolsVersion "35.0.0"
-    compileSdk 35
+    // Single source of truth is the ext block in the root build.gradle — these previously
+    // duplicated the SDK levels and could silently drift out of sync with it.
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.elitehomeservicesusa.app"
     def keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -86,8 +88,8 @@ android {
 
     defaultConfig {
         applicationId "com.elitehomeservicesusa.app"
-        minSdkVersion 24
-        targetSdkVersion 35
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode((System.getenv("BUILD_BUILDID") ?: "1").toInteger())
         versionName(System.getenv("VERSION_NAME") ?: "1.0")
     }

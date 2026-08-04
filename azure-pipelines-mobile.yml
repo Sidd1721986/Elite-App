@@ -267,13 +267,16 @@ stages:
               pathToPublish: android/app/build/outputs/bundle/release/app-release.aab
               artifactName: android-aab
           - task: GooglePlayRelease@4
-            displayName: Publish AAB to Google Play (production)
+            displayName: Publish AAB to Google Play (internal testing)
             inputs:
               serviceConnection: $(GOOGLE_PLAY_SERVICE_CONN)
               applicationId: $(GOOGLE_PLAY_PACKAGE_NAME)
               action: SingleBundle
               bundleFile: android/app/build/outputs/bundle/release/app-release.aab
-              track: production
+              # Internal track, promoted to production by hand in Play Console. Previously
+              # `production` with isDraftRelease:false, which shipped every build straight to
+              # all users with no gate — and contradicted the header comment above.
+              track: internal
               isDraftRelease: false
               releaseName: '$(Build.BuildNumber)'
               changeLogFile: $(PLAY_RELEASE_NOTES_FILE)
