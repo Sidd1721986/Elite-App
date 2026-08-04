@@ -33,9 +33,17 @@ docker info >/dev/null 2>&1 || { echo "❌ Docker isn't running — start Docker
 az account show >/dev/null 2>&1 || { echo "❌ Not logged in to Azure — run: az login"; exit 1; }
 
 # --- work out the current and next tags -------------------------------------
-CURRENT_IMAGE=$(az webapp config container show \
+# This query MUST succeed. It previously swallowed failures with `|| echo ""`, so a
+# flaky `az` call made PREV_TAG empty, NEW_TAG fall back to a timestamp — or worse,
+# read a stale tag and rebuild the SAME number, overwriting that tag's digest on
+# Docker Hub and destroying the rollback target.
+if ! CURRENT_IMAGE=$(az webapp config container show \
   --name "$WEBAPP" --resource-group "$RG" \
-  --query "[?name=='DOCKER_CUSTOM_IMAGE_NAME'].value | [0]" -o tsv 2>/dev/null || echo "")
+  --query "[?name=='DOCKER_CUSTOM_IMAGE_NAME'].value | [0]" -o tsv 2>/dev/null); then
+  echo "❌ Could not read the current container image from Azure. Refusing to guess a tag."
+  echo "   Re-run once 'az' is responsive."
+  exit 1
+fi
 PREV_TAG="${CURRENT_IMAGE##*:}"
 echo "Current live image: ${CURRENT_IMAGE:-<unknown>}  (tag: ${PREV_TAG:-?})"
 
@@ -44,6 +52,13 @@ if [[ "$PREV_TAG" =~ ^[0-9]+$ ]]; then
 else
   NEW_TAG="$(date +%Y%m%d%H%M)"   # fallback if the current tag isn't numeric
 fi
+
+# Never reuse a tag: overwriting one on Docker Hub silently destroys the image you
+# would roll back to. Bump until we find a tag that doesn't already exist remotely.
+while docker manifest inspect "${IMAGE}:${NEW_TAG}" >/dev/null 2>&1; do
+  echo "   tag ${NEW_TAG} already exists on Docker Hub — bumping"
+  if [[ "$NEW_TAG" =~ ^[0-9]+$ ]]; then NEW_TAG=$(( NEW_TAG + 1 )); else NEW_TAG="${NEW_TAG}-b"; fi
+done
 echo "==> Deploying new tag: $NEW_TAG"
 echo
 
@@ -55,14 +70,26 @@ docker buildx build --platform linux/amd64 \
   -f backend/Dockerfile backend \
   --push
 
-# Small retry wrapper — `az` occasionally drops the connection mid-call.
+# Small retry wrapper — `az` occasionally drops the connection mid-call (300s read
+# timeouts against management.azure.com are common).
+#
+# Callers must NOT redirect this function's output: `retry az ... >/dev/null` sends the
+# progress messages below to /dev/null too, so a call that failed once and then succeeded
+# looks like a bare unexplained ERROR. The command's own stdout is suppressed here instead;
+# its stderr is kept so real failures stay visible.
 retry() {
   local n=0
-  until "$@"; do
+  until "$@" >/dev/null; do
     n=$((n+1))
-    if [ "$n" -ge 4 ]; then echo "   (command failed after $n attempts)"; return 1; fi
-    echo "   transient error — retrying ($n)…"; sleep 5
+    if [ "$n" -ge 4 ]; then
+      echo "   ❌ command failed after $n attempts: $*" >&2
+      return 1
+    fi
+    echo "   ⏳ transient error — retry $n/3 in 5s…"
+    sleep 5
   done
+  [ "$n" -gt 0 ] && echo "   ✅ succeeded on attempt $((n+1))"
+  return 0
 }
 
 # --- preflight: required app settings ----------------------------------------
@@ -104,14 +131,14 @@ echo "==> Pointing ${WEBAPP} at ${IMAGE}:${NEW_TAG} and restarting…"
 retry az webapp config container set \
   --name "$WEBAPP" --resource-group "$RG" \
   --container-image-name "${IMAGE}:${NEW_TAG}" \
-  --container-registry-url "$REGISTRY" >/dev/null
+  --container-registry-url "$REGISTRY"
 retry az webapp restart --name "$WEBAPP" --resource-group "$RG"
 
 # --- platform health probing + always-on (idempotent) ------------------------
 # Azure ignores the Docker HEALTHCHECK; the App Service health-check path is what lets the
 # load balancer stop routing to a sick instance. Always On prevents idle unload.
 retry az webapp config set --name "$WEBAPP" --resource-group "$RG" \
-  --generic-configurations '{"healthCheckPath": "/health", "alwaysOn": true}' >/dev/null
+  --generic-configurations '{"healthCheckPath": "/health", "alwaysOn": true}'
 
 # --- health check -----------------------------------------------------------
 echo "==> Waiting for ${HEALTH_URL} (cold start can take ~90s)…"

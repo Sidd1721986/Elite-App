@@ -34,10 +34,18 @@ public class FilesController : ControllerBase
         (new byte[] { 0x25, 0x50, 0x44, 0x46 },       "application/pdf"),
     ];
 
+    // HEIC/HEIF are ISO base media files: bytes 4-7 are the "ftyp" box type and bytes 8-11
+    // the major brand. Only the still-image/sequence brands are accepted — the same box
+    // structure also fronts MP4/MOV, which must not pass as an image.
+    private static readonly string[] HeifBrands =
+        ["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1"];
+
     private static string? DetectMimeFromMagic(Stream stream)
     {
+        // 12 bytes is exactly enough for every signature below, including the ftyp major
+        // brand at offset 8-11. Read may return short even mid-stream, so demand all 12.
         Span<byte> header = stackalloc byte[12];
-        var read = stream.Read(header);
+        var read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
         stream.Position = 0;
 
         foreach (var (magic, mime) in MagicSignatures)
@@ -50,8 +58,26 @@ public class FilesController : ControllerBase
                 return mime;
             }
         }
-        return null; // HEIC/HEIF lack universal magic — fall through to MIME+extension check
+
+        if (read >= 12 && header[4..8].SequenceEqual("ftyp"u8))
+        {
+            var brand = System.Text.Encoding.ASCII.GetString(header[8..12]);
+            if (HeifBrands.Contains(brand, StringComparer.OrdinalIgnoreCase))
+                return "image/heic";
+        }
+
+        return null;
     }
+
+    // HEIC and HEIF are one container under two labels; clients send the same file as either,
+    // so a HEIF-family brand satisfies both declared types.
+    private static bool DetectedMatchesDeclared(string detected, string declared) =>
+        string.Equals(detected, declared, StringComparison.OrdinalIgnoreCase) ||
+        (IsHeifFamily(detected) && IsHeifFamily(declared));
+
+    private static bool IsHeifFamily(string mime) =>
+        string.Equals(mime, "image/heic", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(mime, "image/heif", StringComparison.OrdinalIgnoreCase);
 
     private readonly EliteApp.API.Services.Storage.IFileStorage _storage;
 
@@ -86,13 +112,12 @@ public class FilesController : ControllerBase
             return BadRequest(new { message = "File extension does not match the declared content type." });
 
         // ── Magic-byte guard (server-side content sniffing) ─────────────────────
-        // HEIC/HEIF don't have universal magic bytes so we skip them here.
-        if (!contentType.StartsWith("image/heic", StringComparison.OrdinalIgnoreCase) &&
-            !contentType.StartsWith("image/heif", StringComparison.OrdinalIgnoreCase))
+        // Every allowed type has a recognisable signature, so an unrecognised header is a
+        // rejection rather than a pass — otherwise a renamed binary declared as HEIC slips through.
+        using (var peekStream = file.OpenReadStream())
         {
-            using var peekStream = file.OpenReadStream();
             var detectedMime = DetectMimeFromMagic(peekStream);
-            if (detectedMime != null && !string.Equals(detectedMime, contentType, StringComparison.OrdinalIgnoreCase))
+            if (detectedMime == null || !DetectedMatchesDeclared(detectedMime, contentType))
                 return BadRequest(new { message = "File content does not match the declared type." });
         }
 

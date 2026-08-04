@@ -24,6 +24,11 @@ public class AppDbContext : DbContext
             .HasIndex(u => u.Email)
             .IsUnique();
 
+        // Phone-based password reset identifies the account by this column alone.
+        // Not unique: nothing stops two accounts from registering the same number.
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.PhoneNormalized);
+
         modelBuilder.Entity<PasswordResetToken>()
             .HasIndex(t => t.Token)
             .IsUnique();

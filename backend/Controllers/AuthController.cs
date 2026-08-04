@@ -73,6 +73,7 @@ public class AuthController : ControllerBase
             Role = role,
             Address = address,
             Phone = phone,
+            PhoneNormalized = PhoneNormalizer.ForStorage(phone),
             IsApproved = role != UserRole.Vendor.ToString() // Authors approve non-vendors
         };
 

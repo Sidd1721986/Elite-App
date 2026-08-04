@@ -1,3 +1,15 @@
+> ⚠️ **DEPRECATED — describes an ACR-based deploy that does not exist (verified 2026-08-04).**
+>
+> The Azure Container Registry `eliteservicesregprod.azurecr.io` is not in the subscription
+> and the ACR credentials were never configured, so anything here describing a registry
+> login or an ACR push is wrong.
+>
+> **The real backend deploy is `./deploy-backend.sh`**: build linux/amd64 → push to Docker Hub
+> (`sidd172/eliteapp-api`) → apply EF migrations → repoint App Service `eliteapp-api-prod` →
+> wait on `/health`. Mobile builds run from Azure DevOps pipeline 4 (`azure-pipelines-mobile.yml`).
+>
+> Treat the rest of this document as historical until it is rewritten.
+
 # Production Incident Runbook — Elite Home Services USA
 
 > Written for developers who need to act fast. Keep this tab open during incidents.

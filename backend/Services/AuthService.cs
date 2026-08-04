@@ -185,12 +185,11 @@ public class AuthService : IAuthService
                     "Phone number and role are required.");
             }
             // Match on digits only (last 10) so "+1 617-794-6854" and "6177946854"
-            // resolve to the same account regardless of how the number was stored.
-            var wanted = NormalizePhone(phone);
-            var candidates = await _context.Users
-                .Where(u => u.Phone != null && u.Phone != "")
-                .ToListAsync();
-            user = candidates.FirstOrDefault(u => NormalizePhone(u.Phone!) == wanted);
+            // resolve to the same account regardless of how the number was stored. The
+            // comparable form lives in its own indexed column — normalizing Phone here
+            // instead would mean loading every user row on each reset request.
+            var wanted = PhoneNormalizer.Normalize(phone);
+            user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNormalized == wanted);
         }
         else
         {
@@ -342,13 +341,9 @@ public class AuthService : IAuthService
 
         if (!string.IsNullOrWhiteSpace(phone))
         {
-            // Phone numbers are stored in mixed formats, so normalize in memory exactly as the
-            // reset-request flow does. Bounded by the live-token set, not by user count.
-            var wanted = NormalizePhone(phone);
-            var candidates = await live
-                .Where(t => t.User != null && t.User.Phone != null && t.User.Phone != "")
-                .ToListAsync();
-            return candidates.FirstOrDefault(t => NormalizePhone(t.User!.Phone!) == wanted);
+            // Same indexed comparable form the reset-request flow looks the account up by.
+            var wanted = PhoneNormalizer.Normalize(phone);
+            return await live.FirstOrDefaultAsync(t => t.User != null && t.User.PhoneNormalized == wanted);
         }
 
         if (string.IsNullOrWhiteSpace(email)) return null;
@@ -362,17 +357,9 @@ public class AuthService : IAuthService
     private static bool ResetIdentityMatches(User user, string email, string? phone)
     {
         if (!string.IsNullOrWhiteSpace(phone))
-            return !string.IsNullOrWhiteSpace(user.Phone) && NormalizePhone(user.Phone) == NormalizePhone(phone);
+            return !string.IsNullOrWhiteSpace(user.Phone) &&
+                   PhoneNormalizer.Normalize(user.Phone) == PhoneNormalizer.Normalize(phone);
         return string.Equals(user.Email, email.Trim(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    // Reduce a phone number to comparable digits: strip everything non-numeric and,
-    // for 11-digit numbers, drop a leading country code so US numbers match with or
-    // without "+1". Returns the last 10 digits when available.
-    private static string NormalizePhone(string phone)
-    {
-        var digits = new string(phone.Where(char.IsDigit).ToArray());
-        return digits.Length > 10 ? digits[^10..] : digits;
     }
 
     public async Task<(bool Ok, string Error)> ResetPasswordAsync(string email, string token, string newPassword, string? phone = null)

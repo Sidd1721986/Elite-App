@@ -37,7 +37,15 @@ public class User
 
     [StringLength(30)]
     public string? Phone { get; set; }
-    
+
+    // Digits-only form of Phone (see Services/PhoneNormalizer), maintained on every write to
+    // Phone so the phone-based password reset can look an account up by an indexed equality
+    // match instead of normalizing every row in memory. Internal — never serialized.
+    [StringLength(30)]
+    [JsonIgnore]
+    public string? PhoneNormalized { get; set; }
+
+
     // Vendor specific
     public bool IsApproved { get; set; } = false;
     

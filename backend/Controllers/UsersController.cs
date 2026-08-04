@@ -190,6 +190,7 @@ public class UsersController : ControllerBase
             if (user.Phone != phone)
             {
                 user.Phone = phone;
+                user.PhoneNormalized = EliteApp.API.Services.PhoneNormalizer.ForStorage(phone);
                 user.IsPhoneVerified = false; // Reset verification if phone changes
             }
         }
@@ -322,9 +323,9 @@ public class UsersController : ControllerBase
             new User { Id = Guid.NewGuid(), Email = "admin@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"), Role = "Admin", Name = "Admin User", IsApproved = true },
             new User { Id = Guid.NewGuid(), Email = "vendor@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Vendor User", IsApproved = true },
             new User { Id = Guid.NewGuid(), Email = "customer@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("customer123"), Role = "Customer", Name = "Customer User", IsApproved = true },
-            new User { Id = Guid.NewGuid(), Email = "plumber@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Premium Plumbing", IsApproved = true, Address = "123 Water St", Phone = "555-0101" },
-            new User { Id = Guid.NewGuid(), Email = "electric@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Elite Electricians", IsApproved = true, Address = "456 Spark Ave", Phone = "555-0202" },
-            new User { Id = Guid.NewGuid(), Email = "roofer@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Top Tier Roofing", IsApproved = true, Address = "789 Peak Rd", Phone = "555-0303" }
+            new User { Id = Guid.NewGuid(), Email = "plumber@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Premium Plumbing", IsApproved = true, Address = "123 Water St", Phone = "555-0101", PhoneNormalized = "5550101" },
+            new User { Id = Guid.NewGuid(), Email = "electric@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Elite Electricians", IsApproved = true, Address = "456 Spark Ave", Phone = "555-0202", PhoneNormalized = "5550202" },
+            new User { Id = Guid.NewGuid(), Email = "roofer@test.com", PasswordHash = BCrypt.Net.BCrypt.HashPassword("vendor123"), Role = "Vendor", Name = "Top Tier Roofing", IsApproved = true, Address = "789 Peak Rd", Phone = "555-0303", PhoneNormalized = "5550303" }
         };
         
         _context.Users.AddRange(users);

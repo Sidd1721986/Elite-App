@@ -101,3 +101,6 @@ android/local.properties
 
 # Android NDK/CMake build output
 android/app/.cxx/
+
+# Locally-uploaded files (dev storage root)
+backend/wwwroot/uploads/

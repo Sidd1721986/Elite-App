@@ -1,3 +1,14 @@
+# ⚠️ DEPRECATED — DOES NOT WORK AS WRITTEN (verified 2026-08-04)
+# This workflow targets an Azure Container Registry (eliteservicesregprod.azurecr.io) that
+# does not exist in the subscription, and the ACR_* secrets it needs were never configured.
+# Any run fails at the registry-login step.
+#
+# The REAL backend deploy is ./deploy-backend.sh — it builds for linux/amd64, pushes to
+# Docker Hub (sidd172/eliteapp-api), applies EF migrations, repoints the App Service
+# (eliteapp-api-prod) and waits on /health.
+#
+# Fix or delete this file before relying on it.
+
 name: Disaster Recovery
 
 on:
