@@ -21,6 +21,7 @@ public interface IAuthService
     Task<ForgotPasswordRequestResult> RequestPasswordResetAsync(string email, string role, string deliveryMethod, string? phone = null);
     Task<(bool Ok, string Error)> VerifyResetCodeAsync(string email, string token, string? phone = null);
     Task<(bool Ok, string Error)> ResetPasswordAsync(string email, string token, string newPassword, string? phone = null);
+    Task<(string? Token, User? User, bool PendingApproval, string Error)> SocialLoginAsync(Security.SocialIdentity identity, string requestedRole, string? clientName);
 }
 
 public class AuthService : IAuthService
@@ -125,6 +126,67 @@ public class AuthService : IAuthService
         var token = GenerateJwtToken(user);
         _logger.LogInformation("Login success: email={Email} role={Role} userId={UserId}", emailTrimmed, user.Role, user.Id);
         return (token, user, string.Empty);
+    }
+
+    /// <summary>
+    /// Login-or-register for a verified Apple/Google identity. The email in
+    /// <paramref name="identity"/> has already been signature-verified against the
+    /// provider's keys — possession of that email is proven, so an existing account
+    /// with the same email is simply logged in (its stored role wins over the
+    /// role the client asked for). A new account is created with no usable password.
+    /// </summary>
+    public async Task<(string? Token, User? User, bool PendingApproval, string Error)> SocialLoginAsync(
+        Security.SocialIdentity identity, string requestedRole, string? clientName)
+    {
+        // Google marks unverified emails explicitly; Apple emails are always verified.
+        // An unverified email must not be trusted as proof of account ownership.
+        if (identity.Provider == "google" && !identity.EmailVerified)
+            return (null, null, false, "Your Google account email is not verified.");
+
+        var email = identity.Email; // already normalized by the verifier
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+
+        if (user == null)
+        {
+            // Public social signup may only create Customer or Vendor — mirror RegisterAsync.
+            if (requestedRole != UserRole.Customer.ToString() && requestedRole != UserRole.Vendor.ToString())
+                return (null, null, false, "Invalid account type.");
+
+            var name = (identity.Name ?? clientName)?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                name = email.Split('@')[0];
+            if (name.Length > 255)
+                name = name[..255];
+
+            user = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                Name = name,
+                Role = requestedRole,
+                // No password was ever chosen: store the hash of a random 256-bit secret so
+                // password login can never succeed. The user can still set one via reset.
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(
+                    Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)), 12),
+                IsApproved = requestedRole != UserRole.Vendor.ToString()
+            };
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Social signup: provider={Provider} role={Role} userId={UserId}", identity.Provider, user.Role, user.Id);
+
+            if (user.Role == UserRole.Vendor.ToString())
+                return (null, user, true, string.Empty);
+        }
+
+        if (!user.IsActive)
+            return (null, null, false, "Account deactivated. Please contact support.");
+
+        if (user.Role == UserRole.Vendor.ToString() && !user.IsApproved)
+            return (null, user, true, string.Empty);
+
+        var token = GenerateJwtToken(user);
+        _logger.LogInformation("Social login: provider={Provider} role={Role} userId={UserId}", identity.Provider, user.Role, user.Id);
+        return (token, user, false, string.Empty);
     }
 
     private string GenerateJwtToken(User user)

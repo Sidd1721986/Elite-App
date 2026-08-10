@@ -19,9 +19,9 @@ export const authService = {
         email: string,
         password: string,
         role: UserRole, // This will be the granular role from UI
-        address: string,
-        phone: string,
-        referralSource: string,
+        address?: string,
+        phone?: string,
+        referralSource?: string,
         roleOther?: string
     ): Promise<boolean | string> {
         try {
@@ -35,8 +35,8 @@ export const authService = {
                 email,
                 password,
                 role: apiRole,
-                address,
-                phone,
+                address: address || undefined,
+                phone: phone || undefined,
                 // referralSource and roleOther might need addition to backend if needed
             });
             return true;

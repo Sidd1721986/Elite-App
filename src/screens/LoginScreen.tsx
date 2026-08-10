@@ -10,6 +10,7 @@ import { RootStackParamList } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import AppLogo from '../components/AppLogo';
+import SocialAuthButtons from '../components/SocialAuthButtons';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -188,6 +189,13 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                                     ) : null}
                                 </View>
 
+
+                                {selectedRole !== UserRole.ADMIN && (
+                                    <SocialAuthButtons
+                                        role={selectedRole}
+                                        onMessage={(msg) => { setSnackbarMessage(msg); setSnackbarVisible(true); }}
+                                    />
+                                )}
 
                                 {selectedRole !== UserRole.ADMIN && (
                                     <View style={styles.footerLinks}>

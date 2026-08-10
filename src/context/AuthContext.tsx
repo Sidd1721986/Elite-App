@@ -117,14 +117,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, []);
 
+    const socialLogin = useCallback(async (provider: 'apple' | 'google', role: UserRole) => {
+        const { signInWithApple, signInWithGoogle } = require('../services/socialAuth');
+        const result = provider === 'apple'
+            ? await signInWithApple(role)
+            : await signInWithGoogle(role);
+        if (result.ok && result.user) {
+            setUser(normalizeUser(result.user) || null);
+        }
+        return result;
+    }, []);
+
     const signup = useCallback(async (
         name: string,
         email: string,
         password: string,
         role: UserRole,
-        address: string,
-        phone: string,
-        referralSource: string,
+        address?: string,
+        phone?: string,
+        referralSource?: string,
         roleOther?: string
     ): Promise<boolean | string> => {
         try {
@@ -205,6 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         login,
         signup,
+        socialLogin,
         logout,
         isLoading,
         isOffline,
@@ -217,7 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         requestPhoneVerification,
         verifyPhone,
     }), [
-        user, login, signup, logout, isLoading, isOffline, getPendingVendors,
+        user, login, signup, socialLogin, logout, isLoading, isOffline, getPendingVendors,
         getApprovedVendors, updateUserStatus, removeVendor, deleteAccount,
         updateProfile, requestPhoneVerification, verifyPhone,
     ]);

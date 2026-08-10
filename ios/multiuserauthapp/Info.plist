@@ -31,6 +31,13 @@
 				<string>eliteapp</string>
 			</array>
 		</dict>
+		<!-- Google Sign-In redirect scheme: reversed iOS OAuth client ID -->
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.484389734261-vjd34o75r37uiejmhrhemq8akdtm11if</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>

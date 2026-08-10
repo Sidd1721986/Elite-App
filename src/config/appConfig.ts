@@ -40,6 +40,20 @@ export function getProductionBaseUrl(): string {
     return apiBase;
 }
 
+/**
+ * Google Sign-In web client ID (OAuth 2.0 "Web application" client from Google Cloud
+ * console → Credentials). Used by the native Google Sign-In SDK on BOTH platforms so
+ * the resulting ID token's audience matches what the backend validates
+ * (appsettings SocialAuth:Google:ClientIds). Empty string disables the Google button.
+ */
+export const GOOGLE_WEB_CLIENT_ID = '484389734261-37a798n3csm0c0gikvp861orjsstosh4.apps.googleusercontent.com';
+
+/**
+ * Google Sign-In iOS client ID (OAuth 2.0 "iOS" client). Required on iOS alongside the
+ * web client ID; its reversed form must also be registered as a URL scheme in Info.plist.
+ */
+export const GOOGLE_IOS_CLIENT_ID = '484389734261-vjd34o75r37uiejmhrhemq8akdtm11if.apps.googleusercontent.com';
+
 export const PRIVACY_POLICY_URL = `${getProductionBaseUrl()}/privacy`;
 export const SUPPORT_URL = `${getProductionBaseUrl()}/support`;
 export const TERMS_OF_SERVICE_URL = `${getProductionBaseUrl()}/terms`;

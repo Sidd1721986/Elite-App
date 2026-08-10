@@ -35,7 +35,9 @@
     "npm": ">=10.0.0"
   },
   "dependencies": {
+    "@invertase/react-native-apple-authentication": "^2.5.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-google-signin/google-signin": "^13.3.1",
     "@react-native/community-cli-plugin": "0.76.9",
     "@react-navigation/native": "^7.1.28",
     "@react-navigation/stack": "^7.6.16",

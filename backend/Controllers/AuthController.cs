@@ -134,6 +134,55 @@ public class AuthController : ControllerBase
         });
     }
 
+    [EnableRateLimiting("auth-login")]
+    [HttpPost("social")]
+    public async Task<IActionResult> SocialLogin([FromBody] SocialLoginRequest request, [FromServices] EliteApp.API.Services.Security.ISocialTokenVerifier verifier)
+    {
+        var (identity, verifyError) = await verifier.VerifyAsync(request.Provider ?? string.Empty, request.IdToken ?? string.Empty);
+        if (identity == null)
+            return Unauthorized(new { message = verifyError });
+
+        var role = request.Role?.Trim() ?? UserRole.Customer.ToString();
+        var (token, user, pendingApproval, error) = await _authService.SocialLoginAsync(identity, role, request.Name);
+
+        if (pendingApproval && user != null)
+        {
+            // First-time vendor via social sign-in: mirror the password flow's admin notification.
+            if (token == null && user.CreatedAt > DateTime.UtcNow.AddMinutes(-1))
+            {
+                var to = _configuration["Email:AdminNotify"];
+                if (!string.IsNullOrWhiteSpace(to))
+                {
+                    _emailQueue.TryEnqueue(new EliteApp.API.Services.Email.OutgoingEmail(
+                        to,
+                        "New vendor registered — pending approval",
+                        $"A new vendor registered via {identity.Provider} sign-in and is awaiting approval.\n\n" +
+                        $"Name: {user.Name}\nEmail: {user.Email}"));
+                }
+            }
+            return Ok(new { pendingApproval = true, message = "Your vendor account is awaiting approval." });
+        }
+
+        if (token == null || user == null)
+            return Unauthorized(new { message = error });
+
+        return Ok(new
+        {
+            token,
+            user = new
+            {
+                user.Id,
+                user.Name,
+                user.Email,
+                user.Role,
+                user.Address,
+                user.Phone,
+                user.IsApproved,
+                user.CreatedAt
+            }
+        });
+    }
+
     [AllowAnonymous]
     [EnableRateLimiting("password-reset")]
     [HttpPost("forgot-password-eligibility")]
@@ -259,6 +308,14 @@ public class RegisterRequest
     public string Role { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
+}
+
+public class SocialLoginRequest
+{
+    public string? Provider { get; set; }   // "apple" | "google"
+    public string? IdToken { get; set; }
+    public string? Role { get; set; }       // desired role for first-time signup; ignored for existing accounts
+    public string? Name { get; set; }       // Apple only supplies the name client-side on first auth
 }
 
 public class LoginRequest

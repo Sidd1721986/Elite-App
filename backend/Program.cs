@@ -110,6 +110,8 @@ builder.Services.AddSingleton<IEmailQueue>(sp => sp.GetRequiredService<EmailQueu
 builder.Services.AddHostedService<EmailDispatchService>();
 builder.Services.AddHostedService<EliteApp.API.Services.TokenPurgeService>();
 builder.Services.AddScoped<EliteApp.API.Services.IAuthService, EliteApp.API.Services.AuthService>();
+builder.Services.AddHttpClient("social-jwks", c => c.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddSingleton<EliteApp.API.Services.Security.ISocialTokenVerifier, EliteApp.API.Services.Security.SocialTokenVerifier>();
 builder.Services.AddSingleton<EliteApp.API.Services.Security.ITokenHasher, EliteApp.API.Services.Security.TokenHasher>();
 
 // Upload storage. Container disk is ephemeral and per-instance, so Production must point at

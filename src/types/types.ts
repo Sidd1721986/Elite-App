@@ -34,11 +34,17 @@ export interface AuthContextType {
     email: string,
     password: string,
     role: UserRole,
-    address: string,
-    phone: string,
-    referralSource: string,
+    address?: string,
+    phone?: string,
+    referralSource?: string,
     roleOther?: string
   ) => Promise<boolean | string>;
+  socialLogin: (provider: 'apple' | 'google', role: UserRole) => Promise<{
+    ok: boolean;
+    pendingApproval?: boolean;
+    cancelled?: boolean;
+    message?: string;
+  }>;
   logout: () => Promise<void>;
   isLoading: boolean;
   isOffline: boolean;
