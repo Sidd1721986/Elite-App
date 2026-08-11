@@ -125,6 +125,12 @@ stages:
               certSecureFile: $(IOS_DISTRIBUTION_P12_SECURE_FILE)
               certPwd: $(IOS_P12_PASSWORD)
               keychain: temp
+              # The task does NOT expose the auto-generated temp-keychain password as an
+              # output variable — $(installCert.keychainPassword) reaches bash unexpanded
+              # and the unlock in later steps silently runs with an empty password (run 246:
+              # archive survived only because the keychain was still unlocked; export failed
+              # once it auto-locked). Set a known password so later steps can unlock it.
+              keychainPassword: $(IOS_P12_PASSWORD)
           - task: InstallAppleProvisioningProfile@1
             displayName: Install Provisioning Profile
             name: installProfile
@@ -134,7 +140,7 @@ stages:
           - script: |
               set -e
               rm -rf ~/Library/Developer/Xcode/DerivedData/multiuserauthapp-*
-              security unlock-keychain -p "$(installCert.keychainPassword)" "$(installCert.keychainPath)"
+              security unlock-keychain -p "$KEYCHAIN_PWD" "$(installCert.keychainPath)"
               security set-keychain-settings -t 3600 -l "$(installCert.keychainPath)"
               xcodebuild clean archive \
                 -workspace ios/multiuserauthapp.xcworkspace \
@@ -149,6 +155,8 @@ stages:
               echo "Archive created at: $(Build.ArtifactStagingDirectory)/EliteApp.xcarchive"
               ls -la "$(Build.ArtifactStagingDirectory)/EliteApp.xcarchive/Products/Applications/"
             displayName: Build & Archive iOS app
+            env:
+              KEYCHAIN_PWD: $(IOS_P12_PASSWORD)
           - script: |
               set -e
               ARCHIVE="$(Build.ArtifactStagingDirectory)/EliteApp.xcarchive"
@@ -167,12 +175,14 @@ stages:
             displayName: Patch xcarchive Info.plist
           - script: |
               set -e
-              security unlock-keychain -p "$(installCert.keychainPassword)" "$(installCert.keychainPath)"
+              security unlock-keychain -p "$KEYCHAIN_PWD" "$(installCert.keychainPath)"
               xcodebuild -exportArchive \
                 -archivePath "$(Build.ArtifactStagingDirectory)/EliteApp.xcarchive" \
                 -exportPath "$(Build.ArtifactStagingDirectory)" \
                 -exportOptionsPlist "ios/ExportOptions.plist"
             displayName: Export IPA
+            env:
+              KEYCHAIN_PWD: $(IOS_P12_PASSWORD)
           - task: PublishBuildArtifacts@1
             displayName: Publish IPA artifact
             inputs:
