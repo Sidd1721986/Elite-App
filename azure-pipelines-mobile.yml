@@ -124,13 +124,14 @@ stages:
             inputs:
               certSecureFile: $(IOS_DISTRIBUTION_P12_SECURE_FILE)
               certPwd: $(IOS_P12_PASSWORD)
-              keychain: temp
-              # The task does NOT expose the auto-generated temp-keychain password as an
-              # output variable — $(installCert.keychainPassword) reaches bash unexpanded
-              # and the unlock in later steps silently runs with an empty password (run 246:
-              # archive survived only because the keychain was still unlocked; export failed
-              # once it auto-locked). Set a known password so later steps can unlock it.
+              # A *custom* keychain, not temp: with `keychain: temp` the task IGNORES the
+              # keychainPassword input and generates a random one it never exposes, so no
+              # later step can unlock the keychain once it auto-locks (runs 246/249 both
+              # died in Export IPA on exactly this). A custom keychain honours the password.
+              keychain: custom
+              customKeychainPath: $(Agent.TempDirectory)/elite_ios_signing.keychain
               keychainPassword: $(IOS_P12_PASSWORD)
+              deleteCustomKeychain: true
           - task: InstallAppleProvisioningProfile@1
             displayName: Install Provisioning Profile
             name: installProfile
