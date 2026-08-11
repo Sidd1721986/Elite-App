@@ -146,11 +146,11 @@ stages:
               echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
               IMAGE="$(DOCKERHUB_USERNAME)/eliteapp-api"
               docker build -f $(dockerfilePath) $(buildContext) \
-                -t "$IMAGE:$(Build.BuildId)" \
+                -t "$IMAGE:ci-$(Build.BuildId)" \
                 -t "$IMAGE:latest"
-              docker push "$IMAGE:$(Build.BuildId)"
+              docker push "$IMAGE:ci-$(Build.BuildId)"
               docker push "$IMAGE:latest"
-              echo "##vso[task.setvariable variable=DOCKER_IMAGE;isOutput=true]$IMAGE:$(Build.BuildId)"
+              echo "##vso[task.setvariable variable=DOCKER_IMAGE;isOutput=true]$IMAGE:ci-$(Build.BuildId)"
             displayName: Build and push to Docker Hub
             env:
               DOCKERHUB_TOKEN: $(DOCKERHUB_TOKEN)

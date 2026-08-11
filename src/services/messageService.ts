@@ -27,4 +27,15 @@ export const messageService = {
     async getDefaultAdminId(): Promise<string> {
         return apiClient.get<string>('/messages/admin-id');
     },
+
+    // Admin only: permanently deletes the conversation with the given user.
+    async deleteConversation(otherUserId: string): Promise<boolean> {
+        try {
+            await apiClient.delete(`/messages/conversations/${otherUserId}`);
+            return true;
+        } catch (error) {
+            if (__DEV__) { console.error('Error deleting conversation:', error); }
+            return false;
+        }
+    },
 };

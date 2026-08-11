@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useCallback, useMemo } from 'react';
-import { View, StyleSheet, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, RefreshControl, Pressable, useWindowDimensions, Alert } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Text, Card, Button, Avatar, Divider, Surface, IconButton, Icon, List, Chip, Snackbar, Portal, Menu, Dialog, Searchbar, TextInput } from 'react-native-paper';
 import { apiClient } from '../services/apiClient';
@@ -163,6 +163,29 @@ const AdminDashboard: React.FC = () => {
         } catch {
             /* ignore */
         }
+    }, []);
+
+    // Permanently removes a conversation (admin only) after confirmation.
+    const handleDeleteConversation = useCallback((otherUserId: string, otherUserName: string) => {
+        Alert.alert(
+            'Delete conversation',
+            `Permanently delete the conversation with ${otherUserName}? This removes all messages for both sides and cannot be undone.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        const ok = await messageService.deleteConversation(otherUserId);
+                        if (ok) {
+                            setConversations(prev => prev.filter(c => String(c.otherUserId) !== otherUserId));
+                        } else {
+                            Alert.alert('Delete failed', 'Could not delete the conversation. Please try again.');
+                        }
+                    },
+                },
+            ],
+        );
     }, []);
 
     useFocusEffect(
@@ -789,6 +812,14 @@ const AdminDashboard: React.FC = () => {
                                                     </View>
                                                     <Text variant="bodySmall" style={[styles.messageListPreview, unread > 0 && styles.messageListPreviewUnread]} numberOfLines={2}>{formatChatPreview(c.latestMessage || '') || 'No preview'}</Text>
                                                 </View>
+                                                <IconButton
+                                                    icon="trash-can-outline"
+                                                    size={20}
+                                                    iconColor="#EF4444"
+                                                    style={styles.messageChevron}
+                                                    onPress={() => handleDeleteConversation(String(c.otherUserId), c.otherUserName || c.otherUserEmail || 'this user')}
+                                                    testID={`delete_conversation_${index}`}
+                                                />
                                                 <IconButton icon="chevron-right" size={20} iconColor="#CBD5E1" style={styles.messageChevron} />
                                             </Pressable>
                                         </React.Fragment>
@@ -1162,7 +1193,7 @@ const AdminDashboard: React.FC = () => {
             default:
                 return null;
         }
-    }, [navigation, getTimelineBarColor, handleApproval, handleRemoveVendor, updateSectionY, conversations, messageUnreadTotal, jobsDeduped, vendorSearch, setVendorSearch, filteredApprovedVendors, approvedVendors, inProgressSearch, setInProgressSearch, filteredActiveProjects, activeProjects, showAllRequests, setShowAllRequests, showAllInProgress, setShowAllInProgress]);
+    }, [navigation, getTimelineBarColor, handleApproval, handleRemoveVendor, handleDeleteConversation, updateSectionY, conversations, messageUnreadTotal, jobsDeduped, vendorSearch, setVendorSearch, filteredApprovedVendors, approvedVendors, inProgressSearch, setInProgressSearch, filteredActiveProjects, activeProjects, showAllRequests, setShowAllRequests, showAllInProgress, setShowAllInProgress]);
 
     // Stable extraData ref — only changes when its contents change, so FlashList
     // doesn't re-render the whole list on every unrelated parent render.

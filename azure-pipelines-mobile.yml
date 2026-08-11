@@ -235,13 +235,6 @@ stages:
               restoreKeys: |
                 npm | "$(Agent.OS)"
               path: node_modules
-          - task: Cache@2
-            displayName: Cache Gradle
-            inputs:
-              key: 'gradle | "$(Agent.OS)" | android/build.gradle | android/app/build.gradle'
-              restoreKeys: |
-                gradle | "$(Agent.OS)"
-              path: $(HOME)/.gradle/caches
           - script: npm ci --ignore-scripts --legacy-peer-deps
             displayName: npm ci
           - script: |

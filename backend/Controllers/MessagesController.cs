@@ -228,6 +228,28 @@ public class MessagesController : ControllerBase
         messages.Reverse(); // oldest → newest for the UI
         return Ok(messages);
     }
+
+    // DELETE: api/messages/conversations/{otherUserId}
+    // Admin-only: permanently removes the conversation between the current admin and
+    // the given user (both directions). Single DB-side delete — no entity materialization.
+    [HttpDelete("conversations/{otherUserId}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeleteConversation(Guid otherUserId)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == Guid.Empty)
+            return Unauthorized();
+
+        var deleted = await _context.Messages
+            .Where(m => (m.SenderId == currentUserId && m.ReceiverId == otherUserId) ||
+                        (m.SenderId == otherUserId && m.ReceiverId == currentUserId))
+            .ExecuteDeleteAsync();
+
+        if (deleted == 0)
+            return NotFound(new { message = "No conversation found with this user." });
+
+        return Ok(new { deleted });
+    }
 }
 
 public class MessageDto
