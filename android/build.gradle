@@ -4,8 +4,8 @@ ext {
     // Google Play requires new releases to target Android 16 (API 36) from 2026-08-31.
     compileSdkVersion = 36
     targetSdkVersion = 36
-    ndkVersion = "26.1.10909125"
-    kotlinVersion = "1.9.25"
+    ndkVersion = "27.1.12297006"
+    kotlinVersion = "2.0.21"
 }
 
 buildscript {
