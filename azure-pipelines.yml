@@ -214,7 +214,7 @@ stages:
             inputs:
               azureSubscription: $(azureSubscription)
               appName: $(webAppName)
-              containers: $(DOCKERHUB_USERNAME)/eliteapp-api:$(Build.BuildId)
+              containers: $(DOCKERHUB_USERNAME)/eliteapp-api:ci-$(Build.BuildId)
 
           - script: |
               set -e
