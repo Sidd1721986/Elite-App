@@ -111,8 +111,8 @@ stages:
             displayName: Verify Xcode
           - script: |
               /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(Build.BuildId)" ios/multiuserauthapp/Info.plist
-              /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.2.1" ios/multiuserauthapp/Info.plist
-              echo "CFBundleVersion=$(Build.BuildId), CFBundleShortVersionString=1.2.1"
+              /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.2.2" ios/multiuserauthapp/Info.plist
+              echo "CFBundleVersion=$(Build.BuildId), CFBundleShortVersionString=1.2.2"
             displayName: Set build version
           - task: CocoaPods@0
             displayName: pod install

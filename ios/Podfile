@@ -1,4 +1,10 @@
 ENV['PATH'] = "/usr/local/bin:/opt/homebrew/bin:#{ENV['PATH']}"
+# RN 0.77 enables the New Architecture by default. Our native deps (notably
+# react-native-fast-image) still emit legacy RCTEventEmitter events, which is a
+# red-box in Debug but a fatal unhandled JS exception at launch in Release
+# (TestFlight 1.2.1 build 254 crash). Stay on the legacy architecture, matching
+# every stable release to date.
+ENV['RCT_NEW_ARCH_ENABLED'] = '0'
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 
 platform :ios, '16.0'
