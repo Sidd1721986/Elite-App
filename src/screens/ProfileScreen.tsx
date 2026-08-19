@@ -44,6 +44,10 @@ const ProfileScreen: React.FC = () => {
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
 
+    // Seed once per account, not per user-object identity: background profile refreshes
+    // (e.g. after phone verification) produce a new object for the same user and would
+    // otherwise wipe in-progress edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (user) {
             setName(user.name);
@@ -54,7 +58,8 @@ const ProfileScreen: React.FC = () => {
             setState(parts.state);
             setPhone(user.phone);
         }
-    }, [user]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id]);
 
     const handleSave = async () => {
         if (!name.trim()) {

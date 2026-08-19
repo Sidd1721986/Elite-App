@@ -208,6 +208,7 @@ public class MessagesController : ControllerBase
         if (currentUserId == Guid.Empty)
             return Unauthorized();
 
+        page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         // Mark incoming unread messages in one DB-side update.

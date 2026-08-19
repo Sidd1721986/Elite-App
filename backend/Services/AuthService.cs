@@ -67,7 +67,10 @@ public class AuthService : IAuthService
         if (string.IsNullOrEmpty(password) || password.Length < minLen)
             return (null, $"Password must be at least {minLen} characters.");
 
-        if (await _context.Users.AsNoTracking().AnyAsync(u => u.Email == user.Email))
+        // Case-insensitive: the write path lowercases new emails, but legacy rows may be mixed-case;
+        // an exact match here would let those slip through to the unique index (a 500 instead of a 400).
+        var emailLower = user.Email.ToLower();
+        if (await _context.Users.AsNoTracking().AnyAsync(u => u.Email.ToLower() == emailLower))
         {
             return (null, "Email already exists");
         }
@@ -171,8 +174,20 @@ public class AuthService : IAuthService
                 IsApproved = requestedRole != UserRole.Vendor.ToString()
             };
             _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-            _logger.LogInformation("Social signup: provider={Provider} role={Role} userId={UserId}", identity.Provider, user.Role, user.Id);
+            try
+            {
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Social signup: provider={Provider} role={Role} userId={UserId}", identity.Provider, user.Role, user.Id);
+            }
+            catch (DbUpdateException)
+            {
+                // Two first-time logins for the same email raced; the unique index picked a winner.
+                // Drop our loser row and continue with the row that won.
+                _context.Entry(user).State = EntityState.Detached;
+                user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email);
+                if (user == null)
+                    return (null, null, false, "Sign-in failed. Please try again.");
+            }
 
             if (user.Role == UserRole.Vendor.ToString())
                 return (null, user, true, string.Empty);

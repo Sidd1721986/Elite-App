@@ -205,8 +205,14 @@ export const apiClient = {
                         }
                     }
                     if (__DEV__) {console.log('API CLIENT THROWING:', errorMessage);}
+                    // 5xx bodies are server internals (stack fragments, framework dumps) — never
+                    // show them to users. 4xx messages are written for users and pass through.
+                    if (response.status >= 500) {
+                        errorMessage = 'Something went wrong on our end. Please try again.';
+                    }
                     const error = new Error(errorMessage) as any;
                     error.traceId = traceId;
+                    error.status = response.status;
                     throw error;
                 }
 

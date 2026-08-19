@@ -1,16 +1,15 @@
 import * as React from 'react';
 import { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Platform, RefreshControl, ScrollView, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, RefreshControl, ScrollView, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 
 const FlashListCompat = FlashList as any;
-import FastImage from 'react-native-fast-image';
 import {
     Text, Button, Avatar, Divider, Surface,
     List, IconButton, Chip,
     Menu, SegmentedButtons, Snackbar,
 } from 'react-native-paper';
-import { MotiView, MotiText } from 'moti';
+import { MotiView } from 'moti';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useAuth } from '../context/AuthContext';
 import { useJobs } from '../context/JobContext';
@@ -494,10 +493,6 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '800',
     },
-    headerLogout: {
-        margin: 0,
-        marginRight: -12,
-    },
     welcomeSection: {
         marginBottom: 16,
     },
@@ -592,14 +587,6 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-start',
         borderRadius: 12,
     },
-    bannerImage: {
-        width: 100,
-        height: 100,
-        opacity: 0.2,
-        position: 'absolute',
-        right: -20,
-        bottom: -20,
-    },
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -655,31 +642,10 @@ const styles = StyleSheet.create({
         borderColor: '#F1F5F9',
         marginBottom: 24,
     },
-    logoutBtn: {
-        borderRadius: 16,
-        borderColor: '#EF4444',
-        marginBottom: 40,
-    },
-    modalContent: {
-        backgroundColor: '#FFFFFF',
-        padding: 24,
-        margin: 20,
-        borderRadius: 32,
-        maxHeight: '80%',
-    },
     modalTitle: {
         fontWeight: '900',
         marginBottom: 20,
         textAlign: 'center',
-    },
-    modalInput: {
-        marginBottom: 12,
-        backgroundColor: '#FFFFFF',
-    },
-    addressRow: {
-        flexDirection: 'row',
-        gap: 8,
-        marginBottom: 4,
     },
     formRow: {
         marginBottom: 24,
@@ -687,13 +653,6 @@ const styles = StyleSheet.create({
     formLabel: {
         marginBottom: 8,
         color: '#64748B',
-    },
-    urgencyBtn: {
-        borderRadius: 12,
-    },
-    submitBtn: {
-        marginTop: 8,
-        borderRadius: 16,
     },
     sectionLabel: {
         marginTop: 16,
@@ -711,10 +670,6 @@ const styles = StyleSheet.create({
     selectedServicesHint: {
         color: '#94A3B8',
         marginBottom: 8,
-    },
-    selectedServiceChip: {
-        backgroundColor: '#EEF2FF',
-        borderColor: '#CBD5FF',
     },
     selectedServiceChipText: {
         fontSize: 12,
@@ -741,12 +696,6 @@ const styles = StyleSheet.create({
         position: 'relative',
         marginRight: 12,
     },
-    photoThumbnail: {
-        width: 100,
-        height: 100,
-        borderRadius: 12,
-        backgroundColor: '#F1F5F9',
-    },
     removePhotoBtn: {
         position: 'absolute',
         top: -10,
@@ -764,14 +713,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 8,
     },
-    itemCard: {
-        backgroundColor: '#F8FAFC',
-        borderRadius: 12,
-        padding: 12,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-    },
     itemCardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -785,16 +726,6 @@ const styles = StyleSheet.create({
     itemInput: {
         backgroundColor: '#FFFFFF',
         marginBottom: 8,
-    },
-    emptyPhotoBox: {
-        height: 100,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderStyle: 'dashed',
-        borderColor: '#CBD5E1',
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#F8FAFC',
     },
 });
 

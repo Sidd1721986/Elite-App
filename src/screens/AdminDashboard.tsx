@@ -447,7 +447,7 @@ const AdminDashboard: React.FC = () => {
             setSnackbarMessage('An unexpected error occurred.');
             setSnackbarVisible(true);
         }
-        setRefreshing(false);
+        if (isMountedRef.current) { setRefreshing(false); }
     }, [updateUserStatus, fetchData]);
 
     const handleRemoveVendor = useCallback(async (userId: string) => {
@@ -466,7 +466,7 @@ const AdminDashboard: React.FC = () => {
             setSnackbarMessage('An unexpected error occurred.');
             setSnackbarVisible(true);
         }
-        setRefreshing(false);
+        if (isMountedRef.current) { setRefreshing(false); }
     }, [removeVendor, fetchData]);
 
     const handleLogout = useCallback(async () => {

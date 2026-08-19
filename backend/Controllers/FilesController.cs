@@ -80,10 +80,12 @@ public class FilesController : ControllerBase
         string.Equals(mime, "image/heif", StringComparison.OrdinalIgnoreCase);
 
     private readonly EliteApp.API.Services.Storage.IFileStorage _storage;
+    private readonly ILogger<FilesController> _logger;
 
-    public FilesController(EliteApp.API.Services.Storage.IFileStorage storage)
+    public FilesController(EliteApp.API.Services.Storage.IFileStorage storage, ILogger<FilesController> logger)
     {
         _storage = storage;
+        _logger = logger;
     }
 
     [HttpPost("upload")]
@@ -124,9 +126,21 @@ public class FilesController : ControllerBase
         // ── Persist with a random name (no user-supplied filename) ──────────────
         var safeFileName = $"{Guid.NewGuid()}{extension.ToLowerInvariant()}";
 
-        await using (var uploadStream = file.OpenReadStream())
+        try
         {
-            await _storage.SaveAsync(safeFileName, uploadStream, contentType);
+            await using var uploadStream = file.OpenReadStream();
+            await _storage.SaveAsync(safeFileName, uploadStream, contentType, HttpContext.RequestAborted);
+        }
+        catch (OperationCanceledException)
+        {
+            // Client went away mid-upload — nothing to report.
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "File storage write failed for {FileName}", safeFileName);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { message = "File storage is temporarily unavailable. Please try again." });
         }
 
         var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";

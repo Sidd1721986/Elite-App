@@ -51,10 +51,9 @@ const JobDetailsScreen: React.FC = () => {
     const route = useRoute<JobDetailsRouteProp>();
     const navigation = useNavigation<NavigationProp<RootStackParamList>>();
     const { getJobById, updateJob, assignVendor, acceptJob, completeSale, reachOut, setAppointment, completeJob, requestInvoice, uploadInvoice, sendInvoice, addJobPhotos, removeJobPhoto } = useJobs();
-    const { user, getApprovedVendors } = useAuth();
+    const { user } = useAuth();
     const jobId = route.params?.jobId;
 
-    const [approvedVendors, setApprovedVendors] = React.useState<User[]>([]);
     const [notes, setNotes] = React.useState<any[]>([]);
     const [noteContent, setNoteContent] = React.useState('');
     const [invoiceUrl, setInvoiceUrl] = React.useState('');
@@ -117,17 +116,6 @@ const JobDetailsScreen: React.FC = () => {
     };
 
     const job = jobId ? getJobById(jobId) : undefined;
-
-    React.useEffect(() => {
-        if (user?.role !== 'Admin') {return;}
-        // Guarded: this can resolve after the screen is popped (setState-after-unmount), and an
-        // unhandled rejection here previously crashed the red box on a flaky network.
-        let cancelled = false;
-        getApprovedVendors()
-            .then(vendors => { if (!cancelled) {setApprovedVendors(vendors);} })
-            .catch(err => { if (__DEV__) {console.error('Failed to load approved vendors:', err);} });
-        return () => { cancelled = true; };
-    }, [user, getApprovedVendors]);
 
     React.useEffect(() => {
         if (user?.role === 'Vendor') {
@@ -197,16 +185,18 @@ const JobDetailsScreen: React.FC = () => {
             quality: 0.8 as const,
         };
 
-        const result = type === 'camera'
-            ? await launchCamera(options)
-            : await launchImageLibrary(options);
+        try {
+            // Picker inside the try: an OS permission denial or native module throw was
+            // previously an unhandled rejection with no user feedback.
+            const result = type === 'camera'
+                ? await launchCamera(options)
+                : await launchImageLibrary(options);
 
-        if (result.assets && result.assets[0]) {
-            const asset = result.assets[0];
-            setIsUploading(true);
-            setUploadProgress(0.3);
+            if (result.assets && result.assets[0]) {
+                const asset = result.assets[0];
+                setIsUploading(true);
+                setUploadProgress(0.3);
 
-            try {
                 const fileToUpload = {
                     uri: asset.uri,
                     type: asset.type || 'image/jpeg',
@@ -219,12 +209,13 @@ const JobDetailsScreen: React.FC = () => {
                     await addJobPhotos(job.id, [uploadResult.url]);
                     setUploadProgress(1);
                 }
-            } catch (error) {
-                console.error('Photo upload failed:', error);
-            } finally {
-                setIsUploading(false);
-                setUploadProgress(0);
             }
+        } catch (error) {
+            console.error('Photo upload failed:', error);
+            showError(error, 'Could not upload the photo. Please try again.');
+        } finally {
+            setIsUploading(false);
+            setUploadProgress(0);
         }
     };
 
@@ -235,6 +226,7 @@ const JobDetailsScreen: React.FC = () => {
             await removeJobPhoto(job.id, photoUrl);
         } catch (error) {
             console.error('Error deleting photo:', error);
+            showError(error, 'Could not delete the photo. Please try again.');
         } finally {
             setIsDeletingPhoto(null);
         }
@@ -266,6 +258,7 @@ const JobDetailsScreen: React.FC = () => {
                 // User cancelled
             } else {
                 console.error('Document pick error:', err);
+                showError(err, 'Could not upload the document. Please try again.');
             }
         } finally {
             setIsUploading(false);
@@ -279,15 +272,16 @@ const JobDetailsScreen: React.FC = () => {
             mediaType: 'photo' as const,
             quality: 0.8 as const,
         };
-        const result =
-            type === 'camera' ? await launchCamera(options) : await launchImageLibrary(options);
-
-        if (!result.assets?.[0]) {return;}
-
-        const asset = result.assets[0];
-        setIsUploading(true);
-        setUploadProgress(0.3);
         try {
+            // Picker inside the try — see handlePhotoUpload.
+            const result =
+                type === 'camera' ? await launchCamera(options) : await launchImageLibrary(options);
+
+            if (!result.assets?.[0]) {return;}
+
+            const asset = result.assets[0];
+            setIsUploading(true);
+            setUploadProgress(0.3);
             const fileToUpload = {
                 uri: asset.uri,
                 type: asset.type || 'image/jpeg',
@@ -301,6 +295,7 @@ const JobDetailsScreen: React.FC = () => {
             }
         } catch (error) {
             console.error('Invoice image upload failed:', error);
+            showError(error, 'Could not upload the invoice image. Please try again.');
         } finally {
             setIsUploading(false);
             setUploadProgress(0);

@@ -46,7 +46,7 @@ const isMissingEndpointError = (err: unknown): boolean => {
     return msg.includes('404') || /not found/i.test(msg);
 };
 
-import { normalizeUser, normalizeJob } from '../utils/normalization';
+import { normalizeJob } from '../utils/normalization';
 import { useAuth } from './AuthContext';
 
 

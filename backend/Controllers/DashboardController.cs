@@ -105,8 +105,12 @@ public class DashboardController : ControllerBase
     {
         if (!IsAdmin()) return Forbid();
 
+        // Project only the fields used below — never materialize full User entities
+        // (avoids tracking overhead and loading PasswordHash column into memory).
         var vendors = await _context.Users
+            .AsNoTracking()
             .Where(u => u.Role == "Vendor")
+            .Select(u => new { u.Id, u.Name, u.Email, u.IsApproved, u.IsActive, u.CreatedAt })
             .ToListAsync();
 
         // O(1) lookups instead of an O(vendors × groups) in-memory FirstOrDefault join.
@@ -146,8 +150,7 @@ public class DashboardController : ControllerBase
         if (!IsAdmin()) return Forbid();
 
         var recentJobs = await _context.Jobs
-            .Include(j => j.Customer)
-            .Include(j => j.Vendor)
+            .AsNoTracking()
             .Where(j => j.ParentJobId == null)
             .OrderByDescending(j => j.CreatedAt)
             .Take(30)

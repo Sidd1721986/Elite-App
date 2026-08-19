@@ -1,9 +1,8 @@
 import * as React from 'react';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { TextInput, Button, Text, Card, Snackbar, Menu, Surface } from 'react-native-paper';
+import { TextInput, Button, Text, Card, Snackbar } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
-import { authService } from '../services/authService';
 import { UserRole } from '../types/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/types';
@@ -18,8 +17,6 @@ interface Props {
     navigation: LoginScreenNavigationProp;
 }
 
-const ROLES: UserRole[] = [UserRole.ADMIN, UserRole.VENDOR, UserRole.CUSTOMER];
-
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const route = useRoute<RouteProp<RootStackParamList, 'Login'>>();
     const resetToastShown = useRef(false);
@@ -28,7 +25,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.CUSTOMER);
-    const [showRoleMenu, setShowRoleMenu] = useState(false);
     const [loading, setLoading] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');

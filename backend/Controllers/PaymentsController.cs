@@ -108,7 +108,7 @@ public class PaymentsController : ControllerBase
         {
             if (existing != null)
             {
-                var openIntent = await _stripe.GetPaymentIntentAsync(existing.StripePaymentIntentId);
+                var openIntent = await _stripe.GetPaymentIntentAsync(existing.StripePaymentIntentId, HttpContext.RequestAborted);
                 if (openIntent.Status is "requires_payment_method" or "requires_confirmation" or "requires_action")
                 {
                     return Ok(new
@@ -132,7 +132,7 @@ public class PaymentsController : ControllerBase
             // which neutralizes the apiClient's automatic retry logic.
             var idempotencyKey = $"job-{jobId}-{amountCents}";
 
-            var intent = await _stripe.CreatePaymentIntentAsync(amountCents, "usd", idempotencyKey, metadata);
+            var intent = await _stripe.CreatePaymentIntentAsync(amountCents, "usd", idempotencyKey, metadata, HttpContext.RequestAborted);
 
             var payment = new Payment
             {
@@ -224,7 +224,8 @@ public class PaymentsController : ControllerBase
                 successUrl: $"{baseUrl}/payment-complete?order={job.JobNumber}",
                 cancelUrl: $"{baseUrl}/payment-cancel",
                 idempotencyKey,
-                metadata);
+                metadata,
+                HttpContext.RequestAborted);
 
             return Ok(new { url = session.Url });
         }

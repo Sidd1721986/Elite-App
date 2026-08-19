@@ -3,8 +3,6 @@ import { SecureStorage } from './secureStorage';
 import { User, UserRole } from '../types/types';
 import { apiClient, setApiClientAuthToken } from './apiClient';
 
-const USERS_KEY = '@users';
-
 /** Login/signup: maps UI role to backend account type (Admin, Vendor, or Customer only). */
 export function toApiRole(role: UserRole): 'Admin' | 'Vendor' | 'Customer' {
     if (role === UserRole.ADMIN) {return 'Admin';}
@@ -165,18 +163,6 @@ export const authService = {
             return true;
         } catch (error) {
             console.error('Error removing vendor:', error);
-            return false;
-        }
-    },
-
-    async forgotPasswordEligibility(email: string, role: UserRole): Promise<boolean> {
-        try {
-            const r = await apiClient.post<{ canShowForgotPassword?: boolean }>(
-                '/auth/forgot-password-eligibility',
-                { email: email.trim(), role: toApiRole(role) },
-            );
-            return Boolean(r.canShowForgotPassword);
-        } catch {
             return false;
         }
     },

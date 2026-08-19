@@ -140,6 +140,26 @@ public class JobsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Validates job text-field lengths against the column limits. [StringLength] annotations do not
+    /// run on SaveChanges, so oversized values would otherwise surface as Postgres 22001 errors (500s).
+    /// Returns null when valid, or the BadRequest to send.
+    /// </summary>
+    private IActionResult? ValidateJobFieldLengths(string? description, string? address, string? otherDetails, string? contactPhone, string? contactEmail)
+    {
+        if (description is { Length: > 5000 })
+            return BadRequest(new { message = "Description must be 5000 characters or fewer." });
+        if (address is { Length: > 500 })
+            return BadRequest(new { message = "Address must be 500 characters or fewer." });
+        if (otherDetails is { Length: > 5000 })
+            return BadRequest(new { message = "Other details must be 5000 characters or fewer." });
+        if (contactPhone is { Length: > 30 })
+            return BadRequest(new { message = "Contact phone must be 30 characters or fewer." });
+        if (contactEmail is { Length: > 255 })
+            return BadRequest(new { message = "Contact email must be 255 characters or fewer." });
+        return null;
+    }
+
     /// <summary>Statuses from which an admin may force-close a vendor-assigned job to Completed (e.g. vendor forgot to tap complete).</summary>
     private static bool IsAdminForceCompleteFromStatus(string? status)
     {
@@ -169,7 +189,6 @@ public class JobsController : ControllerBase
         pageSize = Math.Clamp(pageSize, 1, 200);
         // Negative or zero page causes a negative SQL OFFSET — clamp to 1.
         page = Math.Max(1, page);
-        var userRole = User.FindFirstValue("role");
         var userIdString = User.FindFirstValue("id");
 
         if (!Guid.TryParse(userIdString, out var userId))
@@ -185,7 +204,8 @@ public class JobsController : ControllerBase
         // Admin dashboard: include split children so one parent card can show partial assignment state.
         if (User.IsInRole("Admin") || User.IsInRole("admin"))
         {
-            query = query.Include(j => j.ChildJobs).ThenInclude(c => c.Vendor);
+            // Split query: the three-level Include otherwise multiplies rows per child (cartesian blowup).
+            query = query.Include(j => j.ChildJobs).ThenInclude(c => c.Vendor).AsSplitQuery();
         }
 
         if (User.IsInRole("Customer") || User.IsInRole("customer"))
@@ -225,6 +245,7 @@ public class JobsController : ControllerBase
             .Include(j => j.Vendor)
             .Include(j => j.ChildJobs)
                 .ThenInclude(c => c.Vendor)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(j => j.Id == id);
 
         if (job == null) return NotFound();
@@ -267,6 +288,10 @@ public class JobsController : ControllerBase
         {
             return BadRequest(new { message = "Services, Description, Address, ContactPhone, and ContactEmail are all mandatory fields." });
         }
+
+        // Column limits ([StringLength] does not run on SaveChanges) — reject cleanly instead of a DB 22001 error.
+        var lengthError = ValidateJobFieldLengths(request.Description, request.Address, request.OtherDetails, request.ContactPhone, request.ContactEmail);
+        if (lengthError != null) return lengthError;
 
         // Validate each service string: max 100 chars, alphanumeric + common punctuation only.
         // Allows: letters, digits, spaces, - , & ' ( ) . /  (covers all 28 service names)
@@ -470,7 +495,8 @@ public class JobsController : ControllerBase
 
         if (isVendorUnassignOnly)
         {
-            await _context.SaveChangesAsync();
+            var unassignConflict = await TrySaveChangesAsync();
+            if (unassignConflict != null) return unassignConflict;
             await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
             await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
             return Ok(job);
@@ -489,6 +515,9 @@ public class JobsController : ControllerBase
         }
         var invalidPhotos = ValidatePhotoUrls(request.Photos);
         if (invalidPhotos != null) return invalidPhotos;
+
+        var updateLengthError = ValidateJobFieldLengths(request.Description, request.Address, request.OtherDetails, request.ContactPhone, request.ContactEmail);
+        if (updateLengthError != null) return updateLengthError;
 
         if (request.Description != null) job.Description = request.Description;
         if (request.Address != null) job.Address = request.Address;
@@ -695,7 +724,8 @@ public class JobsController : ControllerBase
             CreatedAt = DateTime.UtcNow
         });
 
-        await _context.SaveChangesAsync();
+        var conflict = await TrySaveChangesAsync();
+        if (conflict != null) return conflict;
 
         await _context.Entry(job).Reference(j => j.Customer).LoadAsync();
         await _context.Entry(job).Reference(j => j.Vendor).LoadAsync();
@@ -782,11 +812,14 @@ public class JobsController : ControllerBase
             CreatedAt = DateTime.UtcNow
         });
 
-        await _context.SaveChangesAsync();
+        var scopeConflict = await TrySaveChangesAsync();
+        if (scopeConflict != null) return scopeConflict;
 
+        // Single round-trip instead of one Vendor query per child job.
+        await _context.Jobs.Where(j => j.ParentJobId == id)
+            .Include(j => j.Vendor)
+            .LoadAsync();
         await _context.Entry(parent).Collection(p => p.ChildJobs).LoadAsync();
-        foreach (var child in parent.ChildJobs)
-            await _context.Entry(child).Reference(c => c.Vendor).LoadAsync();
 
         return Ok(parent);
     }
@@ -839,7 +872,8 @@ public class JobsController : ControllerBase
         };
 
         _context.JobNotes.Add(note);
-        await _context.SaveChangesAsync();
+        var noteConflict = await TrySaveChangesAsync();
+        if (noteConflict != null) return noteConflict;
 
         return StatusCode(StatusCodes.Status201Created, note);
     }
@@ -1025,7 +1059,8 @@ public class JobsController : ControllerBase
         };
         _context.JobNotes.Add(note);
 
-        await _context.SaveChangesAsync();
+        var invoiceConflict = await TrySaveChangesAsync();
+        if (invoiceConflict != null) return invoiceConflict;
         return Ok(job);
     }
 
@@ -1176,7 +1211,8 @@ public class JobsController : ControllerBase
         };
         _context.JobNotes.Add(note);
 
-        await _context.SaveChangesAsync();
+        var photosConflict = await TrySaveChangesAsync();
+        if (photosConflict != null) return photosConflict;
         return Ok(job);
     }
 }

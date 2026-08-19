@@ -89,7 +89,6 @@ builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
     options.Level = System.IO.Compression.CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(options =>
     options.Level = System.IO.Compression.CompressionLevel.Fastest);
-builder.Services.AddResponseCaching();
 builder.Services.AddMemoryCache();
 
 // Services
@@ -558,7 +557,6 @@ if (!app.Environment.IsDevelopment())
 // the /uploads/{fileName} endpoint below streams from IFileStorage (blob in prod).
 app.UseStaticFiles();
 app.UseResponseCompression();
-app.UseResponseCaching();
 
 // Only Development gets the wide-open DevCors. Staging/Production (and any other env) must use
 // the origin-locked ProdCors so a non-dev deploy can never accept requests from any origin.
