@@ -33,6 +33,11 @@ public class AppDbContext : DbContext
             .HasIndex(t => t.Token)
             .IsUnique();
 
+        // Both the failed-attempt bookkeeping and the purge job filter on "live" tokens
+        // (unused and unexpired); without this the predicate falls back to a table scan.
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasIndex(t => new { t.Used, t.ExpiresAt });
+
         // Job query patterns
         modelBuilder.Entity<Job>()
             .HasIndex(j => new { j.CustomerId, j.CreatedAt });

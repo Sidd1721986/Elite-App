@@ -265,8 +265,24 @@ public class AuthService : IAuthService
             // resolve to the same account regardless of how the number was stored. The
             // comparable form lives in its own indexed column — normalizing Phone here
             // instead would mean loading every user row on each reset request.
+            //
+            // The column is deliberately non-unique: a household or a contractor may register
+            // the same number as both a customer and a vendor. Taking an arbitrary row and
+            // only then checking the role dead-ends the reset for the account that actually
+            // asked — it falls through to the generic "if an account matches" reply and no
+            // code is ever sent. Match on phone AND role, and when a number is shared inside
+            // one role prefer the account that can actually sign in.
             var wanted = PhoneNormalizer.Normalize(phone);
-            user = await _context.Users.FirstOrDefaultAsync(u => u.PhoneNormalized == wanted);
+            var wantedRole = role.Trim();
+            var sharingNumber = await _context.Users
+                .Where(u => u.PhoneNormalized == wanted)
+                .ToListAsync();
+            user = sharingNumber
+                .Where(u => string.Equals(u.Role, wantedRole, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(u => u.IsActive)
+                .ThenByDescending(u => u.Role != UserRole.Vendor.ToString() || u.IsApproved)
+                .ThenByDescending(u => u.CreatedAt)
+                .FirstOrDefault();
         }
         else
         {
@@ -412,9 +428,13 @@ public class AuthService : IAuthService
     /// <summary>The live (unused, unexpired) reset token belonging to the supplied identity, if any.</summary>
     private async Task<PasswordResetToken?> FindOutstandingTokenAsync(string email, string? phone)
     {
+        // Newest first: a shared phone number can leave more than one account holding a live
+        // code, and a failed attempt must be charged against a stable, predictable row rather
+        // than whichever one the database returned first.
         var live = _context.PasswordResetTokens
             .Include(t => t.User)
-            .Where(t => !t.Used && t.ExpiresAt > DateTime.UtcNow);
+            .Where(t => !t.Used && t.ExpiresAt > DateTime.UtcNow)
+            .OrderByDescending(t => t.ExpiresAt);
 
         if (!string.IsNullOrWhiteSpace(phone))
         {

@@ -158,6 +158,7 @@ public class MessagesController : ControllerBase
             .Select(m => new
             {
                 Partner = m.SenderId == currentUserId ? m.ReceiverId : m.SenderId,
+                m.Id,
                 m.Content,
                 m.Timestamp
             })
@@ -166,7 +167,10 @@ public class MessagesController : ControllerBase
         var latestContentByPartner = latestRows
             .Where(r => convosByPartner.TryGetValue(r.Partner, out var v) && v.LastTimestamp == r.Timestamp)
             .GroupBy(r => r.Partner)
-            .ToDictionary(g => g.Key, g => g.First().Content);
+            // Two messages in one conversation can carry the identical timestamp — a reply sent
+            // in the same tick, or rows written by one bulk insert. Break the tie on Id so the
+            // preview is the same on every request instead of whichever row came back first.
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.Id).First().Content);
 
         var usersById = await _context.Users
             .AsNoTracking()
