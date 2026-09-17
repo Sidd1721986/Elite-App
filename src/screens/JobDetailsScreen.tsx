@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import FastImage from 'react-native-fast-image';
-import { Text, Card, Button, Avatar, Divider, List, Chip, Surface, IconButton, ProgressBar, TextInput, Menu, Portal, Dialog } from 'react-native-paper';
+import { Text, Card, Button, Avatar, Divider, Chip, Surface, IconButton, ProgressBar, TextInput, Menu, Portal, Dialog } from 'react-native-paper';
 import { useJobs } from '../context/JobContext';
 import { useAuth } from '../context/AuthContext';
 import { jobService } from '../services/jobService';
@@ -11,6 +10,11 @@ import { RouteProp, useRoute, useNavigation, NavigationProp } from '@react-navig
 import { RootStackParamList, JobStatus, Urgency, User } from '../types/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { openExternalUrl } from '../utils/openExternalUrl';
+
+import { JobHeaderCard } from './jobs/JobHeaderCard';
+import { JobNotesSection } from './jobs/JobNotesSection';
+import { JobAttachmentsSection } from './jobs/JobAttachmentsSection';
+import { JobContactSection } from './jobs/JobContactSection';
 
 type JobDetailsRouteProp = RouteProp<RootStackParamList, 'JobDetails'>;
 
@@ -24,13 +28,25 @@ function adminMayMarkVendorJobComplete(job: { vendorId?: string; status?: string
         'invoiced',
         'invoicerequested',
         'submitted',
-        'assigned',
         'expired',
     ]);
     if (blocked.has(s)) {return false;}
-    const eligible = new Set(['sale', 'followup', 'accepted', 'reachedout', 'apptset']);
+    const eligible = new Set(['assigned', 'sale', 'followup', 'accepted', 'reachedout', 'apptset']);
     return eligible.has(s);
 }
+
+const ALL_LIFECYCLE_STAGES: Array<{ status: string; label: string; icon: string; color: string; desc: string }> = [
+    { status: JobStatus.SUBMITTED, label: 'Submitted', icon: 'send-circle-outline', color: '#6366F1', desc: 'Initial homeowner submission' },
+    { status: JobStatus.ASSIGNED, label: 'Assigned', icon: 'account-arrow-right-outline', color: '#8B5CF6', desc: 'Dispatched to vendor' },
+    { status: JobStatus.ACCEPTED, label: 'Accepted', icon: 'check-circle-outline', color: '#3B82F6', desc: 'Vendor accepted lead' },
+    { status: 'ReachedOut', label: 'Reached Out', icon: 'phone-outgoing-outline', color: '#F59E0B', desc: 'Vendor contacted homeowner' },
+    { status: 'ApptSet', label: 'Appointment Set', icon: 'calendar-check-outline', color: '#EC4899', desc: 'On-site estimate booked' },
+    { status: JobStatus.SALE, label: 'Sale Confirmed', icon: 'currency-usd', color: '#10B981', desc: 'Contract agreed & start date set' },
+    { status: 'FollowUp', label: 'Follow Up', icon: 'refresh', color: '#EAB308', desc: 'Pending quote decision' },
+    { status: JobStatus.COMPLETED, label: 'Completed', icon: 'flag-checkered', color: '#059669', desc: 'Work finished on-site' },
+    { status: JobStatus.INVOICE_REQUESTED, label: 'Invoice Requested', icon: 'file-document-edit-outline', color: '#F97316', desc: 'Waiting for vendor invoice doc' },
+    { status: JobStatus.INVOICED, label: 'Invoiced', icon: 'file-check-outline', color: '#0F172A', desc: 'Ready for customer billing' },
+];
 
 const getStatusStyle = (status: string) => {
     switch (status) {
@@ -76,6 +92,9 @@ const JobDetailsScreen: React.FC = () => {
     const [amountDialogVisible, setAmountDialogVisible] = React.useState(false);
     const [amountValue, setAmountValue] = React.useState('');
 
+    // Admin-only stage progression / override modal
+    const [stageDialogVisible, setStageDialogVisible] = React.useState(false);
+
     // Surface action failures to the user instead of swallowing them in console.error
     // (previously a failed accept/reach-out/appointment/invoice left the spinner stopped
     // and the screen unchanged, so vendors just re-tapped into stuck jobs).
@@ -110,6 +129,51 @@ const JobDetailsScreen: React.FC = () => {
             });
         } catch (e: any) {
             Alert.alert('Could not record sale', e?.message || 'Something went wrong. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleAdminChangeStage = async (newStatus: string) => {
+        if (!job || job.status.toLowerCase().replace(/\s+/g, '') === newStatus.toLowerCase().replace(/\s+/g, '')) {
+            setStageDialogVisible(false);
+            return;
+        }
+
+        setStageDialogVisible(false);
+
+        if (newStatus === JobStatus.COMPLETED) {
+            Alert.alert(
+                'Mark Job Complete',
+                'Move this job to Completed status?',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Complete Job',
+                        style: 'default',
+                        onPress: async () => {
+                            setIsProcessing(true);
+                            try {
+                                await completeJob(job.id, []);
+                                Alert.alert('Success', 'Job has been marked as Completed.');
+                            } catch (e) {
+                                showError(e, 'Could not mark job complete.');
+                            } finally {
+                                setIsProcessing(false);
+                            }
+                        },
+                    },
+                ]
+            );
+            return;
+        }
+
+        setIsProcessing(true);
+        try {
+            await updateJob(job.id, { status: newStatus });
+            Alert.alert('Stage Updated', `Job stage moved to ${newStatus}.`);
+        } catch (e) {
+            showError(e, `Could not change stage to ${newStatus}.`);
         } finally {
             setIsProcessing(false);
         }
@@ -349,55 +413,32 @@ const JobDetailsScreen: React.FC = () => {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-                <Surface style={styles.headerSurface} elevation={0}>
-                    <View style={styles.headerTop}>
-                        <IconButton
-                            icon="chevron-left"
-                            mode="contained"
-                            containerColor="#F1F5F9"
-                            size={24}
-                            onPress={() => navigation.goBack()}
-                        />
-                        <Text variant="titleMedium" style={styles.headerTitle}>Order Pipeline</Text>
-                        <IconButton
-                            icon="dots-vertical"
-                            mode="contained"
-                            containerColor="#F1F5F9"
-                            size={24}
-                        />
-                    </View>
+                <View style={styles.topNav}>
+                    <IconButton
+                        icon="chevron-left"
+                        mode="contained"
+                        containerColor="#F1F5F9"
+                        size={24}
+                        onPress={() => navigation.goBack()}
+                    />
+                    <Text variant="titleMedium" style={styles.headerTitle}>Order Pipeline</Text>
+                    <IconButton
+                        icon="dots-vertical"
+                        mode="contained"
+                        containerColor="#F1F5F9"
+                        size={24}
+                    />
+                </View>
 
-                    <View style={styles.heroSection}>
-                        <View style={styles.heroInfo}>
-                            <Text variant="labelSmall" style={styles.idLabel}>ORDER #{job.jobNumber}{job.jobSuffix || ''}</Text>
-                            <Text variant="headlineSmall" style={styles.addressTitle}>{job.address}</Text>
-                        </View>
-                        <Chip
-                            icon={statusStyle.icon}
-                            style={[styles.statusChip, { backgroundColor: statusStyle.bg }]}
-                            textStyle={[styles.statusChipText, { color: statusStyle.color }]}
-                        >
-                            {job.status}
-                        </Chip>
-                    </View>
-
-                    <View style={styles.metaRow}>
-                        <View style={styles.metaItem}>
-                            <Avatar.Icon size={32} icon="calendar-clock" style={styles.metaIcon} color="#94A3B8" />
-                            <View>
-                                <Text variant="labelSmall" style={styles.metaLabel}>CREATED</Text>
-                                <Text variant="labelLarge" style={styles.metaValue}>{new Date(job.createdAt).toLocaleDateString()}</Text>
-                            </View>
-                        </View>
-                        <View style={styles.metaItem}>
-                            <Avatar.Icon size={32} icon="alert-decagram-outline" style={styles.metaIcon} color={job.urgency === Urgency.IMMEDIATE ? '#EF4444' : '#94A3B8'} />
-                            <View>
-                                <Text variant="labelSmall" style={styles.metaLabel}>PRIORITY</Text>
-                                <Text variant="labelLarge" style={[styles.metaValue, job.urgency === Urgency.IMMEDIATE && { color: '#EF4444' }]}>{job.urgency}</Text>
-                            </View>
-                        </View>
-                    </View>
-                </Surface>
+                <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
+                    <JobHeaderCard
+                        job={job}
+                        onEditAmount={openAmountDialog}
+                        canEditAmount={isAdmin}
+                        onChangeStage={() => setStageDialogVisible(true)}
+                        canChangeStage={isAdmin}
+                    />
+                </View>
 
                 {/* Admin: set / change the amount the customer is invoiced & pays */}
                 {isAdmin && (
@@ -668,244 +709,46 @@ const JobDetailsScreen: React.FC = () => {
                         </Card>
                     </View>
 
-                    <View style={styles.section}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                            <Text variant="titleMedium" style={[styles.sectionTitle, { marginBottom: 0 }]}>Request Photos</Text>
-                            {user?.role !== 'Vendor' && (
-                                <Menu
-                                    visible={showAddPhotoMenu}
-                                    onDismiss={() => setShowAddPhotoMenu(false)}
-                                    anchor={
-                                        <Button
-                                            mode="text"
-                                            compact
-                                            icon="plus-circle-outline"
-                                            onPress={() => setShowAddPhotoMenu(true)}
-                                            textColor="#6366F1"
-                                            loading={isUploading}
-                                        >
-                                            Add Photo
-                                        </Button>
-                                    }
-                                >
-                                    <Menu.Item leadingIcon="camera" onPress={() => handlePhotoUpload('camera')} title="Take Photo" />
-                                    <Menu.Item leadingIcon="image" onPress={() => handlePhotoUpload('library')} title="Gallery" />
-                                    <Menu.Item leadingIcon="link" onPress={() => setShowPhotoInput(true)} title="Paste Link" />
-                                </Menu>
-                            )}
-                        </View>
-                        <Surface style={styles.photosBox} elevation={0}>
-                            {isUploading && (
-                                <View style={{ padding: 12 }}>
-                                    <ProgressBar progress={uploadProgress} color="#6366F1" style={{ height: 4, borderRadius: 2 }} />
-                                    <Text variant="labelSmall" style={{ marginTop: 4, textAlign: 'center', color: '#64748B' }}>Sharing photo...</Text>
-                                </View>
-                            )}
-                            {showPhotoInput && !isUploading && user?.role !== 'Vendor' && (
-                                <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 12 }}>
-                                    <TextInput
-                                        placeholder="Paste image URL here..."
-                                        value={newPhotoUrl}
-                                        onChangeText={setNewPhotoUrl}
-                                        mode="outlined"
-                                        style={{ backgroundColor: '#FFF', fontSize: 13 }}
-                                        dense
-                                        outlineColor="#E2E8F0"
-                                        activeOutlineColor="#6366F1"
-                                        right={
-                                            <TextInput.Icon
-                                                icon="send"
-                                                onPress={async () => {
-                                                    if (!newPhotoUrl.trim()) {return;}
-                                                    setIsProcessing(true);
-                                                    try {
-                                                        await addJobPhotos(job.id, [newPhotoUrl]);
-                                                        setNewPhotoUrl('');
-                                                        setShowPhotoInput(false);
-                                                    } catch (e) { showError(e); }
-                                                    finally { setIsProcessing(false); }
-                                                }}
-                                                disabled={!newPhotoUrl.trim() || isProcessing}
-                                            />
-                                        }
-                                        left={<TextInput.Icon icon="close" onPress={() => setShowPhotoInput(false)} />}
-                                    />
-                                </View>
-                            )}
-                            {job.photos && job.photos.length > 0 ? (
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
-                                    {job.photos.map((uri, index) => uri ? (
-                                        <View key={uri} style={styles.photoWrapper}>
-                                            <FastImage
-                                                source={{ uri, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }}
-                                                style={styles.photoThumbnail}
-                                                resizeMode={FastImage.resizeMode.cover}
-                                            />
-                                            {user?.role !== 'Vendor' && (
-                                                <IconButton
-                                                    icon="close-circle"
-                                                    size={20}
-                                                    iconColor="#EF4444"
-                                                    style={styles.deletePhotoBtn}
-                                                    onPress={() => handleDeletePhoto(uri)}
-                                                    loading={isDeletingPhoto === uri}
-                                                    disabled={!!isDeletingPhoto}
-                                                />
-                                            )}
-                                        </View>
-                                    ) : null)}
-                                </ScrollView>
-                            ) : (
-                                !isUploading && (
-                                    <View style={styles.emptyPhotoContent}>
-                                        <IconButton icon="image-off-outline" size={32} iconColor="#CBD5E1" />
-                                        <Text variant="bodySmall" style={{ color: '#94A3B8' }}>No photos provided for this request.</Text>
-                                    </View>
-                                )
-                            )}
-                        </Surface>
-                    </View>
+                    {/* Attachments Section */}
+                    <JobAttachmentsSection
+                        photos={job.photos}
+                        completedPhotos={job.completedPhotos}
+                        canAddPhotos={user?.role !== 'Vendor'}
+                        isUploading={isUploading}
+                        uploadProgress={uploadProgress}
+                        showAddPhotoMenu={showAddPhotoMenu}
+                        setShowAddPhotoMenu={setShowAddPhotoMenu}
+                        showPhotoInput={showPhotoInput}
+                        setShowPhotoInput={setShowPhotoInput}
+                        newPhotoUrl={newPhotoUrl}
+                        setNewPhotoUrl={setNewPhotoUrl}
+                        isProcessing={isProcessing}
+                        isDeletingPhoto={isDeletingPhoto}
+                        onPhotoUpload={handlePhotoUpload}
+                        onAddPhotoUrl={async () => {
+                            if (!newPhotoUrl.trim()) { return; }
+                            setIsProcessing(true);
+                            try {
+                                await addJobPhotos(job.id, [newPhotoUrl]);
+                                setNewPhotoUrl('');
+                                setShowPhotoInput(false);
+                            } catch (e) { showError(e); }
+                            finally { setIsProcessing(false); }
+                        }}
+                        onDeletePhoto={handleDeletePhoto}
+                    />
 
-                    {/* Completion Photos Section */}
-                    {job.completedPhotos && job.completedPhotos.length > 0 && (
-                        <View style={styles.section}>
-                            <Text variant="titleMedium" style={styles.sectionTitle}>Completed Work Photos</Text>
-                            <Surface style={[styles.photosBox, { borderColor: '#10B98120', backgroundColor: '#F0FDF430' }]} elevation={0}>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
-                                    {job.completedPhotos.map((uri, index) => uri ? (
-                                        <View key={uri} style={styles.photoWrapper}>
-                                            <FastImage
-                                                source={{ uri, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }}
-                                                style={[styles.photoThumbnail, { borderColor: '#10B981' }]}
-                                                resizeMode={FastImage.resizeMode.cover}
-                                            />
-                                        </View>
-                                    ) : null)}
-                                </ScrollView>
-                            </Surface>
-                        </View>
-                    )}
-
-
-                    <View style={styles.section}>
-                        <Text variant="titleMedium" style={styles.sectionTitle}>Portal Notes</Text>
-                        <Surface style={styles.notesBox} elevation={0}>
-                            <View style={styles.notesList}>
-                                {Array.isArray(notes) && notes.length > 0 ? (
-                                    notes.map(note => {
-                                        const date = new Date(note.createdAt);
-                                        const dateString = isNaN(date.getTime()) ? 'Recent' : date.toLocaleDateString();
-
-                                        return (
-                                            <View key={note.id} style={styles.noteItem}>
-                                                <View style={styles.noteHeader}>
-                                                    <Avatar.Text
-                                                        size={20}
-                                                        label={String(note.authorId || 'S').substring(0, 2).toUpperCase()}
-                                                        style={{ backgroundColor: '#F1F5F9' }}
-                                                        labelStyle={{ fontSize: 10, color: '#64748B' }}
-                                                    />
-                                                    <Text variant="labelSmall" style={styles.noteDate}>
-                                                        {dateString}
-                                                    </Text>
-                                                </View>
-                                                <Text variant="bodyMedium" style={styles.noteContent}>{note.content || ''}</Text>
-                                            </View>
-                                        );
-                                    })
-                                ) : (
-                                    <View style={styles.emptyNotes}>
-                                        <Text variant="bodySmall" style={{ color: '#94A3B8', textAlign: 'center' }}>No notes in this portal yet.</Text>
-                                    </View>
-                                )}
-                            </View>
-
-                            <View style={styles.addNoteContainer}>
-                                <TextInput
-                                    placeholder="Add a progress update..."
-                                    value={noteContent}
-                                    onChangeText={setNoteContent}
-                                    mode="outlined"
-                                    style={styles.noteInput}
-                                    multiline
-                                    dense
-                                    outlineColor="#E2E8F0"
-                                    activeOutlineColor="#6366F1"
-                                    right={
-                                        <TextInput.Icon
-                                            icon="send"
-                                            disabled={!noteContent.trim()}
-                                            onPress={handleAddNote}
-                                            color={noteContent.trim() ? '#6366F1' : '#CBD5E1'}
-                                        />
-                                    }
-                                />
-                            </View>
-                        </Surface>
-                    </View>
+                    {/* Notes Section */}
+                    <JobNotesSection
+                        notes={notes}
+                        noteContent={noteContent}
+                        onChangeNoteContent={setNoteContent}
+                        onAddNote={handleAddNote}
+                        isSubmitting={isProcessing}
+                    />
 
                     {/* Point of Contact Section */}
-                    <View style={styles.section}>
-                        <Text variant="titleMedium" style={styles.sectionTitle}>Contact & Stakeholders</Text>
-
-                        {/* Customer Profile */}
-                        <Surface style={styles.contactCard} elevation={0}>
-                            <View style={styles.contactRow}>
-                                <Avatar.Text
-                                    size={48}
-                                    label={(job.customer?.name || 'CU').substring(0, 2).toUpperCase()}
-                                    style={styles.contactAvatar}
-                                />
-                                <View style={styles.contactInfo}>
-                                    <Text variant="titleMedium" style={styles.contactName}>
-                                        {job.customer?.name && job.customer.name !== 'Homeowner' ? job.customer.name : 'Homeowner Profile'}
-                                    </Text>
-                                    <Text variant="labelSmall" style={styles.contactType}>Homeowner Profile</Text>
-                                    <View style={{ marginTop: 4 }}>
-                                        <Text variant="bodySmall" style={{ color: '#64748B' }}>
-                                            {job.customer?.phone || 'No phone provided'}
-                                        </Text>
-                                        <Text variant="bodySmall" style={{ color: '#64748B' }}>
-                                            {job.customer?.email || 'No email provided'}
-                                        </Text>
-                                    </View>
-                                </View>
-                            </View>
-                        </Surface>
-
-                        {/* On-site Details (if different or assigned) */}
-                        {(job.contactPhone || job.contactEmail) && (
-                            <Surface style={[styles.contactCard, { marginTop: 12, backgroundColor: '#F8FAFC' }]} elevation={0}>
-                                <View style={styles.contactRow}>
-                                    <Avatar.Icon size={48} icon="account-tie-outline" style={{ backgroundColor: '#EEF2FF' }} color="#6366F1" />
-                                    <View style={styles.contactInfo}>
-                                        <Text variant="titleMedium" style={styles.contactName}>On-site Contact</Text>
-                                        <Text variant="labelSmall" style={styles.contactType}>Specific Point of Contact</Text>
-                                        <View style={{ marginTop: 4 }}>
-                                            <Text variant="bodySmall" style={{ color: '#6366F1', fontWeight: 'bold' }}>{job.contactPhone}</Text>
-                                            <Text variant="bodySmall" style={{ color: '#64748B' }}>{job.contactEmail}</Text>
-                                        </View>
-                                    </View>
-                                </View>
-                            </Surface>
-                        )}
-
-                        {/* Assigned Vendor Profile */}
-                        {job.vendor && (
-                            <Surface style={[styles.contactCard, { marginTop: 12, borderLeftWidth: 4, borderLeftColor: '#10B981' }]} elevation={0}>
-                                <View style={styles.contactRow}>
-                                    <Avatar.Text size={48} label={(job.vendor?.name || 'VN').substring(0, 2).toUpperCase()} style={{ backgroundColor: '#ECFDF5' }} color="#10B981" />
-                                    <View style={styles.contactInfo}>
-                                        <Text variant="titleMedium" style={styles.contactName}>{job.vendor?.name}</Text>
-                                        <Text variant="labelSmall" style={styles.contactType}>Assigned Vendor</Text>
-                                        <View style={{ marginTop: 4 }}>
-                                            <Text variant="bodySmall" style={{ color: '#059669', fontWeight: 'bold' }}>{job.vendor?.phone || 'No phone'}</Text>
-                                        </View>
-                                    </View>
-                                </View>
-                            </Surface>
-                        )}
-                    </View>
+                    <JobContactSection job={job} />
 
                     {/* Padding for footer */}
                     <View style={{ height: 100 }} />
@@ -1069,7 +912,20 @@ const JobDetailsScreen: React.FC = () => {
                             );
                         }}
                     >
-                        Mark complete (vendor missed)
+                        Finalize & Complete (Admin)
+                    </Button>
+                )}
+                {user?.role === 'Admin' && (
+                    <Button
+                        mode="outlined"
+                        style={[styles.mainActionBtn, { marginTop: 8, borderColor: '#6366F1' }]}
+                        contentStyle={{ height: 48 }}
+                        textColor="#6366F1"
+                        icon="swap-horizontal-bold"
+                        onPress={() => setStageDialogVisible(true)}
+                        loading={isProcessing}
+                    >
+                        Change Stage Override
                     </Button>
                 )}
                 {user?.role === 'Admin' && job.status === JobStatus.COMPLETED && (
@@ -1162,6 +1018,72 @@ const JobDetailsScreen: React.FC = () => {
                         <Button mode="contained" onPress={submitAmount} loading={isProcessing}>Save</Button>
                     </Dialog.Actions>
                 </Dialog>
+
+                <Dialog
+                    visible={stageDialogVisible}
+                    onDismiss={() => setStageDialogVisible(false)}
+                    style={{ maxHeight: '80%', borderRadius: 20, backgroundColor: '#FFFFFF' }}
+                >
+                    <Dialog.Title style={{ fontWeight: 'bold', color: '#1E293B' }}>
+                        Change Job Stage (Admin)
+                    </Dialog.Title>
+                    <Dialog.ScrollArea style={{ paddingHorizontal: 16 }}>
+                        <ScrollView style={{ maxHeight: 380 }}>
+                            <Text variant="bodySmall" style={{ color: '#64748B', marginBottom: 12 }}>
+                                Select a stage to update this job. Any vendor skipped stages or missed completions can be overridden directly.
+                            </Text>
+                            {ALL_LIFECYCLE_STAGES.map((stage) => {
+                                const isCurrent = job.status.toLowerCase().replace(/\s+/g, '') === stage.status.toLowerCase().replace(/\s+/g, '');
+                                return (
+                                    <Surface
+                                        key={stage.status}
+                                        style={[
+                                            styles.stageOptionCard,
+                                            isCurrent && { borderColor: stage.color, backgroundColor: `${stage.color}10`, borderWidth: 2 }
+                                        ]}
+                                        elevation={0}
+                                    >
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                            <Avatar.Icon
+                                                size={38}
+                                                icon={stage.icon}
+                                                style={{ backgroundColor: `${stage.color}20`, marginRight: 12 }}
+                                                color={stage.color}
+                                            />
+                                            <View style={{ flex: 1 }}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                    <Text variant="titleSmall" style={{ fontWeight: 'bold', color: '#1E293B' }}>
+                                                        {stage.label}
+                                                    </Text>
+                                                    {isCurrent && (
+                                                        <Chip compact style={{ marginLeft: 8, height: 22, backgroundColor: stage.color }}>
+                                                            <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>Current</Text>
+                                                        </Chip>
+                                                    )}
+                                                </View>
+                                                <Text variant="bodySmall" style={{ color: '#64748B' }}>
+                                                    {stage.desc}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <Button
+                                            mode={isCurrent ? 'text' : 'contained-tonal'}
+                                            compact
+                                            disabled={isCurrent || isProcessing}
+                                            onPress={() => handleAdminChangeStage(stage.status)}
+                                            style={{ marginLeft: 8 }}
+                                        >
+                                            {isCurrent ? 'Active' : 'Set'}
+                                        </Button>
+                                    </Surface>
+                                );
+                            })}
+                        </ScrollView>
+                    </Dialog.ScrollArea>
+                    <Dialog.Actions>
+                        <Button onPress={() => setStageDialogVisible(false)}>Close</Button>
+                    </Dialog.Actions>
+                </Dialog>
             </Portal>
         </SafeAreaView>
     );
@@ -1178,87 +1100,37 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 24,
     },
-    headerSurface: {
-        backgroundColor: '#FFFFFF',
-        padding: 24,
-        borderBottomLeftRadius: 32,
-        borderBottomRightRadius: 32,
-    },
-    headerTop: {
+    topNav: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 16,
     },
     headerTitle: {
         fontWeight: '900',
         color: '#1E293B',
     },
-    heroSection: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 24,
-    },
-    heroInfo: {
-        flex: 1,
-    },
-    idLabel: {
-        color: '#94A3B8',
-        fontWeight: 'bold',
-        letterSpacing: 1,
-    },
-    addressTitle: {
-        fontWeight: '900',
-        color: '#1E293B',
-        marginTop: 4,
-        letterSpacing: -0.5,
-    },
     statusChip: {
         borderRadius: 12,
         height: 32,
     },
-    statusChipText: {
-        fontSize: 11,
-        fontWeight: '900',
-        textTransform: 'uppercase',
-    },
-    metaRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    metaItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    metaIcon: {
-        backgroundColor: '#F8FAFC',
-        margin: 0,
-    },
-    metaLabel: {
-        color: '#94A3B8',
-        letterSpacing: 0.5,
-    },
-    metaValue: {
-        fontWeight: 'bold',
-        color: '#1E293B',
-    },
     contentBody: {
-        padding: 24,
+        paddingHorizontal: 20,
         paddingBottom: 100,
     },
     section: {
-        marginBottom: 32,
+        marginBottom: 24,
     },
     sectionTitle: {
         fontWeight: '900',
         color: '#1E293B',
-        marginBottom: 16,
+        marginBottom: 12,
     },
     descriptionCard: {
         backgroundColor: '#FFFFFF',
-        borderRadius: 24,
+        borderRadius: 20,
         borderWidth: 1,
         borderColor: '#F1F5F9',
     },
@@ -1266,99 +1138,16 @@ const styles = StyleSheet.create({
         color: '#475569',
         lineHeight: 24,
     },
-    notesBox: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 24,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    notesList: {
-        maxHeight: 300,
-        padding: 16,
-    },
-    noteItem: {
-        backgroundColor: '#F8FAFC',
-        padding: 12,
-        borderRadius: 12,
-        marginBottom: 12,
-    },
-    noteHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 4,
-    },
-    noteContent: {
-        color: '#1E293B',
-        lineHeight: 20,
-    },
-    noteDate: {
-        color: '#94A3B8',
-        fontSize: 10,
-    },
-    emptyNotes: {
-        paddingVertical: 20,
-    },
-    addNoteContainer: {
-        padding: 12,
-        backgroundColor: '#FFFFFF',
-        borderTopWidth: 1,
-        borderTopColor: '#F1F5F9',
-    },
     invoiceUploadBox: {
         backgroundColor: '#FFFFFF',
         padding: 20,
-        borderRadius: 24,
+        borderRadius: 20,
         borderWidth: 1,
         borderColor: '#F1F5F9',
     },
     noteInput: {
         backgroundColor: '#FFFFFF',
         fontSize: 14,
-    },
-    photosBox: {
-        backgroundColor: '#FFFFFF',
-        padding: 16,
-        borderRadius: 24,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-        minHeight: 120,
-        justifyContent: 'center',
-    },
-    photoList: {
-        flexDirection: 'row',
-    },
-    photoWrapper: {
-        marginRight: 12,
-        position: 'relative',
-    },
-    deletePhotoBtn: {
-        position: 'absolute',
-        top: -8,
-        right: -8,
-        backgroundColor: '#FFFFFF',
-        margin: 0,
-        zIndex: 10,
-    },
-    photoThumbnail: {
-        width: 120,
-        height: 120,
-        borderRadius: 16,
-        backgroundColor: '#F1F5F9',
-    },
-    emptyPhotoContent: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    vendorPickerCard: {
-        width: 140,
-        backgroundColor: '#FFFFFF',
-        padding: 16,
-        borderRadius: 20,
-        marginRight: 12,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
     },
     otherDetailsBox: {
         marginTop: 20,
@@ -1401,16 +1190,13 @@ const styles = StyleSheet.create({
     contactCard: {
         backgroundColor: '#FFFFFF',
         padding: 16,
-        borderRadius: 24,
+        borderRadius: 20,
         borderWidth: 1,
         borderColor: '#F1F5F9',
     },
     contactRow: {
         flexDirection: 'row',
         alignItems: 'center',
-    },
-    contactAvatar: {
-        backgroundColor: '#6366F1',
     },
     contactInfo: {
         flex: 1,
@@ -1423,10 +1209,6 @@ const styles = StyleSheet.create({
     contactType: {
         color: '#94A3B8',
     },
-    contactActions: {
-        flexDirection: 'row',
-        gap: 4,
-    },
     footerActions: {
         padding: 24,
         backgroundColor: '#FFFFFF',
@@ -1438,6 +1220,17 @@ const styles = StyleSheet.create({
     },
     mainActionBtn: {
         borderRadius: 16,
+    },
+    stageOptionCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 12,
+        borderRadius: 14,
+        backgroundColor: '#F8FAFC',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        marginBottom: 8,
     },
     assignmentCard: {
         padding: 16,

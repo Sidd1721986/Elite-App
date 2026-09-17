@@ -1,4 +1,4 @@
-import { User, Job, Contact, JobNote, JobStatus, Urgency } from '../types/types';
+import { User, Job, JobStatus, Urgency } from '../types/types';
 
 /**
  * Robustly normalizes user data from raw API response.

@@ -169,11 +169,11 @@ public class JobsController : ControllerBase
             || s.Equals("Invoiced", StringComparison.OrdinalIgnoreCase)
             || s.Equals("InvoiceRequested", StringComparison.OrdinalIgnoreCase)
             || s.Equals("Submitted", StringComparison.OrdinalIgnoreCase)
-            || s.Equals("Assigned", StringComparison.OrdinalIgnoreCase)
             || s.Equals("Expired", StringComparison.OrdinalIgnoreCase))
             return false;
 
-        return s.Equals("Sale", StringComparison.OrdinalIgnoreCase)
+        return s.Equals("Assigned", StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Sale", StringComparison.OrdinalIgnoreCase)
             || s.Equals("FollowUp", StringComparison.OrdinalIgnoreCase)
             || s.Equals("Follow Up", StringComparison.OrdinalIgnoreCase)
             || s.Equals("Accepted", StringComparison.OrdinalIgnoreCase)
@@ -511,7 +511,31 @@ public class JobsController : ControllerBase
                 return BadRequest(new { message = "Job status can only be changed through dedicated workflow actions." });
             if (!KnownStatuses.Contains(request.Status))
                 return BadRequest(new { message = $"Invalid status value '{request.Status}'." });
-            job.Status = request.Status;
+
+            var prevStatus = job.Status;
+            if (!string.Equals(prevStatus, request.Status, StringComparison.OrdinalIgnoreCase))
+            {
+                job.Status = request.Status;
+
+                // Sync workflow timestamps for admin stage movements
+                if (request.Status.Equals("Accepted", StringComparison.OrdinalIgnoreCase) && job.AcceptedAt == null)
+                {
+                    job.AcceptedAt = DateTime.UtcNow;
+                }
+                else if (request.Status.Equals("Assigned", StringComparison.OrdinalIgnoreCase) && job.AssignedAt == null)
+                {
+                    job.AssignedAt = DateTime.UtcNow;
+                }
+
+                _context.JobNotes.Add(new JobNote
+                {
+                    Id = Guid.NewGuid(),
+                    JobId = id,
+                    AuthorId = userId,
+                    Content = $"Stage changed by admin from '{prevStatus}' to '{request.Status}'.",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
         }
         var invalidPhotos = ValidatePhotoUrls(request.Photos);
         if (invalidPhotos != null) return invalidPhotos;

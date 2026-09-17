@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useCallback, useMemo } from 'react';
 import { View, StyleSheet, RefreshControl, Pressable, useWindowDimensions, Alert } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Text, Card, Button, Avatar, Divider, Surface, IconButton, Icon, List, Chip, Snackbar, Portal, Menu, Dialog, Searchbar, TextInput } from 'react-native-paper';
+import { Text, Button, Avatar, Divider, Surface, IconButton, Chip, Snackbar, Portal, Menu, Dialog, Searchbar, TextInput } from 'react-native-paper';
 import { apiClient } from '../services/apiClient';
 import { MotiView } from 'moti';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -12,14 +12,20 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, User, Job, JobStatus, Conversation } from '../types/types';
 import { messageService } from '../services/messageService';
-import { formatChatPreview } from '../utils/chatMessageContent';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useJobs } from '../context/JobContext'; // Assuming useJobs is imported from here
+import { useJobs } from '../context/JobContext';
 import { JobErrorBanner } from '../components/JobErrorBanner';
+
+import { VendorApprovalCard } from './admin/VendorApprovalCard';
+import { JobRequestCard } from './admin/JobRequestCard';
+import { ActiveProjectCard } from './admin/ActiveProjectCard';
+import { AdminInboxSection } from './admin/AdminInboxSection';
+import { VerifiedVendorCard } from './admin/VerifiedVendorCard';
+import { CompletedJobCard } from './admin/CompletedJobCard';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
-type AdminDashboardDataItem =
+export type AdminDashboardDataItem =
     | { type: 'section_inbox' }
     | { type: 'section_header', title: string, count: number, sectionKey: string, chipColor: string, chipText: string }
     | { type: 'job_request', data: Job }
@@ -31,67 +37,6 @@ type AdminDashboardDataItem =
     | { type: 'show_more_requests', hidden: number }
     | { type: 'show_more_inprogress', hidden: number };
 
-const AdminList = FlashList as any;
-
-// ─── Vendor progress pipeline ─────────────────────────────────────────────────
-/** Ordered steps a vendor takes from assignment to job completion. */
-const VENDOR_PIPELINE = [
-    { status: JobStatus.ASSIGNED,     label: 'Assigned',    short: 'Asgn',  icon: 'account-check-outline',      color: '#6366F1' },
-    { status: JobStatus.ACCEPTED,     label: 'Accepted',    short: 'Accpt', icon: 'handshake-outline',           color: '#10B981' },
-    { status: JobStatus.REACHED_OUT,  label: 'Reached Out', short: 'Call',  icon: 'phone-forward-outline',       color: '#F59E0B' },
-    { status: JobStatus.APPT_SET,     label: 'Appt Set',    short: 'Appt',  icon: 'calendar-check-outline',      color: '#8B5CF6' },
-    { status: JobStatus.SALE,         label: 'Sale',        short: 'Sale',  icon: 'cash-check',                  color: '#059669' },
-    { status: JobStatus.FOLLOW_UP,    label: 'Follow Up',   short: 'FU',    icon: 'message-reply-text-outline',  color: '#F97316' },
-] as const;
-
-function getPipelineIndex(status: string): number {
-    return VENDOR_PIPELINE.findIndex(s => s.status === status);
-}
-
-/** Horizontal dot-and-line progress bar showing the vendor's current step. */
-const StatusPipeline = React.memo(({ currentStatus }: { currentStatus: string }) => {
-    const currentIdx = getPipelineIndex(currentStatus);
-    const step = currentIdx >= 0 ? VENDOR_PIPELINE[currentIdx] : null;
-    return (
-        <View>
-            <View style={pipelineStyles.track}>
-                {VENDOR_PIPELINE.map((s, idx) => {
-                    const done    = idx < currentIdx;
-                    const current = idx === currentIdx;
-                    const dotBg   = done ? '#10B981' : current ? s.color : '#E2E8F0';
-                    return (
-                        <React.Fragment key={s.status}>
-                            {idx > 0 && (
-                                <View style={[
-                                    pipelineStyles.line,
-                                    { backgroundColor: idx <= currentIdx ? (done ? '#10B981' : s.color) : '#E2E8F0' },
-                                ]} />
-                            )}
-                            <View style={[
-                                pipelineStyles.dot,
-                                { backgroundColor: dotBg, width: current ? 12 : 8, height: current ? 12 : 8, borderRadius: 6 },
-                                current && { shadowColor: s.color, shadowOpacity: 0.6, shadowRadius: 4, elevation: 3 },
-                            ]} />
-                        </React.Fragment>
-                    );
-                })}
-            </View>
-            {step && (
-                <Text style={[pipelineStyles.label, { color: step.color }]}>
-                    {step.label.toUpperCase()}
-                </Text>
-            )}
-        </View>
-    );
-});
-
-const pipelineStyles = StyleSheet.create({
-    track:  { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 2 },
-    line:   { flex: 1, height: 2, marginHorizontal: 2 },
-    dot:    { borderRadius: 6 },
-    label:  { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, marginTop: 3 },
-});
-// ─────────────────────────────────────────────────────────────────────────────
 
 const AdminDashboard: React.FC = () => {
     const { width: windowWidth } = useWindowDimensions();
@@ -620,73 +565,8 @@ const AdminDashboard: React.FC = () => {
         </View>
     ), [user, handleLogout, stats, scrollToSection, settingsMenuVisible, windowWidth, searchQuery, reducedMotion, navigation]);
 
-    const renderVendorItem = useCallback(({ item: vendor }: { item: User }) => (
-        <Card style={styles.approvalCard} elevation={0}>
-            <Card.Content style={styles.cardInner}>
-                <View style={styles.cardHeader}>
-                    <Avatar.Text
-                        size={44}
-                        label={(vendor.name || vendor.email || '??').substring(0, 2).toUpperCase()}
-                        style={styles.vendorAvatar}
-                    />
-                    <View style={styles.vendorInfo}>
-                        <Text variant="titleSmall" style={styles.vendorName} numberOfLines={1}>
-                            {vendor.name || 'Anonymous Vendor'}
-                        </Text>
-                        <Text variant="labelSmall" style={styles.vendorEmail} numberOfLines={1}>
-                            {vendor.email}
-                        </Text>
-                    </View>
-                    <View style={styles.pendingBadge}>
-                        <Text style={styles.pendingBadgeText}>Pending</Text>
-                    </View>
-                </View>
-
-                <Divider style={styles.cardDivider} />
-
-                <View style={styles.detailsRow}>
-                    <View style={styles.detailItem}>
-                        <IconButton icon="map-marker-outline" size={16} style={{ margin: 0 }} />
-                        <Text variant="labelSmall" style={styles.detailText} numberOfLines={1}>{vendor.address || 'No Address'}</Text>
-                    </View>
-                    <View style={styles.detailItem}>
-                        <IconButton icon="phone-outline" size={16} style={{ margin: 0 }} />
-                        <Text variant="labelSmall" style={styles.detailText} numberOfLines={1}>{vendor.phone || 'No Phone'}</Text>
-                    </View>
-                </View>
-
-                <View style={styles.cardActions}>
-                    <Button
-                        mode="contained"
-                        onPress={() => handleApproval(vendor.id || '', true)}
-                        style={styles.approveBtn}
-                    >
-                        Approve
-                    </Button>
-                    <Button
-                        mode="outlined"
-                        onPress={() => handleApproval(vendor.id || '', false)}
-                        style={styles.denyBtn}
-                        textColor="#EF4444"
-                    >
-                        Deny
-                    </Button>
-                    <Button
-                        mode="outlined"
-                        onPress={() => navigation.navigate('Chat', { otherUserId: vendor.id || vendor.email, otherUserName: vendor.name || 'Vendor' })}
-                        style={styles.messageBtn}
-                        icon="message-outline"
-                    >
-                        Chat
-                    </Button>
-                </View>
-            </Card.Content>
-        </Card>
-    ), [handleApproval, navigation]);
-
     const listData = useMemo<AdminDashboardDataItem[]>(() => {
         const data: AdminDashboardDataItem[] = [];
-        // Header is handled by ListHeaderComponent to keep it sticky or standard
 
         // Inbox Section
         data.push({ type: 'section_inbox' });
@@ -746,7 +626,7 @@ const AdminDashboard: React.FC = () => {
         }
 
         return data;
-    }, [conversations, submittedJobs, pendingVendors, activeProjects, filteredActiveProjects, approvedVendors, filteredApprovedVendors, completedJobs, showAllRequests, showAllInProgress]);
+    }, [submittedJobs, pendingVendors, activeProjects, filteredActiveProjects, approvedVendors, filteredApprovedVendors, completedJobs, showAllRequests, showAllInProgress]);
 
     // Keep the ref in sync so scrollToSection always has the latest indices.
     listDataRef.current = listData;
@@ -765,75 +645,12 @@ const AdminDashboard: React.FC = () => {
         switch (item.type) {
             case 'section_inbox':
                 return wrapInMoti(
-                    <View style={styles.messagesSection}>
-                        <Surface style={styles.messagesPanel} elevation={0}>
-                            <View style={styles.messagesPanelInner}>
-                            <View style={styles.messagesPanelHeader}>
-                                <View style={styles.messagesPanelTitleBlock}>
-                                    <View style={styles.messagesPanelTitleRow}>
-                                        <View style={styles.messagesPanelIconWrap}>
-                                            <Icon source="forum-outline" size={22} color="#475569" />
-                                        </View>
-                                        <View style={styles.messagesPanelTitles}>
-                                            <Text variant="titleMedium" style={styles.messagesPanelTitle}>Inbox</Text>
-                                            <Text variant="labelSmall" style={styles.messagesPanelSubtitle}>Messages from vendors and users</Text>
-                                        </View>
-                                    </View>
-                                </View>
-                                {messageUnreadTotal > 0 ? (
-                                    <View style={styles.messagesUnreadBadge}>
-                                        <Text style={styles.messagesUnreadBadgeText}>{messageUnreadTotal}</Text>
-                                    </View>
-                                ) : (
-                                    <Text variant="labelSmall" style={styles.messagesCountLabel}>
-                                        {conversations.length} {conversations.length === 1 ? 'thread' : 'threads'}
-                                    </Text>
-                                )}
-                            </View>
-                            {conversations.length > 0 ? (
-                                conversations.map((c, index) => {
-                                    const unread = c.unreadCount || 0;
-                                    const timeStr = c.timestamp ? new Date(c.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-                                    return (
-                                        <React.Fragment key={String(c.otherUserId)}>
-                                            {index > 0 ? <Divider style={styles.messageRowDivider} /> : null}
-                                            <Pressable
-                                                onPress={() => navigation.navigate('Chat', { otherUserId: String(c.otherUserId), otherUserName: c.otherUserName || 'User' })}
-                                                style={({ pressed }) => [styles.messageListRow, pressed && styles.messageListRowPressed]}
-                                            >
-                                                <Avatar.Text size={48} label={(c.otherUserName || c.otherUserEmail || '?').substring(0, 2).toUpperCase()} style={styles.messageListAvatar} labelStyle={styles.messageListAvatarLabel} />
-                                                <View style={styles.messageListBody}>
-                                                    <View style={styles.messageListTopLine}>
-                                                        <Text variant="titleSmall" style={[styles.messageListName, unread > 0 && styles.messageListNameUnread]} numberOfLines={1}>{c.otherUserName || c.otherUserEmail || 'User'}</Text>
-                                                        <View style={styles.messageListTopEnd}>
-                                                            {unread > 0 && <View style={styles.messageUnreadPill}><Text style={styles.messageUnreadPillText}>{unread}</Text></View>}
-                                                            <Text style={styles.messageListTime} numberOfLines={1}>{timeStr}</Text>
-                                                        </View>
-                                                    </View>
-                                                    <Text variant="bodySmall" style={[styles.messageListPreview, unread > 0 && styles.messageListPreviewUnread]} numberOfLines={2}>{formatChatPreview(c.latestMessage || '') || 'No preview'}</Text>
-                                                </View>
-                                                <IconButton
-                                                    icon="trash-can-outline"
-                                                    size={20}
-                                                    iconColor="#EF4444"
-                                                    style={styles.messageChevron}
-                                                    onPress={() => handleDeleteConversation(String(c.otherUserId), c.otherUserName || c.otherUserEmail || 'this user')}
-                                                    testID={`delete_conversation_${index}`}
-                                                />
-                                                <IconButton icon="chevron-right" size={20} iconColor="#CBD5E1" style={styles.messageChevron} />
-                                            </Pressable>
-                                        </React.Fragment>
-                                    );
-                                })
-                            ) : (
-                                <View style={styles.messagesEmptyInner}>
-                                    <IconButton icon="email-outline" size={40} iconColor="#CBD5E1" />
-                                    <Text variant="titleSmall" style={styles.messagesEmptyTitle}>No messages yet</Text>
-                                </View>
-                            )}
-                            </View>
-                        </Surface>
-                    </View>
+                    <AdminInboxSection
+                        conversations={conversations}
+                        messageUnreadTotal={messageUnreadTotal}
+                        onSelectConversation={(userId, userName) => navigation.navigate('Chat', { otherUserId: userId, otherUserName: userName })}
+                        onDeleteConversation={handleDeleteConversation}
+                    />
                 );
             case 'section_header':
                 return wrapInMoti(
@@ -883,284 +700,48 @@ const AdminDashboard: React.FC = () => {
                     </View>
                 );
             case 'job_request':
-                const job = item.data;
                 return wrapInMoti(
-                    <Card style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}>
-                        <Card.Content style={styles.cardInnerFlush}>
-                            <View style={styles.requestCardRow}>
-                                <View style={{ backgroundColor: getTimelineBarColor(job.createdAt), width: 6, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 }} />
-                                <View style={styles.requestCardContent}>
-                                    <View style={[styles.vendorInfo, { marginLeft: 0, marginRight: 0 }]}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                                            <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: '900' }}>#{job.jobNumber}</Text>
-                                            <Text variant="titleMedium" style={[styles.vendorName, { flex: 1 }]} numberOfLines={1}>{job.address}</Text>
-                                        </View>
-                                        <Text variant="labelSmall" style={{ color: '#64748B', fontWeight: 'bold' }}>{job.customer?.name || 'Homeowner'}</Text>
-                                        {job.services && job.services.length > 0 && (
-                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginVertical: 4 }}>
-                                                {job.services.map(s => (
-                                                    <View key={s} style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                                                        <Text style={{ fontSize: 9, color: '#6366F1', fontWeight: 'bold' }}>{s.toUpperCase()}</Text>
-                                                    </View>
-                                                ))}
-                                            </View>
-                                        )}
-                                        <Text variant="labelSmall" style={[styles.vendorEmail, { flex: 1 }]} numberOfLines={1}>{job.description}</Text>
-                                        {(() => {
-                                            const partsDone = (job.childJobs || []).filter(c => c?.vendorId);
-                                            const remainingSvc = job.services?.length || 0;
-                                            const itemsLeft = (job.items || []).filter(i => i && !i.isAssigned).length;
-                                            const stillNeedsVendor = remainingSvc > 0 || itemsLeft > 0;
-                                            if (!stillNeedsVendor) {return null;}
-                                            const partsLine = partsDone
-                                                .map(c => `#${c.jobNumber ?? ''}${c.jobSuffix || ''} → ${c.vendor?.name || 'Vendor'}`)
-                                                .join(' • ');
-                                            const assignLine =
-                                                remainingSvc > 0
-                                                    ? `Still needs vendor assignment: ${(job.services || []).join(', ')}`
-                                                    : `Still needs vendor assignment for ${itemsLeft} item(s).`;
-                                            return (
-                                                <Surface style={styles.partialAssignNotice} elevation={0}>
-                                                    {partsLine.length > 0 ? (
-                                                        <Text variant="labelSmall" style={styles.partialAssignParts}>
-                                                            {partsLine}
-                                                        </Text>
-                                                    ) : null}
-                                                    <Text variant="labelSmall" style={styles.partialAssignMain}>
-                                                        {assignLine}
-                                                    </Text>
-                                                </Surface>
-                                            );
-                                        })()}
-                                    </View>
-                                    <View style={styles.actionColumn}>
-                                        <Button mode="contained" compact onPress={() => navigation.navigate('AssignVendor', { jobId: job.id })} style={styles.jobActionBtn} icon="account-plus-outline" labelStyle={{ fontSize: 11 }}>Assign</Button>
-                                    </View>
-                                </View>
-                            </View>
-                        </Card.Content>
-                    </Card>
+                    <JobRequestCard
+                        job={item.data}
+                        onPress={(id) => navigation.navigate('JobDetails', { jobId: id })}
+                        onAssign={(id) => navigation.navigate('AssignVendor', { jobId: id })}
+                        timelineBarColor={getTimelineBarColor(item.data.createdAt)}
+                    />
                 );
             case 'vendor_verification':
-                return wrapInMoti(renderVendorItem({ item: item.data }));
-            case 'active_project': {
-                const activeJob = item.data;
-
-                // When this is a child (split) job, pull address/customer from
-                // the parent so the card shows the original customer request context.
-                const isChildJob = Boolean(activeJob.parentJobId);
-                const parentJob = isChildJob
-                    ? jobsDeduped.find(j => String(j.id) === String(activeJob.parentJobId))
-                    : null;
-                const displayAddress  = parentJob?.address  ?? activeJob.address;
-                const displayCustomer = parentJob?.customer ?? activeJob.customer;
-                const displayJobNum   = parentJob
-                    ? `${parentJob.jobNumber}${activeJob.jobSuffix ?? ''}`
-                    : String(activeJob.jobNumber ?? '');
-
-                // Use this job's OWN status (child's status is the live one)
-                const pipelineIdx = getPipelineIndex(activeJob.status);
-                const currentStep = pipelineIdx >= 0 ? VENDOR_PIPELINE[pipelineIdx] : null;
-
-                // Vendor: child jobs carry vendorId directly; fall back to nested object
-                const vendorName =
-                    activeJob.vendor?.name ||
-                    activeJob.childJobs?.find((c: any) => c?.vendor?.name)?.vendor?.name ||
-                    null;
-
-                // Navigate to the actual job (child or parent)
-                const detailJobId = activeJob.id;
-                // Reassign: always open the ROOT job in reassign mode
-                const rootJobId = parentJob?.id ?? activeJob.id;
-
                 return wrapInMoti(
-                    <Card style={styles.inProgressCard} elevation={0}>
-                        <Card.Content style={styles.cardInner}>
-                            {/* ── Scope label for split jobs ── */}
-                            {isChildJob && (
-                                <View style={styles.splitScopeBanner}>
-                                    <IconButton icon="call-split" size={12} iconColor="#7C3AED" style={{ margin: 0, padding: 0, marginRight: 2 }} />
-                                    <Text style={styles.splitScopeText}>
-                                        Scope {activeJob.jobSuffix || ''} · {(activeJob.services || []).join(', ') || 'Split assignment'}
-                                    </Text>
-                                </View>
-                            )}
-
-                            {/* ── Top row: job number + address + status badge ── */}
-                            <View style={styles.inProgressTopRow}>
-                                <View style={[
-                                    styles.inProgressIconWrap,
-                                    { backgroundColor: (currentStep?.color ?? '#6366F1') + '18' },
-                                ]}>
-                                    <IconButton
-                                        icon={currentStep?.icon ?? 'progress-wrench'}
-                                        size={18}
-                                        iconColor={currentStep?.color ?? '#6366F1'}
-                                        style={{ margin: 0, padding: 0 }}
-                                    />
-                                </View>
-                                <View style={{ flex: 1, marginLeft: 10 }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                        <Text style={styles.inProgressJobNum}>#{displayJobNum}</Text>
-                                        <Text variant="titleSmall" style={styles.inProgressAddress} numberOfLines={1}>
-                                            {displayAddress}
-                                        </Text>
-                                    </View>
-                                    <Text variant="labelSmall" style={styles.inProgressCustomer}>
-                                        {displayCustomer?.name || 'Homeowner'}
-                                    </Text>
-                                    {vendorName && (
-                                        <View style={styles.inProgressVendorRow}>
-                                            <Avatar.Text
-                                                size={16}
-                                                label={vendorName.substring(0, 2).toUpperCase()}
-                                                style={styles.inProgressVendorAvatar}
-                                                labelStyle={{ fontSize: 7 }}
-                                                color="#4338CA"
-                                            />
-                                            <Text style={styles.inProgressVendorName}>{vendorName}</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-
-                            {/* ── Progress pipeline — shows vendor's real current step ── */}
-                            <StatusPipeline currentStatus={activeJob.status} />
-
-                            {/* ── Service chips ── */}
-                            {activeJob.services && activeJob.services.length > 0 && (
-                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-                                    {activeJob.services.map((s: string) => (
-                                        <View key={s} style={styles.inProgressServiceChip}>
-                                            <Text style={styles.inProgressServiceChipText}>{s.toUpperCase()}</Text>
-                                        </View>
-                                    ))}
-                                </View>
-                            )}
-
-                            {/* ── Action buttons ── */}
-                            <View style={styles.inProgressActions}>
-                                <Button
-                                    mode="outlined"
-                                    compact
-                                    onPress={() => navigation.navigate('AssignVendor', { jobId: rootJobId, reassignMode: true })}
-                                    style={styles.reassignBtn}
-                                    labelStyle={{ fontSize: 11, color: '#EF4444' }}
-                                    icon="account-sync"
-                                    textColor="#EF4444"
-                                >
-                                    Reassign
-                                </Button>
-                                <Button
-                                    mode="outlined"
-                                    compact
-                                    onPress={() => navigation.navigate('JobDetails', { jobId: detailJobId })}
-                                    style={styles.viewDetailsBtn}
-                                    labelStyle={{ fontSize: 11 }}
-                                    icon="eye-outline"
-                                >
-                                    View Details
-                                </Button>
-                            </View>
-                        </Card.Content>
-                    </Card>
+                    <VendorApprovalCard
+                        vendor={item.data}
+                        onApprove={(id) => handleApproval(id, true)}
+                        onDeny={(id) => handleApproval(id, false)}
+                        onChat={(v) => navigation.navigate('Chat', { otherUserId: v.id || v.email, otherUserName: v.name || 'Vendor' })}
+                    />
                 );
-            }
+            case 'active_project':
+                return wrapInMoti(
+                    <ActiveProjectCard
+                        job={item.data}
+                        allJobs={jobsDeduped}
+                        onPress={(id) => navigation.navigate('JobDetails', { jobId: id })}
+                        onReassign={(rootId) => navigation.navigate('AssignVendor', { jobId: rootId, reassignMode: true })}
+                    />
+                );
             case 'verified_vendor':
-                const vVendor = item.data;
                 return wrapInMoti(
-                    <Card style={styles.approvalCard} elevation={0}>
-                        <Card.Content style={styles.cardInner}>
-                            <View style={styles.cardHeader}>
-                                <Avatar.Text
-                                    size={44}
-                                    label={(vVendor.name || vVendor.email || '??').substring(0, 2).toUpperCase()}
-                                    style={{ backgroundColor: '#F0FDF4' }}
-                                    color="#15803D"
-                                />
-                                <View style={styles.vendorInfo}>
-                                    <Text variant="titleSmall" style={styles.vendorName} numberOfLines={1}>
-                                        {vVendor.name || 'Anonymous Vendor'}
-                                    </Text>
-                                    <Text variant="labelSmall" style={styles.vendorEmail} numberOfLines={1}>
-                                        {vVendor.email}
-                                    </Text>
-                                </View>
-                                <View style={styles.verifiedBadge}>
-                                    <Text style={styles.verifiedBadgeText}>✓  Verified</Text>
-                                </View>
-                            </View>
-                            <View style={styles.cardActions}>
-                                <Button
-                                    mode="outlined"
-                                    onPress={() => handleRemoveVendor(vVendor.id || '')}
-                                    style={styles.denyBtn}
-                                    textColor="#EF4444"
-                                    icon="trash-can-outline"
-                                    compact
-                                >
-                                    Remove Vendor
-                                </Button>
-                            </View>
-                        </Card.Content>
-                    </Card>
+                    <VerifiedVendorCard
+                        vendor={item.data}
+                        onChat={(v) => navigation.navigate('Chat', { otherUserId: v.id || v.email, otherUserName: v.name || 'Vendor' })}
+                        onRemoveVendor={(v) => handleRemoveVendor(v.id || '')}
+                        onDeleteVendorPermanently={(v) => handleRemoveVendor(v.id || '')}
+                    />
                 );
-            case 'completed_job': {
-                const compJob = item.data;
-                const isInvoiced = compJob.status === JobStatus.INVOICED;
-                const isInvoiceRequested = compJob.status === JobStatus.INVOICE_REQUESTED;
-                const compVendorName =
-                    compJob.vendor?.name ||
-                    compJob.childJobs?.find((c: any) => c?.vendor?.name)?.vendor?.name ||
-                    null;
-                const compStatusLabel = isInvoiced
-                    ? 'Invoiced'
-                    : isInvoiceRequested
-                    ? 'Invoice Requested'
-                    : 'Completed';
-                const compStatusColor = isInvoiced ? '#0EA5E9' : isInvoiceRequested ? '#8B5CF6' : '#059669';
-                const compStatusIcon  = isInvoiced ? 'file-check-outline' : isInvoiceRequested ? 'file-document-edit-outline' : 'check-decagram';
-
+            case 'completed_job':
                 return wrapInMoti(
-                    <Card style={styles.approvalCard} elevation={0} onPress={() => navigation.navigate('JobDetails', { jobId: compJob.id })}>
-                        <Card.Content style={styles.cardInner}>
-                            <View style={styles.cardHeader}>
-                                <Avatar.Icon size={40} icon={compStatusIcon} style={{ backgroundColor: compStatusColor + '15' }} color={compStatusColor} />
-                                <View style={styles.vendorInfo}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                                        <Text variant="labelSmall" style={{ color: '#6366F1', fontWeight: '900' }}>#{compJob.jobNumber}</Text>
-                                        <Text variant="titleMedium" style={[styles.vendorName, { flex: 1 }]} numberOfLines={1}>{compJob.address}</Text>
-                                    </View>
-                                    <Text variant="labelSmall" style={{ color: '#94A3B8' }}>
-                                        {compJob.customer?.name || 'Homeowner'}
-                                    </Text>
-                                    {compVendorName && (
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                                            <Avatar.Text size={14} label={compVendorName.substring(0, 2).toUpperCase()} style={{ backgroundColor: '#F0FDF4' }} color="#059669" labelStyle={{ fontSize: 6 }} />
-                                            <Text variant="labelSmall" style={{ color: '#059669', fontWeight: '700' }}>{compVendorName}</Text>
-                                        </View>
-                                    )}
-                                    {compJob.services && compJob.services.length > 0 && (
-                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                                            {compJob.services.map((s: string) => (
-                                                <View key={s} style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                                                    <Text style={{ fontSize: 9, color: '#64748B', fontWeight: 'bold' }}>{s.toUpperCase()}</Text>
-                                                </View>
-                                            ))}
-                                        </View>
-                                    )}
-                                </View>
-                                <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                                    <View style={[styles.statusBadge, { backgroundColor: compStatusColor + '15', borderColor: compStatusColor + '50' }]}>
-                                        <Text style={[styles.statusBadgeText, { color: compStatusColor }]}>{compStatusLabel.toUpperCase()}</Text>
-                                    </View>
-                                    <IconButton icon="chevron-right" size={18} style={{ margin: 0 }} />
-                                </View>
-                            </View>
-                        </Card.Content>
-                    </Card>
+                    <CompletedJobCard
+                        job={item.data}
+                        onPress={(id) => navigation.navigate('JobDetails', { jobId: id })}
+                    />
                 );
-            }
             case 'show_more_requests':
                 return (
                     <View style={styles.showMoreWrap}>
@@ -1193,10 +774,8 @@ const AdminDashboard: React.FC = () => {
             default:
                 return null;
         }
-    }, [navigation, getTimelineBarColor, handleApproval, handleRemoveVendor, handleDeleteConversation, updateSectionY, conversations, messageUnreadTotal, jobsDeduped, vendorSearch, setVendorSearch, filteredApprovedVendors, approvedVendors, inProgressSearch, setInProgressSearch, filteredActiveProjects, activeProjects, showAllRequests, setShowAllRequests, showAllInProgress, setShowAllInProgress]);
+    }, [navigation, getTimelineBarColor, handleApproval, handleRemoveVendor, handleDeleteConversation, updateSectionY, conversations, messageUnreadTotal, jobsDeduped, vendorSearch, setVendorSearch, filteredApprovedVendors, approvedVendors, inProgressSearch, setInProgressSearch, filteredActiveProjects, activeProjects, showAllRequests, setShowAllRequests, showAllInProgress, setShowAllInProgress, reducedMotion]);
 
-    // Stable extraData ref — only changes when its contents change, so FlashList
-    // doesn't re-render the whole list on every unrelated parent render.
     const adminExtraData = React.useMemo(
         () => [pendingVendors, approvedVendors, filteredApprovedVendors, vendorSearch, filteredActiveProjects, inProgressSearch, showAllRequests, showAllInProgress, conversations, filteredJobs, refreshing],
         [pendingVendors, approvedVendors, filteredApprovedVendors, vendorSearch, filteredActiveProjects, inProgressSearch, showAllRequests, showAllInProgress, conversations, filteredJobs, refreshing]
@@ -1205,16 +784,16 @@ const AdminDashboard: React.FC = () => {
     return (
         <SafeAreaView style={styles.container} edges={['top']} testID="admin_dashboard_screen">
             <JobErrorBanner />
-            <AdminList
+            <FlashList<AdminDashboardDataItem>
                 ref={scrollViewRef}
                 data={listData}
                 renderItem={renderItem}
-                keyExtractor={(item: any, index: number) => {
-                    const dataId = item.data?.id;
-                    const sectionKey = item.sectionKey;
+                keyExtractor={(item: AdminDashboardDataItem, index: number) => {
+                    const dataId = 'data' in item && item.data?.id ? item.data.id : undefined;
+                    const sectionKey = 'sectionKey' in item ? item.sectionKey : undefined;
                     return item.type + (dataId || sectionKey || index);
                 }}
-                estimatedItemSize={200}
+                estimatedItemSize={140}
                 ListHeaderComponent={headerElement}
                 contentContainerStyle={styles.scrollContent}
                 extraData={adminExtraData}
@@ -1301,10 +880,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    headerLogo: {
-        width: 28,
-        height: 28,
-    },
     adminBadge: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1378,14 +953,6 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        marginTop: 8,
-        marginBottom: 12,
-    },
     sectionHeaderBar: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -1443,114 +1010,12 @@ const styles = StyleSheet.create({
         marginTop: 6,
         marginLeft: 4,
     },
-    sectionChip: {
-        backgroundColor: '#EEF2FF',
-    },
     sectionTitle: {
         fontWeight: '900',
         color: '#1E293B',
     },
     scrollContent: {
         paddingBottom: 40,
-    },
-    approvalCard: {
-        marginHorizontal: 16,
-        marginBottom: 12,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-    },
-    cardInner: {
-        padding: 16,
-    },
-    /** Use on cards where content must bleed to the card edge (e.g. the coloured left bar on job-request cards). */
-    cardInnerFlush: {
-        padding: 0,
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 0,
-    },
-    vendorAvatar: {
-        backgroundColor: '#EEF2FF',
-    },
-    vendorInfo: {
-        flex: 1,
-        marginLeft: 12,
-        marginRight: 8,
-    },
-    vendorName: {
-        fontWeight: 'bold',
-        color: '#1E293B',
-    },
-    vendorEmail: {
-        color: '#94A3B8',
-    },
-    verifiedBadge: {
-        backgroundColor: '#F0FDF4',
-        borderRadius: 20,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderWidth: 1,
-        borderColor: '#BBF7D0',
-        alignSelf: 'center',
-    },
-    verifiedBadgeText: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#15803D',
-    },
-    pendingChip: {
-        backgroundColor: '#FFFBEB',
-        height: 24,
-    },
-    pendingBadge: {
-        backgroundColor: '#FFFBEB',
-        borderRadius: 20,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderWidth: 1,
-        borderColor: '#FDE68A',
-        alignSelf: 'center',
-    },
-    pendingBadgeText: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#92400E',
-    },
-    cardDivider: {
-        backgroundColor: '#F1F5F9',
-    },
-    detailsRow: {
-        flexDirection: 'column',
-        gap: 4,
-        marginVertical: 12,
-    },
-    detailItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'stretch',
-    },
-    detailText: {
-        flexShrink: 1,
-        minWidth: 0,
-    },
-    cardActions: {
-        flexDirection: 'row',
-        gap: 8,
-        marginTop: 12,
-    },
-    approveBtn: {
-        flex: 1,
-        borderRadius: 10,
-        backgroundColor: '#10B981',
-    },
-    denyBtn: {
-        flex: 1,
-        borderRadius: 10,
-        borderColor: '#EF4444',
     },
     emptyBox: {
         alignItems: 'center',
@@ -1566,353 +1031,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#1E293B',
         borderRadius: 12,
     },
-    requestCardRow: {
-        flexDirection: 'row',
-        alignItems: 'stretch',
-        minHeight: 80,
-        overflow: 'hidden',
-        borderRadius: 16,
-    },
-    timelineBar: {
-        width: 6,
-        borderTopLeftRadius: 16,
-        borderBottomLeftRadius: 16,
-    },
-    requestCardContent: {
-        flex: 1,
-        flexDirection: 'row',
-        paddingVertical: 14,
-        paddingLeft: 14,
-        paddingRight: 14,
-        alignItems: 'center',
-        gap: 10,
-    },
-    actionColumn: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-    },
-    jobActionBtn: {
-        borderRadius: 10,
-        backgroundColor: '#6366F1',
-        elevation: 0,
-    },
-    partialAssignNotice: {
-        marginTop: 8,
-        padding: 10,
-        borderRadius: 10,
-        backgroundColor: '#FFFBEB',
-        borderWidth: 1,
-        borderColor: '#FDE68A',
-    },
-    partialAssignParts: {
-        color: '#92400E',
-        marginBottom: 4,
-    },
-    partialAssignMain: {
-        color: '#B45309',
-        fontWeight: '700',
-    },
-    messageBtn: {
-        flex: 1,
-        borderRadius: 12,
-        borderColor: '#6366F1',
-    },
-    messagesSection: {
-        marginBottom: 16,
-        paddingHorizontal: 20,
-    },
-    messagesPanel: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-    },
-    messagesPanelInner: {
-        borderRadius: 16,
-        overflow: 'hidden',
-    },
-    messagesPanelHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        backgroundColor: '#F8FAFC',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E2E8F0',
-    },
-    messagesPanelTitleBlock: {
-        flex: 1,
-        minWidth: 0,
-    },
-    messagesPanelTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    messagesPanelIconWrap: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        backgroundColor: '#E2E8F0',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    messagesPanelTitles: {
-        flex: 1,
-        minWidth: 0,
-    },
-    messagesPanelTitle: {
-        fontWeight: '700',
-        color: '#0F172A',
-        letterSpacing: -0.3,
-    },
-    messagesPanelSubtitle: {
-        color: '#64748B',
-        marginTop: 2,
-        lineHeight: 16,
-    },
-    messagesUnreadBadge: {
-        minWidth: 26,
-        height: 26,
-        paddingHorizontal: 8,
-        borderRadius: 13,
-        backgroundColor: '#6366F1',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginLeft: 12,
-    },
-    messagesUnreadBadgeText: {
-        color: '#FFFFFF',
-        fontSize: 12,
-        fontWeight: '800',
-    },
-    messagesCountLabel: {
-        color: '#94A3B8',
-        fontWeight: '600',
-        marginLeft: 12,
-    },
-    messageListRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 14,
-        paddingLeft: 16,
-        paddingRight: 12,
-        backgroundColor: '#FFFFFF',
-    },
-    messageListRowPressed: {
-        backgroundColor: '#F8FAFC',
-    },
-    messageRowDivider: {
-        marginLeft: 78,
-        backgroundColor: '#F1F5F9',
-    },
-    messageListAvatar: {
-        backgroundColor: '#EEF2FF',
-    },
-    messageListAvatarLabel: {
-        fontWeight: '700',
-        fontSize: 16,
-        color: '#4F46E5',
-    },
-    messageListBody: {
-        flex: 1,
-        minWidth: 0,
-        marginLeft: 14,
-    },
-    messageListTopLine: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 10,
-        marginBottom: 2,
-    },
-    messageListName: {
-        flex: 1,
-        minWidth: 0,
-        fontWeight: '600',
-        color: '#1E293B',
-        fontSize: 15,
-        letterSpacing: -0.2,
-    },
-    messageListNameUnread: {
-        fontWeight: '800',
-        color: '#0F172A',
-    },
-    messageListTopEnd: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        flexShrink: 0,
-    },
-    messageListTime: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#94A3B8',
-        minWidth: 72,
-        textAlign: 'right',
-    },
-    messageListEmail: {
-        color: '#94A3B8',
-        marginBottom: 4,
-    },
-    messageListPreview: {
-        color: '#64748B',
-        lineHeight: 20,
-    },
-    messageListPreviewUnread: {
-        color: '#334155',
-        fontWeight: '500',
-    },
-    messageUnreadPill: {
-        minWidth: 22,
-        height: 22,
-        paddingHorizontal: 7,
-        borderRadius: 11,
-        backgroundColor: '#6366F1',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    messageUnreadPillText: {
-        color: '#FFFFFF',
-        fontSize: 11,
-        fontWeight: '800',
-    },
-    messageChevron: {
-        margin: 0,
-        marginLeft: 4,
-        alignSelf: 'center',
-        flexShrink: 0,
-    },
-    messagesEmptyInner: {
-        alignItems: 'center',
-        paddingVertical: 36,
-        paddingHorizontal: 28,
-    },
-    messagesEmptyTitle: {
-        color: '#475569',
-        fontWeight: '700',
-        marginTop: 4,
-    },
-    messagesEmptyBody: {
-        color: '#94A3B8',
-        textAlign: 'center',
-        lineHeight: 20,
-        marginTop: 8,
-        maxWidth: 280,
-    },
-    activeProjectActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    reassignBtn: {
-        borderRadius: 10,
-        borderColor: '#FCA5A5',
-        flex: 1,
-    },
-    // ── In-Progress card ──────────────────────────────────────────────────────
-    inProgressCard: {
-        marginBottom: 12,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-        overflow: 'hidden',
-    },
-    inProgressTopRow: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-    },
-    inProgressIconWrap: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        marginRight: 12,
-    },
-    inProgressJobNum: {
-        color: '#6366F1',
-        fontWeight: '900',
-        fontSize: 11,
-    },
-    inProgressAddress: {
-        fontWeight: '700',
-        color: '#1E293B',
-        flex: 1,
-    },
-    inProgressCustomer: {
-        color: '#94A3B8',
-        marginTop: 2,
-    },
-    inProgressVendorRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginTop: 3,
-    },
-    inProgressVendorAvatar: {
-        backgroundColor: '#EEF2FF',
-    },
-    inProgressVendorName: {
-        fontSize: 11,
-        color: '#4338CA',
-        fontWeight: '700',
-    },
-    inProgressServiceChip: {
-        backgroundColor: '#ECFDF5',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    inProgressServiceChipText: {
-        fontSize: 9,
-        color: '#10B981',
-        fontWeight: '700',
-    },
-    inProgressActions: {
-        flexDirection: 'row',
-        gap: 8,
-        marginTop: 12,
-    },
-    viewDetailsBtn: {
-        borderRadius: 10,
-        flex: 1,
-    },
-    // ── Split-scope banner (shown on child-job cards) ─────────────────────────
-    splitScopeBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F5F3FF',
-        borderRadius: 6,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        marginBottom: 8,
-        alignSelf: 'flex-start',
-    },
-    splitScopeText: {
-        fontSize: 10,
-        color: '#7C3AED',
-        fontWeight: '700',
-        letterSpacing: 0.2,
-    },
-    // ── Status badge (used in both In-Progress and Completed cards) ───────────
-    statusBadge: {
-        borderRadius: 8,
-        borderWidth: 1,
-        paddingHorizontal: 7,
-        paddingVertical: 3,
-        alignSelf: 'flex-start',
-        flexShrink: 0,
-    },
-    statusBadgeText: {
-        fontSize: 9,
-        fontWeight: '800',
-        letterSpacing: 0.3,
-    },
 });
 
 export default React.memo(AdminDashboard);
+

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useCallback, useMemo } from 'react';
 import { View, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { Text, Card, Button, Avatar, Divider, Surface, Chip, IconButton, List, Menu, Portal, Dialog, Snackbar, Searchbar } from 'react-native-paper';
+import { Text, Card, Button, Avatar, Divider, Surface, Chip, IconButton, Menu, Snackbar, Searchbar } from 'react-native-paper';
 import { MotiView } from 'moti';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useAuth } from '../context/AuthContext';
