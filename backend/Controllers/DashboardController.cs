@@ -3,6 +3,7 @@ using EliteApp.API.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Security.Claims;
 
 namespace EliteApp.API.Controllers;
@@ -13,10 +14,13 @@ namespace EliteApp.API.Controllers;
 public class DashboardController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IMemoryCache _cache;
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(60);
 
-    public DashboardController(AppDbContext context)
+    public DashboardController(AppDbContext context, IMemoryCache cache)
     {
         _context = context;
+        _cache = cache;
     }
 
     private bool IsAdmin()
@@ -34,46 +38,54 @@ public class DashboardController : ControllerBase
     {
         if (!IsAdmin()) return Forbid();
 
-        // Aggregate in the DB instead of materializing whole Jobs/Users tables into memory.
-        var weekAgo = DateTime.UtcNow.AddDays(-7);
-        var parentJobs = _context.Jobs.Where(j => j.ParentJobId == null);
-
-        // One grouped query returns only (status, count) pairs — not every job row.
-        var statusGroups = await parentJobs
-            .GroupBy(j => j.Status)
-            .Select(g => new { Status = g.Key, Count = g.Count() })
-            .ToListAsync();
-
-        int CountOf(params string[] statuses) =>
-            statusGroups.Where(g => statuses.Contains(g.Status)).Sum(g => g.Count);
-
-        var totalJobs       = statusGroups.Sum(g => g.Count);
-        var completedJobs   = CountOf("Completed", "Invoiced");
-        var salesJobs       = CountOf("Sale", "Completed", "Invoiced", "InvoiceRequested");
-        var cancelledJobs   = CountOf("Expired");
-        var activeJobs      = totalJobs - CountOf("Expired", "Completed", "Invoiced");
-        var conversionRate  = totalJobs > 0 ? Math.Round((double)salesJobs / totalJobs * 100, 1) : 0;
-        var totalRevenue    = await parentJobs.Where(j => j.ContractAmount.HasValue).SumAsync(j => j.ContractAmount!.Value);
-        var jobsThisWeek    = await parentJobs.CountAsync(j => j.CreatedAt >= weekAgo);
-
-        var approvedVendors = await _context.Users.CountAsync(u => u.Role == "Vendor" && u.IsApproved);
-        var pendingVendors  = await _context.Users.CountAsync(u => u.Role == "Vendor" && !u.IsApproved);
-        var totalCustomers  = await _context.Users.CountAsync(u => u.Role == "Customer");
-
-        return Ok(new
+        const string cacheKey = "dashboard:admin:summary";
+        var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
-            totalJobs,
-            completedJobs,
-            salesJobs,
-            cancelledJobs,
-            activeJobs,
-            conversionRate,
-            totalRevenue,
-            approvedVendors,
-            pendingVendors,
-            totalCustomers,
-            jobsThisWeek
+            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
+
+            // Aggregate in the DB instead of materializing whole Jobs/Users tables into memory.
+            var weekAgo = DateTime.UtcNow.AddDays(-7);
+            var parentJobs = _context.Jobs.Where(j => j.ParentJobId == null);
+
+            // One grouped query returns only (status, count) pairs — not every job row.
+            var statusGroups = await parentJobs
+                .GroupBy(j => j.Status)
+                .Select(g => new { Status = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            int CountOf(params string[] statuses) =>
+                statusGroups.Where(g => statuses.Contains(g.Status)).Sum(g => g.Count);
+
+            var totalJobs       = statusGroups.Sum(g => g.Count);
+            var completedJobs   = CountOf("Completed", "Invoiced");
+            var salesJobs       = CountOf("Sale", "Completed", "Invoiced", "InvoiceRequested");
+            var cancelledJobs   = CountOf("Expired");
+            var activeJobs      = totalJobs - CountOf("Expired", "Completed", "Invoiced");
+            var conversionRate  = totalJobs > 0 ? Math.Round((double)salesJobs / totalJobs * 100, 1) : 0;
+            var totalRevenue    = await parentJobs.Where(j => j.ContractAmount.HasValue).SumAsync(j => j.ContractAmount!.Value);
+            var jobsThisWeek    = await parentJobs.CountAsync(j => j.CreatedAt >= weekAgo);
+
+            var approvedVendors = await _context.Users.CountAsync(u => u.Role == "Vendor" && u.IsApproved);
+            var pendingVendors  = await _context.Users.CountAsync(u => u.Role == "Vendor" && !u.IsApproved);
+            var totalCustomers  = await _context.Users.CountAsync(u => u.Role == "Customer");
+
+            return (object)new
+            {
+                totalJobs,
+                completedJobs,
+                salesJobs,
+                cancelledJobs,
+                activeJobs,
+                conversionRate,
+                totalRevenue,
+                approvedVendors,
+                pendingVendors,
+                totalCustomers,
+                jobsThisWeek
+            };
         });
+
+        return Ok(result);
     }
 
     // ── Funnel (status breakdown) ─────────────────────────────────────────────
@@ -82,18 +94,24 @@ public class DashboardController : ControllerBase
     {
         if (!IsAdmin()) return Forbid();
 
-        var statusOrder = new[] { "Submitted", "Assigned", "Accepted", "ReachedOut", "ApptSet", "Sale", "FollowUp", "Expired", "Completed", "InvoiceRequested", "Invoiced" };
-
-        var counts = await _context.Jobs
-            .Where(j => j.ParentJobId == null)
-            .GroupBy(j => j.Status)
-            .Select(g => new { Status = g.Key, Count = g.Count() })
-            .ToListAsync();
-
-        var result = statusOrder.Select(s => new
+        const string cacheKey = "dashboard:admin:funnel";
+        var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
-            status = s,
-            count  = counts.FirstOrDefault(c => c.Status == s)?.Count ?? 0
+            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
+
+            var statusOrder = new[] { "Submitted", "Assigned", "Accepted", "ReachedOut", "ApptSet", "Sale", "FollowUp", "Expired", "Completed", "InvoiceRequested", "Invoiced" };
+
+            var counts = await _context.Jobs
+                .Where(j => j.ParentJobId == null)
+                .GroupBy(j => j.Status)
+                .Select(g => new { Status = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            return (object)statusOrder.Select(s => new
+            {
+                status = s,
+                count  = counts.FirstOrDefault(c => c.Status == s)?.Count ?? 0
+            }).ToList();
         });
 
         return Ok(result);
@@ -105,40 +123,46 @@ public class DashboardController : ControllerBase
     {
         if (!IsAdmin()) return Forbid();
 
-        // Project only the fields used below — never materialize full User entities
-        // (avoids tracking overhead and loading PasswordHash column into memory).
-        var vendors = await _context.Users
-            .AsNoTracking()
-            .Where(u => u.Role == "Vendor")
-            .Select(u => new { u.Id, u.Name, u.Email, u.IsApproved, u.IsActive, u.CreatedAt })
-            .ToListAsync();
-
-        // O(1) lookups instead of an O(vendors × groups) in-memory FirstOrDefault join.
-        var jobCounts = (await _context.Jobs
-            .Where(j => j.VendorId != null)
-            .GroupBy(j => j.VendorId)
-            .Select(g => new { VendorId = g.Key, Total = g.Count(), Completed = g.Count(j => j.Status == "Completed" || j.Status == "Invoiced"), Revenue = g.Where(j => j.ContractAmount.HasValue).Sum(j => j.ContractAmount!.Value) })
-            .ToListAsync())
-            .ToDictionary(j => j.VendorId!.Value);
-
-        var result = vendors.Select(v =>
+        const string cacheKey = "dashboard:admin:vendors";
+        var result = await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
-            jobCounts.TryGetValue(v.Id, out var stats);
-            return new
+            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
+
+            // Project only the fields used below — never materialize full User entities
+            // (avoids tracking overhead and loading PasswordHash column into memory).
+            var vendors = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.Role == "Vendor")
+                .Select(u => new { u.Id, u.Name, u.Email, u.IsApproved, u.IsActive, u.CreatedAt })
+                .ToListAsync();
+
+            // O(1) lookups instead of an O(vendors × groups) in-memory FirstOrDefault join.
+            var jobCounts = (await _context.Jobs
+                .Where(j => j.VendorId != null)
+                .GroupBy(j => j.VendorId)
+                .Select(g => new { VendorId = g.Key, Total = g.Count(), Completed = g.Count(j => j.Status == "Completed" || j.Status == "Invoiced"), Revenue = g.Where(j => j.ContractAmount.HasValue).Sum(j => j.ContractAmount!.Value) })
+                .ToListAsync())
+                .ToDictionary(j => j.VendorId!.Value);
+
+            return (object)vendors.Select(v =>
             {
-                id         = v.Id,
-                name       = v.Name,
-                email      = v.Email,
-                isApproved = v.IsApproved,
-                isActive   = v.IsActive,
-                joinedAt   = v.CreatedAt,
-                totalJobs  = stats?.Total ?? 0,
-                completedJobs = stats?.Completed ?? 0,
-                revenue    = stats?.Revenue ?? 0
-            };
-        })
-        .OrderByDescending(v => v.totalJobs)
-        .ToList();
+                jobCounts.TryGetValue(v.Id, out var stats);
+                return new
+                {
+                    id         = v.Id,
+                    name       = v.Name,
+                    email      = v.Email,
+                    isApproved = v.IsApproved,
+                    isActive   = v.IsActive,
+                    joinedAt   = v.CreatedAt,
+                    totalJobs  = stats?.Total ?? 0,
+                    completedJobs = stats?.Completed ?? 0,
+                    revenue    = stats?.Revenue ?? 0
+                };
+            })
+            .OrderByDescending(v => v.totalJobs)
+            .ToList();
+        });
 
         return Ok(result);
     }
@@ -149,48 +173,54 @@ public class DashboardController : ControllerBase
     {
         if (!IsAdmin()) return Forbid();
 
-        var recentJobs = await _context.Jobs
-            .AsNoTracking()
-            .Where(j => j.ParentJobId == null)
-            .OrderByDescending(j => j.CreatedAt)
-            .Take(30)
-            .Select(j => new
-            {
-                type        = "job",
-                id          = j.Id,
-                jobNumber   = j.JobNumber,
-                status      = j.Status,
-                description = j.Description.Length > 60 ? j.Description.Substring(0, 60) + "…" : j.Description,
-                customer    = j.Customer != null ? j.Customer.Name : "Unknown",
-                vendor      = j.Vendor != null ? j.Vendor.Name : (string?)null,
-                services    = j.Services,
-                urgency     = j.Urgency,
-                amount      = j.ContractAmount,
-                timestamp   = j.CreatedAt
-            })
-            .ToListAsync();
+        const string cacheKey = "dashboard:admin:activity";
+        var activity = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(15);
 
-        var recentUsers = await _context.Users
-            .OrderByDescending(u => u.CreatedAt)
-            .Take(10)
-            .Select(u => new
-            {
-                type      = "signup",
-                id        = u.Id,
-                name      = u.Name,
-                role      = u.Role,
-                timestamp = u.CreatedAt
-            })
-            .ToListAsync();
+            var recentJobs = await _context.Jobs
+                .AsNoTracking()
+                .Where(j => j.ParentJobId == null)
+                .OrderByDescending(j => j.CreatedAt)
+                .Take(30)
+                .Select(j => new
+                {
+                    type        = "job",
+                    id          = j.Id,
+                    jobNumber   = j.JobNumber,
+                    status      = j.Status,
+                    description = j.Description.Length > 60 ? j.Description.Substring(0, 60) + "…" : j.Description,
+                    customer    = j.Customer != null ? j.Customer.Name : "Unknown",
+                    vendor      = j.Vendor != null ? j.Vendor.Name : (string?)null,
+                    services    = j.Services,
+                    urgency     = j.Urgency,
+                    amount      = j.ContractAmount,
+                    timestamp   = j.CreatedAt
+                })
+                .ToListAsync();
 
-        // Merge and sort by timestamp
-        var activity = recentJobs
-            .Select(j => new { j.type, label = $"Job #{j.jobNumber} — {j.customer} ({j.status})", j.timestamp, extra = j.services ?? j.description })
-            .Cast<object>()
-            .Concat(recentUsers.Select(u => new { type = u.type, label = $"New {u.role}: {u.name}", timestamp = u.timestamp, extra = u.role } as object))
-            .OrderByDescending(x => ((dynamic)x).timestamp)
-            .Take(25)
-            .ToList();
+            var recentUsers = await _context.Users
+                .OrderByDescending(u => u.CreatedAt)
+                .Take(10)
+                .Select(u => new
+                {
+                    type      = "signup",
+                    id        = u.Id,
+                    name      = u.Name,
+                    role      = u.Role,
+                    timestamp = u.CreatedAt
+                })
+                .ToListAsync();
+
+            // Merge and sort by timestamp
+            return (object)recentJobs
+                .Select(j => new { j.type, label = $"Job #{j.jobNumber} — {j.customer} ({j.status})", j.timestamp, extra = j.services ?? j.description })
+                .Cast<object>()
+                .Concat(recentUsers.Select(u => new { type = u.type, label = $"New {u.role}: {u.name}", timestamp = u.timestamp, extra = u.role } as object))
+                .OrderByDescending(x => ((dynamic)x).timestamp)
+                .Take(25)
+                .ToList();
+        });
 
         return Ok(activity);
     }
@@ -201,35 +231,41 @@ public class DashboardController : ControllerBase
     {
         if (!IsAdmin()) return Forbid();
 
-        var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
+        const string cacheKey = "dashboard:admin:trend";
+        var trend = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
 
-        // Aggregate per month in the DB (returns ~6 rows) instead of materializing 6 months of jobs.
-        var grouped = await _context.Jobs
-            .Where(j => j.ParentJobId == null && j.CreatedAt >= sixMonthsAgo)
-            .GroupBy(j => new { j.CreatedAt.Year, j.CreatedAt.Month })
-            .Select(g => new
-            {
-                year     = g.Key.Year,
-                month    = g.Key.Month,
-                requests = g.Count(),
-                sales    = g.Count(j => j.Status == "Sale" || j.Status == "Completed" || j.Status == "Invoiced"),
-                revenue  = g.Where(j => j.ContractAmount.HasValue).Sum(j => j.ContractAmount!.Value)
-            })
-            .ToListAsync();
+            var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
 
-        // Build month labels client-side (ToString isn't SQL-translatable) from the small result.
-        var trend = grouped
-            .OrderBy(g => g.year).ThenBy(g => g.month)
-            .Select(g => new
-            {
-                g.year,
-                g.month,
-                label    = new DateTime(g.year, g.month, 1).ToString("MMM yyyy"),
-                g.requests,
-                g.sales,
-                g.revenue
-            })
-            .ToList();
+            // Aggregate per month in the DB (returns ~6 rows) instead of materializing 6 months of jobs.
+            var grouped = await _context.Jobs
+                .Where(j => j.ParentJobId == null && j.CreatedAt >= sixMonthsAgo)
+                .GroupBy(j => new { j.CreatedAt.Year, j.CreatedAt.Month })
+                .Select(g => new
+                {
+                    year     = g.Key.Year,
+                    month    = g.Key.Month,
+                    requests = g.Count(),
+                    sales    = g.Count(j => j.Status == "Sale" || j.Status == "Completed" || j.Status == "Invoiced"),
+                    revenue  = g.Where(j => j.ContractAmount.HasValue).Sum(j => j.ContractAmount!.Value)
+                })
+                .ToListAsync();
+
+            // Build month labels client-side (ToString isn't SQL-translatable) from the small result.
+            return (object)grouped
+                .OrderBy(g => g.year).ThenBy(g => g.month)
+                .Select(g => new
+                {
+                    g.year,
+                    g.month,
+                    label    = new DateTime(g.year, g.month, 1).ToString("MMM yyyy"),
+                    g.requests,
+                    g.sales,
+                    g.revenue
+                })
+                .ToList();
+        });
 
         return Ok(trend);
     }

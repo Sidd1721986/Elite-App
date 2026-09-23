@@ -17,6 +17,7 @@ namespace EliteApp.API.Controllers
             _configuration["Legal:SupportEmail"] ?? "support@eliteservices.com";
 
         [HttpGet("privacy")]
+        [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
         [Produces("text/html")]
         public ContentResult GetPrivacyPolicy()
         {
@@ -101,6 +102,7 @@ namespace EliteApp.API.Controllers
         }
 
         [HttpGet("support")]
+        [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
         [Produces("text/html")]
         public ContentResult GetSupport()
         {
@@ -152,6 +154,7 @@ namespace EliteApp.API.Controllers
         }
 
         [HttpGet("terms")]
+        [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]
         [Produces("text/html")]
         public ContentResult GetTermsOfService()
         {

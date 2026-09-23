@@ -64,4 +64,37 @@ describe('apiClient', () => {
 
         expect(global.fetch).toHaveBeenCalledTimes(3);
     });
+
+    it('should never cache realtime endpoints such as /messages', async () => {
+        (global.fetch as jest.Mock).mockResolvedValue({
+            ok: true,
+            json: async () => ({ messages: [] }),
+        });
+
+        await apiClient.get('/messages/unread-counts');
+        await apiClient.get('/messages/unread-counts');
+
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should support selective cache invalidation by pattern', async () => {
+        (global.fetch as jest.Mock).mockResolvedValue({
+            ok: true,
+            json: async () => ({ ok: true }),
+        });
+
+        await apiClient.get('/dashboard/summary');
+        await apiClient.get('/legal/terms');
+
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+
+        // Invalidate dashboard only
+        apiClient.invalidateCache('/dashboard');
+
+        // /dashboard/summary should fetch again, /legal/terms should stay cached
+        await apiClient.get('/dashboard/summary');
+        await apiClient.get('/legal/terms');
+
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
 });

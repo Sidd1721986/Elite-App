@@ -52,9 +52,39 @@ function devApiBaseUrl(): string {
 
 const BASE_URL = __DEV__ ? devApiBaseUrl() : PROD_URL;
 
-// Response cache with TTL — set to 0 to always fetch fresh data and avoid stale lists
-const cache = new Map<string, { data: any, timestamp: number }>();
-const CACHE_TTL = 300000; // 5 minutes in milliseconds
+// Route-aware response cache
+const cache = new Map<string, { data: any, timestamp: number, ttl: number }>();
+
+/** Default cache TTLs per route category (in ms) */
+export function getRouteCacheTtl(endpoint: string, customTtl?: number): number {
+    if (typeof customTtl === 'number') {
+        return customTtl;
+    }
+
+    const cleanPath = endpoint.split('?')[0].toLowerCase();
+
+    // Always fresh: realtime messages, unread counts, notifications
+    if (
+        cleanPath.startsWith('/messages') ||
+        cleanPath.startsWith('/notifications') ||
+        cleanPath.includes('/unread')
+    ) {
+        return 0;
+    }
+
+    // Dashboard analytics and aggregates
+    if (cleanPath.startsWith('/dashboard')) {
+        return 60000; // 60 seconds
+    }
+
+    // Static content, legal terms, and app info
+    if (cleanPath.startsWith('/legal') || cleanPath.startsWith('/app')) {
+        return 300000; // 5 minutes
+    }
+
+    // Standard dynamic queries (e.g. jobs, vendor lists)
+    return 30000; // 30 seconds
+}
 
 // In-flight request deduplication — prevents duplicate identical GETs within same tick
 const pendingRequests = new Map<string, Promise<any>>();
@@ -110,13 +140,18 @@ const retryDelay = (attempt: number, backoff: number) =>
     backoff * attempt + Math.floor(Math.random() * 500);
 
 export const apiClient = {
-    async request<T>(endpoint: string, options: RequestInit = {}, bypassCache = false): Promise<T> {
+    async request<T>(
+        endpoint: string,
+        options: RequestInit & { cacheTtlMs?: number } = {},
+        bypassCache = false,
+    ): Promise<T> {
         const method = options.method || 'GET';
+        const ttl = getRouteCacheTtl(endpoint, options.cacheTtlMs);
 
         // Cache check for GET requests
-        if (method === 'GET' && !bypassCache) {
+        if (method === 'GET' && !bypassCache && ttl > 0) {
             const cached = cache.get(endpoint);
-            if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+            if (cached && (Date.now() - cached.timestamp < cached.ttl)) {
                 return cached.data;
             }
 
@@ -218,17 +253,21 @@ export const apiClient = {
 
                 const data = await response.json();
 
-                // Cache successful GET responses only when caching is enabled
-                if (method === 'GET' && CACHE_TTL > 0) {
-                    cache.set(endpoint, { data, timestamp: Date.now() });
+                // Cache successful GET responses when TTL > 0
+                if (method === 'GET' && ttl > 0) {
+                    cache.set(endpoint, { data, timestamp: Date.now(), ttl });
                 }
 
-                // Invalidate related caches on mutations
-                if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
-                    // e.g., POST /jobs should invalidate GET /jobs cache
-                    const basePath = endpoint.split('/').slice(0, 2).join('/');
+                // Invalidate related caches on mutations (POST, PUT, PATCH, DELETE)
+                if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+                    const cleanPath = endpoint.split('?')[0];
+                    const basePath = cleanPath.split('/').slice(0, 2).join('/');
+                    const relatedPrefixes = [basePath];
+                    if (basePath === '/jobs') {
+                        relatedPrefixes.push('/dashboard');
+                    }
                     for (const key of cache.keys()) {
-                        if (key.startsWith(basePath)) {
+                        if (relatedPrefixes.some(prefix => key.startsWith(prefix))) {
                             cache.delete(key);
                         }
                     }
@@ -268,29 +307,52 @@ export const apiClient = {
         return requestPromise;
     },
 
-    get<T>(endpoint: string, bypassCache = false) {
-        return this.request<T>(endpoint, { method: 'GET' }, bypassCache);
+    get<T>(endpoint: string, bypassCache = false, options: RequestInit & { cacheTtlMs?: number } = {}) {
+        return this.request<T>(endpoint, { ...options, method: 'GET' }, bypassCache);
     },
 
-    post<T>(endpoint: string, body: any) {
+    post<T>(endpoint: string, body: any, options: RequestInit = {}) {
         return this.request<T>(endpoint, {
+            ...options,
             method: 'POST',
-            body: JSON.stringify(body),
+            body: body instanceof FormData ? body : JSON.stringify(body),
         });
     },
 
-    put<T>(endpoint: string, body: any) {
+    put<T>(endpoint: string, body: any, options: RequestInit = {}) {
         return this.request<T>(endpoint, {
+            ...options,
             method: 'PUT',
-            body: JSON.stringify(body),
+            body: body instanceof FormData ? body : JSON.stringify(body),
         });
     },
 
-    delete<T>(endpoint: string) {
-        return this.request<T>(endpoint, { method: 'DELETE' });
+    patch<T>(endpoint: string, body: any, options: RequestInit = {}) {
+        return this.request<T>(endpoint, {
+            ...options,
+            method: 'PATCH',
+            body: body instanceof FormData ? body : JSON.stringify(body),
+        });
     },
 
-    // Manual cache invalidation
+    delete<T>(endpoint: string, options: RequestInit = {}) {
+        return this.request<T>(endpoint, { ...options, method: 'DELETE' });
+    },
+
+    /** Invalidate specific cache keys matching a pattern or clear entire cache */
+    invalidateCache(pattern?: string) {
+        if (!pattern) {
+            cache.clear();
+            return;
+        }
+        for (const key of cache.keys()) {
+            if (key.includes(pattern)) {
+                cache.delete(key);
+            }
+        }
+    },
+
+    // Manual full cache invalidation
     clearCache() {
         cache.clear();
     },
