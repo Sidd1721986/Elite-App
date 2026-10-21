@@ -68,6 +68,8 @@ backend/eliteapp*.db*
 metro_cache/
 .terminal_history
 *.png
+!website/**/*.png
+!assets/**/*.png
 *.log
 
 # Production and local-secret appsettings (never commit real credentials)
