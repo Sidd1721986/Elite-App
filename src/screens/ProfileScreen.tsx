@@ -254,6 +254,7 @@ const ProfileScreen: React.FC = () => {
                             <Menu
                                 visible={showStateMenu}
                                 onDismiss={() => setShowStateMenu(false)}
+                                contentStyle={{ backgroundColor: '#F4F0FA', borderRadius: 16, borderWidth: 1, borderColor: '#E6E0EB' }}
                                 anchor={
                                     <TouchableOpacity
                                         onPress={() => setShowStateMenu(true)}

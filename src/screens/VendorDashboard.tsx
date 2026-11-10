@@ -246,6 +246,15 @@ const VendorDashboard: React.FC = () => {
                             {scopeLine || root.description}
                         </Text>
 
+                        {root.dimensions ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                                <IconButton icon="ruler-square" size={14} style={{ margin: 0 }} iconColor="#6366F1" />
+                                <Text variant="labelSmall" style={{ color: '#475569', fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                                    Dim: {root.dimensions}
+                                </Text>
+                            </View>
+                        ) : null}
+
                         {(phone || email) && (
                             <View style={{ flexDirection: 'row', marginTop: 8, alignItems: 'center' }}>
                                 <IconButton icon="phone-outline" size={14} style={{ margin: 0 }} iconColor="#6366F1" />

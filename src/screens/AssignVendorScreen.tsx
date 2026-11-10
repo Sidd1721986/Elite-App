@@ -151,7 +151,7 @@ function AssignmentPhotoThumbnails({ urls }: { urls?: string[] | null }) {
             <View style={styles.assignmentPhotoGrid}>
                 {urls.map(uri => (
                     <View key={uri} style={styles.assignmentPhotoThumbWrapper}>
-                        <FastImage source={{ uri }} style={styles.assignmentPhotoThumb} />
+                        <FastImage source={{ uri, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }} style={styles.assignmentPhotoThumb} />
                         <View style={styles.assignmentPhotoMovedBadge}>
                             <IconButton icon="check" size={10} iconColor="#FFFFFF" style={{ margin: 0, padding: 0 }} />
                         </View>
@@ -771,6 +771,18 @@ const AssignVendorScreen: React.FC = () => {
                     <Text variant="labelSmall" style={styles.jobLabel}>TARGET JOB #{job?.jobNumber}</Text>
                     <Text variant="titleMedium" style={styles.jobAddress}>{job?.address || 'Loading...'}</Text>
 
+                    {job?.dimensions ? (
+                        <View style={styles.dimensionsTargetBadge}>
+                            <Avatar.Icon size={18} icon="ruler-square" style={{ backgroundColor: '#EEF2FF' }} color="#6366F1" />
+                            <Text variant="labelSmall" style={styles.dimensionsTargetLabel}>
+                                Dimensions:
+                            </Text>
+                            <Text variant="bodySmall" style={styles.dimensionsTargetText} numberOfLines={2}>
+                                {job.dimensions}
+                            </Text>
+                        </View>
+                    ) : null}
+
                     {assignedServicesFromSplits.length > 0 && (
                         <View style={styles.targetAssignedWrap}>
                             <Text variant="labelSmall" style={styles.targetAssignedLabel}>
@@ -886,7 +898,7 @@ const AssignVendorScreen: React.FC = () => {
                                     onPress={() => togglePhoto(url)}
                                     activeOpacity={0.8}
                                 >
-                                    <FastImage source={{ uri: url }} style={styles.photoImage} />
+                                    <FastImage source={{ uri: url, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }} style={styles.photoImage} />
                                     <View style={[
                                         styles.photoOverlay,
                                         selectedPhotoUrls.includes(url) && styles.photoOverlaySelected,
@@ -1102,6 +1114,29 @@ const styles = StyleSheet.create({
     jobAddress: {
         color: '#1E293B',
         fontWeight: 'bold',
+    },
+    dimensionsTargetBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        gap: 6,
+    },
+    dimensionsTargetLabel: {
+        color: '#6366F1',
+        fontWeight: 'bold',
+        fontSize: 11,
+    },
+    dimensionsTargetText: {
+        color: '#334155',
+        flex: 1,
+        fontSize: 12,
+        fontWeight: '500',
     },
     existingAssignmentsPanel: {
         marginBottom: 16,

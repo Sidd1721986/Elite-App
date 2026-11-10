@@ -1,6 +1,7 @@
 using EliteApp.API.Data;
 using EliteApp.API.Models;
 using EliteApp.API.Services.Email;
+using EliteApp.API.Services.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -145,7 +146,7 @@ public class JobsController : ControllerBase
     /// run on SaveChanges, so oversized values would otherwise surface as Postgres 22001 errors (500s).
     /// Returns null when valid, or the BadRequest to send.
     /// </summary>
-    private IActionResult? ValidateJobFieldLengths(string? description, string? address, string? otherDetails, string? contactPhone, string? contactEmail)
+    private IActionResult? ValidateJobFieldLengths(string? description, string? address, string? otherDetails, string? contactPhone, string? contactEmail, string? dimensions = null)
     {
         if (description is { Length: > 5000 })
             return BadRequest(new { message = "Description must be 5000 characters or fewer." });
@@ -157,6 +158,8 @@ public class JobsController : ControllerBase
             return BadRequest(new { message = "Contact phone must be 30 characters or fewer." });
         if (contactEmail is { Length: > 255 })
             return BadRequest(new { message = "Contact email must be 255 characters or fewer." });
+        if (dimensions is { Length: > 2000 })
+            return BadRequest(new { message = "Dimensions must be 2000 characters or fewer." });
         return null;
     }
 
@@ -290,7 +293,7 @@ public class JobsController : ControllerBase
         }
 
         // Column limits ([StringLength] does not run on SaveChanges) — reject cleanly instead of a DB 22001 error.
-        var lengthError = ValidateJobFieldLengths(request.Description, request.Address, request.OtherDetails, request.ContactPhone, request.ContactEmail);
+        var lengthError = ValidateJobFieldLengths(request.Description, request.Address, request.OtherDetails, request.ContactPhone, request.ContactEmail, request.Dimensions);
         if (lengthError != null) return lengthError;
 
         // Validate each service string: max 100 chars, alphanumeric + common punctuation only.
@@ -349,6 +352,7 @@ public class JobsController : ControllerBase
             JobNumber = nextJobNumber,
             JobSuffix = suffix,
             Services = request.Services != null ? string.Join(",", request.Services) : null,
+            Dimensions = request.Dimensions,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -407,6 +411,7 @@ public class JobsController : ControllerBase
                 $"Job: {jobLabel}\n" +
                 $"Customer: {job.Customer?.Name} ({job.Customer?.Email})\n" +
                 $"Services: {job.Services}\n" +
+                (string.IsNullOrWhiteSpace(job.Dimensions) ? "" : $"Dimensions: {job.Dimensions}\n") +
                 $"Address: {job.Address}\n" +
                 $"Contact: {job.ContactPhone} / {job.ContactEmail}\n" +
                 $"Urgency: {job.Urgency}\n\n" +
@@ -423,6 +428,7 @@ public class JobsController : ControllerBase
                     $"You have been assigned a new job by Elite Home Services.\n\n" +
                     $"Job: {jobLabel}\n" +
                     $"Services: {job.Services}\n" +
+                    (string.IsNullOrWhiteSpace(job.Dimensions) ? "" : $"Dimensions: {job.Dimensions}\n") +
                     $"Address: {job.Address}\n" +
                     $"Contact: {job.ContactPhone} / {job.ContactEmail}\n" +
                     $"Urgency: {job.Urgency}\n\n" +
@@ -491,7 +497,8 @@ public class JobsController : ControllerBase
             && request.Photos == null
             && request.Services == null
             && request.ContactPhone == null
-            && request.ContactEmail == null;
+            && request.ContactEmail == null
+            && request.Dimensions == null;
 
         if (isVendorUnassignOnly)
         {
@@ -540,7 +547,7 @@ public class JobsController : ControllerBase
         var invalidPhotos = ValidatePhotoUrls(request.Photos);
         if (invalidPhotos != null) return invalidPhotos;
 
-        var updateLengthError = ValidateJobFieldLengths(request.Description, request.Address, request.OtherDetails, request.ContactPhone, request.ContactEmail);
+        var updateLengthError = ValidateJobFieldLengths(request.Description, request.Address, request.OtherDetails, request.ContactPhone, request.ContactEmail, request.Dimensions);
         if (updateLengthError != null) return updateLengthError;
 
         if (request.Description != null) job.Description = request.Description;
@@ -551,6 +558,7 @@ public class JobsController : ControllerBase
         if (request.Services != null) job.Services = string.Join(",", request.Services);
         if (request.ContactPhone != null) job.ContactPhone = request.ContactPhone;
         if (request.ContactEmail != null) job.ContactEmail = request.ContactEmail;
+        if (request.Dimensions != null) job.Dimensions = request.Dimensions;
 
         // Admin-only amount override (the value the customer is invoiced/pays). Blocked once Paid.
         if (request.ContractAmount.HasValue)
@@ -1171,7 +1179,7 @@ public class JobsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send invoice email for job {JobId} to {To}", id, to);
+            _logger.LogError(ex, "Failed to send invoice email for job {JobId} to {To}", id, DataMasker.MaskEmail(to));
             return StatusCode(503, new { message = "Could not send the invoice email. Please try again." });
         }
 
@@ -1186,7 +1194,7 @@ public class JobsController : ControllerBase
         _context.JobNotes.Add(note);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Invoice for job {JobId} sent to {To} by admin {AdminId}", id, to, adminId);
+        _logger.LogInformation("Invoice for job {JobId} sent to {To} by admin {AdminId}", id, DataMasker.MaskEmail(to), adminId);
         return Ok(new { message = $"Invoice sent to {to}." });
     }
 
@@ -1289,6 +1297,7 @@ public class CreateJobRequest
     public List<string>? Services { get; set; }
     public string? ContactPhone { get; set; }
     public string? ContactEmail { get; set; }
+    public string? Dimensions { get; set; }
     public Guid? CustomerId { get; set; }
     public Guid? ParentJobId { get; set; }
 
@@ -1313,4 +1322,5 @@ public class UpdateJobRequest
     public List<string>? Services { get; set; }
     public string? ContactPhone { get; set; }
     public string? ContactEmail { get; set; }
+    public string? Dimensions { get; set; }
 }

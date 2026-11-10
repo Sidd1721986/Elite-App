@@ -4,6 +4,7 @@ using System.Text;
 using EliteApp.API.Data;
 using EliteApp.API.Models;
 using EliteApp.API.Services.Email;
+using EliteApp.API.Services.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -92,11 +93,11 @@ public class AdminInviteController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send admin invite email to {Email}", email);
+            _logger.LogError(ex, "Failed to send admin invite email to {Email}", DataMasker.MaskEmail(email));
             return StatusCode(503, new { message = "Could not send invite email. Please try again." });
         }
 
-        _logger.LogInformation("Admin invite sent to {Email} by admin {AdminId}", email, adminGuid);
+        _logger.LogInformation("Admin invite sent to {Email} by admin {AdminId}", DataMasker.MaskEmail(email), adminGuid);
         return Ok(new { message = $"Invite sent to {email}." });
     }
 
@@ -133,7 +134,7 @@ public class AdminInviteController : ControllerBase
 
         _logger.LogInformation(
             "User {Email} promoted from {PreviousRole} to Admin by admin {AdminId}",
-            email, previousRole, actingAdminGuid);
+            DataMasker.MaskEmail(email), previousRole, actingAdminGuid);
 
         // Best-effort courtesy email — queued so it never delays or fails the request.
         _emailQueue.TryEnqueue(new OutgoingEmail(
@@ -153,7 +154,7 @@ public class AdminInviteController : ControllerBase
             return Content("<h2>Invalid invite link.</h2>", "text/html");
 
         var deepLink = $"eliteapp://admin-register?token={Uri.EscapeDataString(token)}&email={Uri.EscapeDataString(email)}";
-        var appStoreUrl = _configuration["App:iOSStoreUrl"] ?? "https://apps.apple.com/app/id123456789";
+        var appStoreUrl = _configuration["App:iOSStoreUrl"] ?? "https://apps.apple.com/app/elite-home-services-usa/id6779766867";
         var playStoreUrl = _configuration["App:AndroidStoreUrl"] ?? "https://play.google.com/store/apps/details?id=com.elitehomeservicesusa.app";
 
         var html = $@"<!DOCTYPE html>

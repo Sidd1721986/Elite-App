@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using EliteApp.API.Data;
 using EliteApp.API.Models;
+using EliteApp.API.Services.Security;
 using EliteApp.API.Services.Sms;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
@@ -91,7 +92,7 @@ public class UsersController : ControllerBase
         user.IsApproved = true;
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Vendor approved: vendorId={VendorId} email={Email} by adminId={AdminId}", id, user.Email, adminId);
+        _logger.LogInformation("Vendor approved: vendorId={VendorId} email={Email} by adminId={AdminId}", id, DataMasker.MaskEmail(user.Email), adminId);
         return Ok(new { message = "Vendor approved" });
     }
     
@@ -116,7 +117,7 @@ public class UsersController : ControllerBase
         await _context.SaveChangesAsync();
         EvictActiveFlag(user.Id);
 
-        _logger.LogWarning("Vendor denied: vendorId={VendorId} email={Email} by adminId={AdminId}", id, user.Email, adminId);
+        _logger.LogWarning("Vendor denied: vendorId={VendorId} email={Email} by adminId={AdminId}", id, DataMasker.MaskEmail(user.Email), adminId);
         return Ok(new { message = "Vendor denied" });
     }
 

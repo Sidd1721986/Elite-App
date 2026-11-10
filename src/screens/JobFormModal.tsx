@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import {
     Text, Button, Portal, Modal, TextInput,
-    Menu, Chip, IconButton, Surface,
+    Menu, Chip, IconButton, Surface, SegmentedButtons,
 } from 'react-native-paper';
 import FastImage from 'react-native-fast-image';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
@@ -23,6 +23,7 @@ import { Urgency, Job, User } from '../types/types';
 import { jobService } from '../services/jobService';
 import { AVAILABLE_SERVICES } from '../config/services';
 import { formatAddress, parseAddress } from '../utils/addressUtils';
+import { parseDimensionString, formatDimensionString } from '../utils/dimensionUtils';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export interface JobFormInitialValues {
     contactEmail: string;
     photos: string[];
     selectedServices: string[];
+    dimensions?: string;
 }
 
 interface Props {
@@ -53,6 +55,7 @@ interface Props {
             address: string;
             services: string[];
             customerId: string;
+            dimensions?: string;
         },
         editingJobId: string | null,
     ) => Promise<void>;
@@ -61,7 +64,12 @@ interface Props {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function buildDefaults(user: User | null, initial: JobFormInitialValues | null): JobFormInitialValues {
-    if (initial) {return initial;}
+    if (initial) {
+        return {
+            ...initial,
+            dimensions: initial.dimensions || '',
+        };
+    }
     const parts = parseAddress(user?.address);
     return {
         street: parts.street,
@@ -75,7 +83,43 @@ function buildDefaults(user: User | null, initial: JobFormInitialValues | null):
         contactEmail: user?.email || '',
         photos: [],
         selectedServices: [],
+        dimensions: '',
     };
+}
+
+// ── Measured items (windows / doors / roof sections) ─────────────────────────
+
+interface DimItem {
+    id: string;
+    width: string;
+    height: string;
+    unit: 'in' | 'ft';
+    description: string;
+    photos: string[];
+}
+
+const BLUE = '#2563EB';
+
+function newDimItem(): DimItem {
+    return { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, width: '', height: '', unit: 'in', description: '', photos: [] };
+}
+
+/** Parses the stored dimensions string (one item per line, optionally prefixed "Item N:"). */
+function parseDimItems(raw?: string): DimItem[] {
+    const lines = (raw || '').split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) { return [newDimItem()]; }
+    return lines.map(line => {
+        const p = parseDimensionString(line.replace(/^Item\s*\d+:\s*/i, ''));
+        return { ...newDimItem(), width: p.width, height: p.height, unit: p.unit, description: p.notes };
+    });
+}
+
+function formatDimItems(items: DimItem[]): string {
+    const parts = items
+        .map(it => formatDimensionString(it.width, it.height, it.unit, it.description))
+        .map((s, i) => (s ? (items.length > 1 ? `Item ${i + 1}: ${s}` : s) : ''))
+        .filter(Boolean);
+    return parts.join('\n');
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -103,6 +147,35 @@ const JobFormModal: React.FC<Props> = ({
     const [photos, setPhotos]               = useState<string[]>(defaults.photos);
     const [selectedServices, setSelectedServices] = useState<string[]>(defaults.selectedServices);
 
+    // Measured items: each window/door has its own size, description and photos
+    const [dimItems, setDimItems] = useState<DimItem[]>(() => parseDimItems(defaults.dimensions));
+
+    const updateDimItem = useCallback((id: string, patch: Partial<DimItem>) => {
+        setDimItems(prev => prev.map(it => (it.id === id ? { ...it, ...patch } : it)));
+    }, []);
+    const addDimItem = useCallback(() => setDimItems(prev => [...prev, newDimItem()]), []);
+    const removeDimItem = useCallback((id: string) => {
+        setDimItems(prev => (prev.length > 1 ? prev.filter(it => it.id !== id) : [newDimItem()]));
+    }, []);
+
+    const addItemPhotos = useCallback((id: string) => {
+        const append = (uris: string[]) =>
+            setDimItems(prev => prev.map(it => (it.id === id ? { ...it, photos: [...it.photos, ...uris] } : it)));
+        const handle = (result: any) => {
+            if (result?.didCancel) { return; }
+            if (result?.errorCode) {
+                Alert.alert('Photo Error', result.errorMessage || 'Could not get photo. Check permissions in Settings.');
+                return;
+            }
+            append((result?.assets || []).map((a: any) => a.uri).filter(Boolean));
+        };
+        Alert.alert('Add Photo', 'Choose a source', [
+            { text: 'Take Photo', onPress: () => launchCamera({ mediaType: 'photo', quality: 0.8, saveToPhotos: true }).then(handle).catch(() => {}) },
+            { text: 'Gallery', onPress: () => launchImageLibrary({ mediaType: 'photo', selectionLimit: 5, quality: 0.8 }).then(handle).catch(() => {}) },
+            { text: 'Cancel', style: 'cancel' },
+        ]);
+    }, []);
+
     // Menu visibility
     const [showUrgencyMenu, setShowUrgencyMenu]   = useState(false);
     const [showServicesMenu, setShowServicesMenu] = useState(false);
@@ -123,9 +196,16 @@ const JobFormModal: React.FC<Props> = ({
         setContactEmail(d.contactEmail);
         setPhotos(d.photos);
         setSelectedServices(d.selectedServices);
+        setDimItems(parseDimItems(d.dimensions));
         setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [visible]);   // intentionally only re-seed on open/close, not on every prop change
+
+    // Check if any selected service is for roof, windows, or doors
+    const hasRoofWindowDoorSelected = selectedServices.some(service => {
+        const s = service.toLowerCase();
+        return s.includes('roof') || s.includes('window') || s.includes('door');
+    });
 
     // Auto-populate description from selected services (single effect, no chain)
     useEffect(() => {
@@ -244,10 +324,18 @@ const JobFormModal: React.FC<Props> = ({
             let uploadedPhotos: string[];
             try {
                 uploadedPhotos = await uploadLocalPhotos(photos);
+                if (hasRoofWindowDoorSelected) {
+                    for (const it of dimItems) {
+                        if (it.photos.length) {
+                            uploadedPhotos.push(...(await uploadLocalPhotos(it.photos)));
+                        }
+                    }
+                }
             } catch {
                 setError('Photo upload failed. Check your connection and try again.');
                 return;
             }
+            const formattedDimensions = hasRoofWindowDoorSelected ? formatDimItems(dimItems) : '';
             await onSubmit(
                 {
                     address,
@@ -260,6 +348,7 @@ const JobFormModal: React.FC<Props> = ({
                     photos: uploadedPhotos,
                     selectedServices,
                     services: selectedServices,
+                    dimensions: formattedDimensions || undefined,
                     customerId: user?.id || user?.email || 'anon',
                 },
                 editingJobId,
@@ -272,7 +361,7 @@ const JobFormModal: React.FC<Props> = ({
     }, [
         addressText, description, urgency,
         otherDetails, contactPhone, contactEmail, photos,
-        selectedServices, isCustomer, editingJobId, onSubmit, user,
+        selectedServices, dimItems, hasRoofWindowDoorSelected, isCustomer, editingJobId, onSubmit, user,
         uploadLocalPhotos,
     ]);
 
@@ -313,49 +402,83 @@ const JobFormModal: React.FC<Props> = ({
                         onAddressSelect={(parts) => setAddressText(formatAddress(parts))}
                     />
 
-                    {/* Services */}
-                    <Text variant="titleSmall" style={styles.sectionLabel}>Select Services Needed *</Text>
-                    <Menu
-                        visible={showServicesMenu}
-                        onDismiss={() => setShowServicesMenu(false)}
-                        anchor={
-                            <TouchableOpacity onPress={() => setShowServicesMenu(true)} activeOpacity={1}>
-                                <View pointerEvents="none">
-                                    <TextInput
-                                        label="Service Needed *"
-                                        value={selectedServices.length > 0 ? `${selectedServices.length} selected` : ''}
-                                        mode="outlined"
-                                        style={styles.input}
-                                        placeholder="Select a service"
-                                        editable={false}
-                                        right={<TextInput.Icon icon="chevron-down" />}
-                                    />
-                                </View>
-                            </TouchableOpacity>
-                        }
-                    >
-                        <ScrollView style={{ maxHeight: 260 }}>
-                            {AVAILABLE_SERVICES.map(service => (
-                                <Menu.Item
-                                    key={service}
-                                    title={service}
-                                    leadingIcon={selectedServices.includes(service) ? 'check-circle-outline' : 'plus-circle-outline'}
-                                    onPress={() => {
-                                        setSelectedServices(prev =>
-                                            prev.includes(service) ? prev : [...prev, service],
-                                        );
-                                        setShowServicesMenu(false);
-                                    }}
+                    {/* Services Dropdown */}
+                    <View style={styles.dropdownContainer}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                setShowServicesMenu(prev => !prev);
+                                setShowUrgencyMenu(false);
+                            }}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityLabel="Select Services Needed"
+                        >
+                            <View pointerEvents="none">
+                                <TextInput
+                                    label="Services Needed *"
+                                    value={selectedServices.length > 0 ? `${selectedServices.length} service${selectedServices.length > 1 ? 's' : ''} selected` : ''}
+                                    mode="outlined"
+                                    style={styles.input}
+                                    placeholder="Select services"
+                                    editable={false}
+                                    right={<TextInput.Icon icon={showServicesMenu ? "chevron-up" : "chevron-down"} />}
+                                    outlineColor="#93C5FD"
+                                    activeOutlineColor={BLUE}
+                                    textColor="#1E3A8A"
                                 />
-                            ))}
-                        </ScrollView>
-                    </Menu>
+                            </View>
+                        </TouchableOpacity>
 
-                    <View style={styles.chipsRow}>
-                        {selectedServices.length === 0 ? (
-                            <Text variant="bodySmall" style={styles.chipsHint}>Selected services will appear here.</Text>
-                        ) : (
-                            selectedServices.map(service => (
+                        {showServicesMenu && (
+                            <Surface style={styles.dropdownMenu} elevation={2}>
+                                <ScrollView
+                                    style={{ maxHeight: 240 }}
+                                    nestedScrollEnabled={true}
+                                    showsVerticalScrollIndicator={true}
+                                    keyboardShouldPersistTaps="handled"
+                                >
+                                    {AVAILABLE_SERVICES.map(service => {
+                                        const isSelected = selectedServices.includes(service);
+                                        return (
+                                            <TouchableOpacity
+                                                key={service}
+                                                style={[styles.dropdownItem, isSelected && styles.dropdownItemSelected]}
+                                                onPress={() => {
+                                                    setSelectedServices(prev =>
+                                                        prev.includes(service)
+                                                            ? prev.filter(s => s !== service)
+                                                            : [...prev, service]
+                                                    );
+                                                }}
+                                                activeOpacity={0.7}
+                                            >
+                                                <IconButton
+                                                    icon={isSelected ? 'check-circle' : 'plus-circle-outline'}
+                                                    iconColor={isSelected ? BLUE : '#64748B'}
+                                                    size={22}
+                                                    style={{ margin: 0, marginRight: 12 }}
+                                                />
+                                                <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]}>
+                                                    {service}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                                <TouchableOpacity
+                                    style={styles.dropdownDoneBtn}
+                                    onPress={() => setShowServicesMenu(false)}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.dropdownDoneText}>Done ({selectedServices.length} selected)</Text>
+                                </TouchableOpacity>
+                            </Surface>
+                        )}
+                    </View>
+
+                    {selectedServices.length > 0 && (
+                        <View style={styles.chipsRow}>
+                            {selectedServices.map(service => (
                                 <Chip
                                     key={service}
                                     mode="outlined"
@@ -366,9 +489,9 @@ const JobFormModal: React.FC<Props> = ({
                                 >
                                     {service}
                                 </Chip>
-                            ))
-                        )}
-                    </View>
+                            ))}
+                        </View>
+                    )}
 
                     {/* Description (auto-populated, read-only) */}
                     <TextInput
@@ -402,28 +525,67 @@ const JobFormModal: React.FC<Props> = ({
                         autoCapitalize="none"
                     />
 
-                    {/* Urgency */}
-                    <View style={styles.urgencyRow}>
-                        <Text variant="labelLarge" style={styles.urgencyLabel}>Urgency Level</Text>
-                        <Menu
-                            visible={showUrgencyMenu}
-                            onDismiss={() => setShowUrgencyMenu(false)}
-                            anchor={
-                                <Button
-                                    mode="outlined"
-                                    onPress={() => setShowUrgencyMenu(true)}
-                                    style={styles.urgencyBtn}
-                                    icon="chevron-down"
-                                    contentStyle={{ flexDirection: 'row-reverse' }}
-                                >
-                                    {urgency}
-                                </Button>
-                            }
+                    {/* Urgency Dropdown */}
+                    <View style={styles.dropdownContainer}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                setShowUrgencyMenu(prev => !prev);
+                                setShowServicesMenu(false);
+                            }}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityLabel="Select Urgency Level"
                         >
-                            {Object.values(Urgency).map(u => (
-                                <Menu.Item key={u} onPress={() => { setUrgency(u); setShowUrgencyMenu(false); }} title={u} />
-                            ))}
-                        </Menu>
+                            <View pointerEvents="none">
+                                <TextInput
+                                    label="Urgency Level *"
+                                    value={urgency}
+                                    mode="outlined"
+                                    style={styles.input}
+                                    editable={false}
+                                    right={<TextInput.Icon icon={showUrgencyMenu ? "chevron-up" : "chevron-down"} />}
+                                    outlineColor="#93C5FD"
+                                    activeOutlineColor={BLUE}
+                                    textColor="#1E3A8A"
+                                />
+                            </View>
+                        </TouchableOpacity>
+
+                        {showUrgencyMenu && (
+                            <Surface style={styles.dropdownMenu} elevation={2}>
+                                <ScrollView
+                                    style={{ maxHeight: 200 }}
+                                    nestedScrollEnabled={true}
+                                    showsVerticalScrollIndicator={false}
+                                    keyboardShouldPersistTaps="handled"
+                                >
+                                    {Object.values(Urgency).map(u => {
+                                        const isSelected = urgency === u;
+                                        return (
+                                            <TouchableOpacity
+                                                key={u}
+                                                style={[styles.dropdownItem, isSelected && styles.dropdownItemSelected]}
+                                                onPress={() => {
+                                                    setUrgency(u);
+                                                    setShowUrgencyMenu(false);
+                                                }}
+                                                activeOpacity={0.7}
+                                            >
+                                                <IconButton
+                                                    icon={isSelected ? 'radiobox-marked' : 'radiobox-blank'}
+                                                    iconColor={isSelected ? BLUE : '#64748B'}
+                                                    size={22}
+                                                    style={{ margin: 0, marginRight: 12 }}
+                                                />
+                                                <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]}>
+                                                    {u}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </Surface>
+                        )}
                     </View>
 
                     {/* Additional Notes */}
@@ -434,6 +596,133 @@ const JobFormModal: React.FC<Props> = ({
                         mode="outlined"
                         style={styles.input}
                     />
+
+                    {/* Measured items: ONLY displayed when roof, windows, or doors is selected */}
+                    {hasRoofWindowDoorSelected && (
+                        <Surface style={styles.dimensionsSection} elevation={0}>
+                            <View style={styles.dimensionsHeader}>
+                                <View style={styles.dimensionsIconBadge}>
+                                    <IconButton icon="ruler-square" size={20} iconColor={BLUE} style={{ margin: 0 }} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text variant="titleSmall" style={styles.dimensionsTitle}>
+                                        Windows, Doors & Measurements
+                                    </Text>
+                                    <Text variant="bodySmall" style={styles.dimensionsSubtitle}>
+                                        Add each window or door with its size, a description and photos
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {dimItems.map((item, index) => (
+                                <View key={item.id} style={styles.itemCard}>
+                                    <View style={styles.itemCardHeader}>
+                                        <Text style={styles.itemCardTitle}>Item {index + 1}</Text>
+                                        {dimItems.length > 1 && (
+                                            <IconButton
+                                                icon="trash-can-outline"
+                                                size={18}
+                                                iconColor="#EF4444"
+                                                style={{ margin: 0 }}
+                                                onPress={() => removeDimItem(item.id)}
+                                                accessibilityLabel={`Remove item ${index + 1}`}
+                                            />
+                                        )}
+                                    </View>
+
+                                    <SegmentedButtons
+                                        value={item.unit}
+                                        onValueChange={v => updateDimItem(item.id, { unit: v as 'in' | 'ft' })}
+                                        buttons={[
+                                            { value: 'in', label: 'Inches (in)' },
+                                            { value: 'ft', label: 'Feet (ft)' },
+                                        ]}
+                                        style={styles.segmentedUnitButtons}
+                                        density="small"
+                                        theme={{ colors: { secondaryContainer: '#DBEAFE', onSecondaryContainer: '#1E40AF', outline: '#93C5FD' } }}
+                                    />
+
+                                    <View style={styles.dimensionInputsRow}>
+                                        <View style={styles.dimensionInputCol}>
+                                            <TextInput
+                                                label={`Width (${item.unit})`}
+                                                placeholder={item.unit === 'in' ? 'e.g. 36' : 'e.g. 3'}
+                                                value={item.width}
+                                                onChangeText={t => updateDimItem(item.id, { width: t })}
+                                                mode="outlined"
+                                                keyboardType="decimal-pad"
+                                                style={styles.dimensionInput}
+                                                outlineColor="#BFDBFE"
+                                                activeOutlineColor={BLUE}
+                                                testID={`job_dimension_width_${index}`}
+                                            />
+                                        </View>
+                                        <View style={styles.dimensionTimesCol}>
+                                            <Text style={styles.dimensionTimesText}>×</Text>
+                                        </View>
+                                        <View style={styles.dimensionInputCol}>
+                                            <TextInput
+                                                label={`Height (${item.unit})`}
+                                                placeholder={item.unit === 'in' ? 'e.g. 80' : 'e.g. 6.5'}
+                                                value={item.height}
+                                                onChangeText={t => updateDimItem(item.id, { height: t })}
+                                                mode="outlined"
+                                                keyboardType="decimal-pad"
+                                                style={styles.dimensionInput}
+                                                outlineColor="#BFDBFE"
+                                                activeOutlineColor={BLUE}
+                                                testID={`job_dimension_height_${index}`}
+                                            />
+                                        </View>
+                                    </View>
+
+                                    <TextInput
+                                        label="Description"
+                                        placeholder="e.g. Front door, double-hung vinyl window, impact glass needed"
+                                        value={item.description}
+                                        onChangeText={t => updateDimItem(item.id, { description: t })}
+                                        mode="outlined"
+                                        multiline
+                                        numberOfLines={3}
+                                        style={styles.dimensionNotesInput}
+                                        outlineColor="#BFDBFE"
+                                        activeOutlineColor={BLUE}
+                                        testID={`job_dimension_notes_${index}`}
+                                    />
+
+                                    <View style={styles.itemPhotoRow}>
+                                        {item.photos.map((uri, pIdx) => (
+                                            <View key={`${uri}-${pIdx}`} style={styles.photoWrapper}>
+                                                <FastImage source={{ uri, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }} style={styles.photoThumb} />
+                                                <IconButton
+                                                    icon="close-circle"
+                                                    size={20}
+                                                    iconColor="#EF4444"
+                                                    style={styles.removePhotoBtn}
+                                                    onPress={() => updateDimItem(item.id, { photos: item.photos.filter((_, i) => i !== pIdx) })}
+                                                />
+                                            </View>
+                                        ))}
+                                        <TouchableOpacity style={styles.itemAddPhotoBtn} onPress={() => addItemPhotos(item.id)} activeOpacity={0.8}>
+                                            <IconButton icon="camera-plus-outline" size={22} iconColor={BLUE} style={{ margin: 0 }} />
+                                            <Text style={styles.itemAddPhotoText}>Photo</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            ))}
+
+                            <Button
+                                mode="contained"
+                                icon="plus"
+                                onPress={addDimItem}
+                                buttonColor={BLUE}
+                                style={styles.addItemBtn}
+                                testID="job_add_dimension_item"
+                            >
+                                Add Another Window / Door
+                            </Button>
+                        </Surface>
+                    )}
 
                     {/* Photos */}
                     <View style={styles.photoSection}>
@@ -475,7 +764,7 @@ const JobFormModal: React.FC<Props> = ({
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
                                 {photos.map((uri, index) => (
                                     <View key={index} style={styles.photoWrapper}>
-                                        <FastImage source={{ uri }} style={styles.photoThumb} />
+                                        <FastImage source={{ uri, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }} style={styles.photoThumb} />
                                         <IconButton
                                             icon="close-circle"
                                             size={20}
@@ -557,25 +846,167 @@ const styles = StyleSheet.create({
         gap: 8,
         marginBottom: 4,
     },
-    sectionLabel: {
-        marginTop: 16,
-        marginBottom: 8,
-        fontWeight: 'bold',
-        color: '#1E293B',
-    },
     chipsRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
         marginBottom: 16,
-        minHeight: 32,
+        minHeight: 24,
     },
-    chipsHint: { color: '#94A3B8', marginBottom: 8 },
-    serviceChip: { backgroundColor: '#EEF2FF', borderColor: '#CBD5FF' },
-    serviceChipText: { fontSize: 12, color: '#4338CA' },
-    urgencyRow: { marginBottom: 24 },
+    serviceChip: { backgroundColor: '#DBEAFE', borderColor: '#93C5FD' },
+    serviceChipText: { fontSize: 12, color: '#1E40AF' },
     urgencyLabel: { marginBottom: 8, color: '#64748B' },
-    urgencyBtn: { borderRadius: 12 },
+    dropdownContainer: {
+        marginBottom: 12,
+    },
+    dropdownMenu: {
+        backgroundColor: '#EFF6FF',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#BFDBFE',
+        marginTop: 4,
+        marginBottom: 16,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        elevation: 4,
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#DBEAFE',
+    },
+    dropdownItemSelected: {
+        backgroundColor: '#DBEAFE',
+    },
+    dropdownItemText: {
+        fontSize: 15,
+        color: '#1E3A8A',
+        flex: 1,
+        fontWeight: '500',
+    },
+    dropdownItemTextSelected: {
+        fontWeight: '700',
+        color: BLUE,
+    },
+    dropdownDoneBtn: {
+        backgroundColor: BLUE,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16,
+    },
+    dropdownDoneText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '700',
+        letterSpacing: 0.3,
+    },
+    dimensionsSection: {
+        backgroundColor: '#F8FBFF',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    dimensionsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+        gap: 10,
+    },
+    dimensionsIconBadge: {
+        backgroundColor: '#DBEAFE',
+        borderRadius: 10,
+        width: 36,
+        height: 36,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    dimensionsTitle: {
+        fontWeight: '700',
+        color: '#1E293B',
+    },
+    dimensionsSubtitle: {
+        color: '#64748B',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    unitSelectorWrap: {
+        marginBottom: 12,
+    },
+    unitSelectorLabel: {
+        color: '#64748B',
+        fontWeight: 'bold',
+        marginBottom: 6,
+        letterSpacing: 0.5,
+    },
+    segmentedUnitButtons: {
+        backgroundColor: '#FFFFFF',
+        marginBottom: 10,
+    },
+    dimensionInputsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    dimensionInputCol: {
+        flex: 1,
+    },
+    dimensionTimesCol: {
+        width: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dimensionTimesText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#64748B',
+    },
+    dimensionInput: {
+        backgroundColor: '#FFFFFF',
+    },
+    dimensionNotesInput: {
+        backgroundColor: '#FFFFFF',
+        marginBottom: 8,
+    },
+    dimensionHintText: {
+        color: '#6366F1',
+        fontSize: 12,
+        fontWeight: '500',
+        marginTop: 2,
+    },
+    itemCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#BFDBFE',
+        padding: 12,
+        marginBottom: 12,
+    },
+    itemCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, minHeight: 28 },
+    itemCardTitle: { fontWeight: '700', color: '#1E40AF', fontSize: 14 },
+    itemPhotoRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+    itemAddPhotoBtn: {
+        width: 70,
+        height: 70,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        borderStyle: 'dashed',
+        borderColor: '#93C5FD',
+        backgroundColor: '#EFF6FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    itemAddPhotoText: { fontSize: 11, color: BLUE, fontWeight: '600', marginTop: -4 },
+    addItemBtn: { borderRadius: 12, marginTop: 4 },
     photoSection: { marginBottom: 24 },
     photoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
     photoList: { flexDirection: 'row', marginTop: 8 },

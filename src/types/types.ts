@@ -142,6 +142,7 @@ export interface Job {
   jobSuffix?: string;
   childJobs?: Job[];
   services?: string[];
+  dimensions?: string;
 }
 
 export interface Message {

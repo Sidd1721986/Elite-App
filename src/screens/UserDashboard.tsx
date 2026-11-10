@@ -68,7 +68,7 @@ const UserDashboard: React.FC = () => {
 
     // Form submission — called by JobFormModal on confirm
     const handleSubmitJob = useCallback(async (
-        data: JobFormInitialValues & { address: string; services: string[]; customerId: string },
+        data: JobFormInitialValues & { address: string; services: string[]; customerId: string; dimensions?: string },
         jobId: string | null,
     ) => {
         if (jobId) {
@@ -81,6 +81,7 @@ const UserDashboard: React.FC = () => {
                 otherDetails: data.otherDetails,
                 contactPhone: data.contactPhone,
                 contactEmail: data.contactEmail,
+                dimensions: data.dimensions,
             });
             setSnackbarMessage('Job request updated successfully!');
         } else {
@@ -94,6 +95,7 @@ const UserDashboard: React.FC = () => {
                 otherDetails: data.otherDetails,
                 contactPhone: data.contactPhone,
                 contactEmail: data.contactEmail,
+                dimensions: data.dimensions,
             });
             setSnackbarMessage('Job request submitted successfully!');
         }
@@ -125,6 +127,7 @@ const UserDashboard: React.FC = () => {
                 contactEmail: jobToEdit.contactEmail || '',
                 photos: jobToEdit.photos || [],
                 selectedServices: jobToEdit.services || [],
+                dimensions: jobToEdit.dimensions || '',
             });
             setNewJobModalVisible(true);
         }

@@ -62,7 +62,7 @@ const MessageItem = memo(({ item, isMe, otherUserName }: {
                 {parsed.kind === 'image' ? (
                     <Pressable onPress={openImage} accessibilityRole="imagebutton" accessibilityLabel="Open shared photo">
                         <FastImage
-                            source={{ uri: parsed.url, priority: FastImage.priority.normal }}
+                            source={{ uri: parsed.url, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }}
                             style={styles.messageImage}
                             resizeMode={FastImage.resizeMode.cover}
                             onError={() => {

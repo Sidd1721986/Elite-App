@@ -57,6 +57,7 @@ export const normalizeJob = (job: any): Job => {
         otherDetails: job.otherDetails || job.OtherDetails,
         contactPhone: job.contactPhone || job.ContactPhone,
         contactEmail: job.contactEmail || job.ContactEmail,
+        dimensions: (job.dimensions || job.Dimensions)?.toString() || undefined,
         contacts: Array.isArray(rawContacts) ? rawContacts : [],
         customer: normalizeUser(job.customer || job.Customer),
         vendor: normalizeUser(job.vendor || job.Vendor),

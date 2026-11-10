@@ -14,7 +14,7 @@ namespace EliteApp.API.Controllers
         }
 
         private string SupportEmail =>
-            _configuration["Legal:SupportEmail"] ?? "support@eliteservices.com";
+            _configuration["Legal:SupportEmail"] ?? "info@elitehomeservicesusa.com";
 
         [HttpGet("privacy")]
         [ResponseCache(Duration = 86400, Location = ResponseCacheLocation.Any)]

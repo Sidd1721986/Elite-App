@@ -36,6 +36,7 @@ const jobsSignature = (list: Job[]): string =>
                 j?.items?.length ?? 0,
                 j?.items?.filter(i => i?.isAssigned).length ?? 0,
                 j?.childJobs?.length ?? 0,
+                j?.dimensions ?? '',
             ].join(':'),
         )
         .join('|');
@@ -325,6 +326,7 @@ export const JobProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 services: selectedServices.length > 0 ? selectedServices : (isSelectingAllServices ? originalServices : []),
                 description: manualDescription || (assignedItems.length > 0 ? assignedItems.map(i => i.description).join('\n') : originalJob.description),
                 photos: selectedPhotoUrls.length > 0 ? selectedPhotoUrls : (originalJob.photos || []),
+                dimensions: originalJob.dimensions,
                 parentJobId: jobId,
                 customerId: originalJob.customerId,
                 createdAt: new Date().toISOString(),

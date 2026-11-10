@@ -82,6 +82,16 @@ export const JobHeaderCard: React.FC<JobHeaderCardProps> = React.memo(({
                     </View>
                 )}
 
+                {job.dimensions ? (
+                    <View style={styles.dimensionsRow}>
+                        <View style={styles.dimensionsIconWrap}>
+                            <IconButton icon="ruler-square" size={14} iconColor="#6366F1" style={styles.dimensionsIcon} />
+                        </View>
+                        <Text style={styles.dimensionsLabel}>DIMENSIONS:</Text>
+                        <Text style={styles.dimensionsValue}>{job.dimensions}</Text>
+                    </View>
+                ) : null}
+
                 <Divider style={styles.divider} />
 
                 <View style={styles.metaGrid}>
@@ -187,6 +197,38 @@ const styles = StyleSheet.create({
         fontSize: 10,
         color: '#475569',
         fontWeight: '700',
+    },
+    dimensionsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        marginBottom: 8,
+    },
+    dimensionsIconWrap: {
+        marginRight: 6,
+    },
+    dimensionsIcon: {
+        margin: 0,
+        padding: 0,
+        width: 16,
+        height: 16,
+    },
+    dimensionsLabel: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: '#6366F1',
+        marginRight: 6,
+    },
+    dimensionsValue: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#1E293B',
+        flex: 1,
     },
     divider: {
         marginVertical: 12,

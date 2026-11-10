@@ -7,7 +7,7 @@ const requiredMajors = [20, 22];
 
 if (!requiredMajors.includes(major)) {
   console.error(
-    `\n[node-version] Detected Node ${process.versions.node}. This project requires Node ${requiredMajor}.x (see .nvmrc and package.json engines).\n` +
+    `\n[node-version] Detected Node ${process.versions.node}. This project requires Node ${requiredMajors.join(' or ')}.x (see .nvmrc and package.json engines).\n` +
       '  Fix:\n' +
       '  nvm use\n'
   );

@@ -3,6 +3,7 @@ using System.Text;
 using EliteApp.API.Data;
 using EliteApp.API.Models;
 using EliteApp.API.Services;
+using EliteApp.API.Services.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -294,7 +295,7 @@ public class AuthController : ControllerBase
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("New admin registered via invite: {Email}", email);
+        _logger.LogInformation("New admin registered via invite: {Email}", DataMasker.MaskEmail(email));
         return Ok(new { message = "Admin account created. You can now log in." });
     }
 

@@ -705,6 +705,16 @@ const JobDetailsScreen: React.FC = () => {
                                         <Text variant="bodyMedium" style={{ color: '#475569' }}>{job.otherDetails}</Text>
                                     </View>
                                 )}
+
+                                {job.dimensions ? (
+                                    <View style={styles.dimensionsBox}>
+                                        <View style={styles.dimensionsTitleRow}>
+                                            <Avatar.Icon size={20} icon="ruler-square" style={{ backgroundColor: '#EEF2FF' }} color="#6366F1" />
+                                            <Text variant="labelSmall" style={styles.dimensionsSubLabel}>DIMENSIONS & MEASUREMENTS</Text>
+                                        </View>
+                                        <Text variant="bodyMedium" style={styles.dimensionsContentText}>{job.dimensions}</Text>
+                                    </View>
+                                ) : null}
                             </Card.Content>
                         </Card>
                     </View>
@@ -1154,6 +1164,32 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         borderTopWidth: 1,
         borderTopColor: '#F1F5F9',
+    },
+    dimensionsBox: {
+        marginTop: 16,
+        padding: 14,
+        backgroundColor: '#F8FAFC',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    dimensionsTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    dimensionsSubLabel: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        color: '#6366F1',
+        marginLeft: 8,
+        letterSpacing: 0.5,
+    },
+    dimensionsContentText: {
+        color: '#1E293B',
+        fontSize: 14,
+        lineHeight: 20,
+        fontWeight: '500',
     },
     itemDetailRow: {
         paddingVertical: 12,

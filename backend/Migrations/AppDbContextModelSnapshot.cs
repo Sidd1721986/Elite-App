@@ -101,6 +101,10 @@ namespace EliteApp.API.Migrations
                         .HasMaxLength(5000)
                         .HasColumnType("character varying(5000)");
 
+                    b.Property<string>("Dimensions")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<string>("InvoiceDocumentUrl")
                         .HasColumnType("text");
 

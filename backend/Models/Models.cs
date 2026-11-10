@@ -143,6 +143,9 @@ public class Job
 
     public string? JobSuffix { get; set; }
     public string? Services { get; set; }
+
+    [StringLength(2000)]
+    public string? Dimensions { get; set; }
 }
 
 public class JobNote

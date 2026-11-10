@@ -155,7 +155,7 @@ const JobItem: React.FC<JobItemProps> = ({ job, onViewDetails, onModify, index =
                                     {job.photos.slice(0, 5).map((uri, idx) => (
                                         <View key={uri + idx} style={styles.photoThumbnailWrapper}>
                                             <FastImage
-                                                source={{ uri, priority: FastImage.priority.normal }}
+                                                source={{ uri, priority: FastImage.priority.normal, cache: FastImage.cacheControl.immutable }}
                                                 style={styles.photoThumbnail}
                                                 resizeMode={FastImage.resizeMode.cover}
                                             />
